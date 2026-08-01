@@ -4,18 +4,41 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 const API_BASE = "https://canislab-api.onrender.com";
 
-// Lista curada de candidatos por defecto para el modo Automatico -- la misma
-// familia de alimentos que ya validamos que da un menu real y completo
-const CANDIDATOS_AUTOMATICO_DEFECTO = [
-  "Ternera con grasa", "Ternera solomillo sin grasa", "Conejo",
-  "Cuello de ternera", "Costillas de ternera", "Costillas de cordero",
-  "Corazón de vaca", "Riñón de ternera", "Pulmón de ternera",
-  "Hígado de vaca",
-  "Salmón", "Sardina", "Mejillón",
-  "Calabaza", "Espinaca", "Zanahoria", "Manzana",
-  "Semilla de lino", "Aceite de girasol", "Huevo de gallina entero",
-  "Sonrisa de Diez Kelp",
-];
+// Grupo amplio de candidatos "realistas" por categoria -- cada vez que se
+// genera un menu, se elige una seleccion distinta (con variedad), no siempre
+// los mismos. Priorizados los ingredientes que de verdad se usan habitualmente
+// en BARF casero (no solo los nutricionalmente validos pero raros de ver,
+// tipo mejillon o pulpo). Las categorias OBLIGATORIA aportan un nutriente que
+// ningun otro grupo cubre (Calcio=hueso, Yodo=pescado/kelp, VitaminaE=aceite)
+// -- de esas SIEMPRE se elige al menos una.
+const POOL_CANDIDATOS = {
+  "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Conejo", "Lomo de ternera con grasa"],
+  "Hueso carnoso (obligatoria)": ["Cuello de ternera", "Costillas de ternera", "Costillas de cordero"],
+  "Vísceras": ["Corazón de vaca", "Riñón de ternera"],
+  "Hígado": ["Hígado de vaca"],
+  "Yodo (obligatoria)": ["Sardina", "Sonrisa de Diez Kelp"],
+  "Verduras y frutas": ["Calabaza", "Zanahoria", "Manzana", "Espinaca"],
+  "Vitamina E (obligatoria)": ["Aceite de girasol", "Aceite de oliva"],
+  "Extra": ["Huevo de gallina entero"],
+};
+
+function elegirAleatorios(lista, n) {
+  const copia = [...lista].sort(() => Math.random() - 0.5);
+  return copia.slice(0, Math.min(n, copia.length));
+}
+
+function generarCandidatosAleatorios() {
+  const elegidos = [];
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Carne muscular"], 2));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hueso carnoso (obligatoria)"], 2));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vísceras"], 2));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hígado"], 1));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Yodo (obligatoria)"], 1));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Verduras y frutas"], 2));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vitamina E (obligatoria)"], 1));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Extra"], 1));
+  return elegidos;
+}
 
 const ETAPA_A_SUFIJO_API = {
   cachorro_joven: "CachorroJoven",
@@ -1041,7 +1064,7 @@ export default function CanislabOnboarding() {
   const [estadoAbiertoAprovechar, setEstadoAbiertoAprovechar] = useState(null);
 
   const [configPersonalizar, setConfigPersonalizar] = useState(
-    Object.fromEntries(CATEGORIAS_ICONOS.map((c) => [c.nombre, { modo: c.nombre === "Suplementos comerciales" ? "no" : "auto", elegido: null }]))
+    Object.fromEntries(CATEGORIAS_ICONOS.map((c) => [c.nombre, { modo: c.nombre === "Suplementos comerciales" ? "no" : "auto", elegido: [] }]))
   );
   const [estadoAbiertoPersonalizar, setEstadoAbiertoPersonalizar] = useState(null);
 
@@ -1100,7 +1123,7 @@ export default function CanislabOnboarding() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nombres_alimentos: CANDIDATOS_AUTOMATICO_DEFECTO,
+          nombres_alimentos: generarCandidatosAleatorios(),
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           especies_excluidas: Array.from(especiesExcluidas),
@@ -1847,13 +1870,19 @@ export default function CanislabOnboarding() {
 // ---------- PANTALLA: personalizar ----------
   if (fase === "generador" && pantalla === "personalizar") {
     const setModoCat = (cat, m) => {
-      setConfigPersonalizar((prev) => ({ ...prev, [cat]: { ...prev[cat], modo: m, elegido: (m === "auto" || m === "no") ? null : prev[cat].elegido } }));
+      setConfigPersonalizar((prev) => ({ ...prev, [cat]: { ...prev[cat], modo: m, elegido: (m === "auto" || m === "no") ? [] : prev[cat].elegido } }));
     };
     const elegirAlimento = (cat, alimento) => {
-      setConfigPersonalizar((prev) => ({ ...prev, [cat]: { ...prev[cat], elegido: alimento } }));
+      setConfigPersonalizar((prev) => {
+        const yaEstaba = prev[cat].elegido.includes(alimento);
+        return { ...prev, [cat]: { ...prev[cat], elegido: yaEstaba ? prev[cat].elegido : [...prev[cat].elegido, alimento] } };
+      });
       setEstadoAbiertoPersonalizar(null);
     };
-    const numManual = Object.values(configPersonalizar).filter((c) => c.modo === "manual" && c.elegido).length;
+    const quitarAlimento = (cat, idx) => {
+      setConfigPersonalizar((prev) => ({ ...prev, [cat]: { ...prev[cat], elegido: prev[cat].elegido.filter((_, i) => i !== idx) } }));
+    };
+    const numManual = Object.values(configPersonalizar).filter((c) => c.modo === "manual" && c.elegido.length > 0).length;
 
     return (
       <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
@@ -1907,16 +1936,22 @@ export default function CanislabOnboarding() {
                   </div>
                   {c.modo === "manual" && (
                     <div className="mt-3 pl-12">
-                      {c.elegido && !categoriaAbierta && (
-                        <button onClick={() => setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie: null })}
-                          className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between w-full" style={{ background: "#F0ECF7", color: VIOLETA, fontFamily: fontBody, fontWeight: 600 }}>
-                          {c.elegido} <span className="text-xs" style={{ opacity: 0.7 }}>cambiar</span>
-                        </button>
+                      {c.elegido.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {c.elegido.map((alimento, idx) => (
+                            <div key={idx} className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full" style={{ background: "#F0ECF7" }}>
+                              <span className="text-xs" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 600 }}>{alimento}</span>
+                              <button onClick={() => quitarAlimento(cat.nombre, idx)}>
+                                <X size={12} style={{ color: ROSA }} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
                       )}
-                      {!c.elegido && !categoriaAbierta && (
+                      {!categoriaAbierta && (
                         <button onClick={() => setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie: null })}
                           className="px-3 py-2 rounded-lg text-sm" style={{ background: PAPEL, color: MALVA, fontFamily: fontBody, border: "1.5px dashed #C9BEDD" }}>
-                          Elegir alimento
+                          {c.elegido.length > 0 ? "+ Añadir otro" : "Elegir alimento"}
                         </button>
                       )}
                       {categoriaAbierta && !especieAbierta && (
