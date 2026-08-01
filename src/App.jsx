@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, Dog, Fish, Flame, Footprints, Hand, HeartPulse, Info, Lock, Moon, Pencil, Pill, Plus, Refrigerator, Salad, Scissors, Search, SlidersHorizontal, Sparkles, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Refrigerator, Salad, Scissors, Search, SlidersHorizontal, Sparkles, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const API_BASE = "https://canislab-api.onrender.com";
 
@@ -349,6 +350,11 @@ function finCrecimientoMeses(pesoAdultoKg) {
 function inicioSeniorAnios(pesoAdultoKg) {
   return interpolar(pesoAdultoKg, [[5, 10.5], [10, 10], [25, 8], [45, 7], [70, 5.5]]);
 }
+function pesoEsperado(mes, pesoAdultoKg) {
+  const fin = finCrecimientoMeses(pesoAdultoKg);
+  const k = 3 / fin;
+  return Math.round(pesoAdultoKg * (1 - Math.exp(-k * mes)) * 10) / 10;
+}
 
 function determinarEtapa(edad, pesoAdultoKg) {
   if (!edad) return "adulto";
@@ -458,8 +464,12 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles }) {
+function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, pesoAdultoEsperado, edad, set }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
+  const [menuLateralAbierto, setMenuLateralAbierto] = useState(false);
+  const [selectorMascotaAbierto, setSelectorMascotaAbierto] = useState(false);
+  const [seccionActiva, setSeccionActiva] = useState(null);
+  const [nuevoPeso, setNuevoPeso] = useState("");
   const [porqueAbierto, setPorqueAbierto] = useState(null);
   const [comoAbierto, setComoAbierto] = useState(null);
   const [mostrarAyuda, setMostrarAyuda] = useState(true);
@@ -518,8 +528,23 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
   return (
     <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
       <Fuentes />
-      <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-6">
-        <BotonAtras onClick={onVolver} texto="Cambiar modo" />
+      <div style={{ background: VIOLETA }} className="w-full px-6 pt-8 pb-6">
+        <div className="flex items-center justify-between mb-4">
+          <button onClick={() => setMenuLateralAbierto(true)}>
+            <Menu size={22} style={{ color: "#FFFFFF" }} />
+          </button>
+          <p className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>CANISLAB</p>
+          <button
+            onClick={() => setSelectorMascotaAbierto(true)}
+            className="w-9 h-9 rounded-full flex items-center justify-center"
+            style={{ background: ROSA }}
+          >
+            <Dog size={16} style={{ color: "#FFFFFF" }} />
+          </button>
+        </div>
+        <button onClick={onVolver} className="text-xs mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+          ← Cambiar modo
+        </button>
         <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
           Semana de {nombrePerro}
         </p>
@@ -790,6 +815,173 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
           Confirmar semana
         </button>
       </div>
+
+      {/* SELECTOR RAPIDO DE MASCOTA */}
+      {selectorMascotaAbierto && (
+        <div className="fixed inset-0 z-50 flex items-start justify-end" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setSelectorMascotaAbierto(false)}>
+          <div className="mt-16 mr-6 w-64 rounded-2xl p-3" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+            <p className="text-[10px] tracking-[0.1em] uppercase mb-2 px-2" style={{ color: MALVA, fontFamily: "monospace" }}>Tus mascotas</p>
+            <div className="w-full flex items-center gap-3 p-2 rounded-xl mb-1" style={{ background: "#F0ECF7" }}>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: VIOLETA }}>
+                <Dog size={16} style={{ color: ROSA }} />
+              </div>
+              <div className="flex-1 text-left">
+                <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{nombrePerro}</p>
+              </div>
+              <div className="w-2 h-2 rounded-full" style={{ background: ROSA }} />
+            </div>
+            <button className="w-full flex items-center gap-2 p-2 rounded-xl mt-1" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700 }}>
+              <Plus size={16} /> Añadir mascota
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* MENU LATERAL DE HAMBURGUESA */}
+      {menuLateralAbierto && (
+        <div className="fixed inset-0 z-50 flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
+          <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
+              <div>
+                <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombrePerro}</p>
+                <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>{etapaLabel}</p>
+              </div>
+              <button onClick={() => setMenuLateralAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
+            </div>
+            <div className="flex-1 px-3 pt-4">
+              {[
+                { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}` },
+                { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento" },
+                { key: "menus", Icono: ClipboardList, label: "Mis menús" },
+                { key: "porque", Icono: Heart, label: "Por qué CANISLAB" },
+              ].map((op) => {
+                const Icono = op.Icono;
+                return (
+                  <button key={op.key} onClick={() => { setSeccionActiva(op.key); setMenuLateralAbierto(false); }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
+                      <Icono size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
+                    </div>
+                    <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{op.label}</span>
+                    <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PERFIL */}
+      {seccionActiva === "perfil" && (
+        <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <div className="flex items-center gap-3 mb-6">
+            <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: VIOLETA }}>
+              <Dog size={26} style={{ color: ROSA }} />
+            </div>
+            <div>
+              <p className="text-2xl" style={{ color: TINTA, fontFamily: fontDisplay }}>{nombrePerro}</p>
+              <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>{perfil?.raza?.nombre || "Raza no especificada"}</p>
+            </div>
+          </div>
+          {[
+            { label: "Peso actual", valor: `${perfil?.pesoActual || "-"}kg` },
+            { label: "Etapa actual", valor: etapaLabel },
+            { label: "Actividad", valor: ["Sedentario", "Normal", "Activo", "Muy activo", "Trabajo"][perfil?.actividadIdx] || "Normal" },
+            { label: "Esterilizado", valor: perfil?.esterilizado === "si" ? "Sí" : "No" },
+            { label: "Alergias", valor: (perfil?.alergias || []).map((a) => a.alimento.replace("Todo: ", "")).join(", ") || "Ninguna" },
+          ].map((campo) => (
+            <div key={campo.label} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid #F0ECF7" }}>
+              <span className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>{campo.label}</span>
+              <span style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{campo.valor}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* EVOLUCION Y CRECIMIENTO */}
+      {seccionActiva === "evolucion" && (
+        <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <p className="text-2xl mb-1" style={{ color: TINTA, fontFamily: fontDisplay }}>Evolución de {nombrePerro}</p>
+          <p className="text-xs mb-6" style={{ color: MALVA, fontFamily: fontBody }}>Peso esperado vs. peso real registrado</p>
+          <div className="rounded-2xl p-4 mb-5" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+            <ResponsiveContainer width="100%" height={200}>
+              <LineChart data={Array.from({ length: 12 }, (_, i) => ({
+                mes: i + 1,
+                esperado: pesoEsperado(i + 1, pesoAdultoEsperado),
+                real: i + 1 === (edad?.totalMeses || 0) ? Number(perfil?.pesoActual) : null,
+              }))}>
+                <CartesianGrid stroke="#F0ECF7" />
+                <XAxis dataKey="mes" tick={{ fontSize: 11, fill: MALVA }} />
+                <YAxis tick={{ fontSize: 11, fill: MALVA }} unit="kg" />
+                <Tooltip />
+                <Line type="monotone" dataKey="esperado" stroke="#D8CFEC" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="real" stroke={ROSA} strokeWidth={2} dot={{ r: 4, fill: ROSA }} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="rounded-2xl p-4 mb-5" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+            <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 28 }}>{perfil?.pesoActual}kg</p>
+            <p className="text-xs mt-1" style={{ color: MALVA, fontFamily: fontBody }}>DER calculado con este peso: <b style={{ color: TINTA }}>{derReal}kcal/día</b></p>
+          </div>
+          <div className="flex gap-2 mb-2">
+            <input type="number" inputMode="decimal" value={nuevoPeso} onChange={(e) => setNuevoPeso(e.target.value)} placeholder="ej. 18.5"
+              className="flex-1 text-lg py-3 px-4 rounded-xl outline-none" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontDisplay }} />
+            <button onClick={() => { if (Number(nuevoPeso) > 0) { set("pesoActual", nuevoPeso); setNuevoPeso(""); } }}
+              className="px-5 rounded-xl" style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>Guardar</button>
+          </div>
+          <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>Al guardar, este pasa a ser el peso actual — las kcal se recalculan solas.</p>
+        </div>
+      )}
+
+      {/* MIS MENUS */}
+      {seccionActiva === "menus" && (
+        <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8" style={{ background: PAPEL }}>
+          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <p className="text-2xl mb-4" style={{ color: TINTA, fontFamily: fontDisplay }}>Mis menús</p>
+          <div className="flex flex-col gap-2">
+            {menus.map((m) => (
+              <button key={m.id} onClick={() => { setTabActiva(m.id); setSeccionActiva(null); }} className="flex items-center gap-3 p-4 rounded-2xl text-left" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: VIOLETA }}>
+                  <ClipboardList size={16} style={{ color: ROSA }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{m.nombre} · {m.kcal}kcal</p>
+                </div>
+                <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* POR QUE CANISLAB */}
+      {seccionActiva === "porque" && (
+        <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué CANISLAB</p>
+          <p className="text-sm leading-relaxed mb-4" style={{ color: TINTA, fontFamily: fontBody }}>
+            Cuando decidí alimentar a mi perro con BARF, mi mayor preocupación era hacerlo bien. Quería ofrecerle
+            una alimentación natural, pero también tener la seguridad de que estaba recibiendo todos los nutrientes
+            que necesitaba.
+          </p>
+          <p className="text-sm leading-relaxed mb-4" style={{ color: TINTA, fontFamily: fontBody }}>
+            Al investigar descubrí que la mayoría de recomendaciones se basaban en un porcentaje del peso del perro
+            según su edad o etapa de crecimiento. Pero surgió una duda: si cada menú tiene una composición y un
+            aporte energético diferente, ¿por qué todos iban a necesitar la misma cantidad?
+          </p>
+          <p className="text-sm leading-relaxed" style={{ color: TINTA, fontFamily: fontBody }}>
+            Así nació CANISLAB: una herramienta creada para calcular la ración de forma más precisa, teniendo en
+            cuenta las necesidades reales de cada perro y la composición de cada menú. Porque alimentar de forma
+            natural también debería ser alimentar con conocimiento.
+          </p>
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl mt-4" style={{ background: "#F0ECF7" }}>
+            <Heart size={14} style={{ color: VIOLETA, flexShrink: 0 }} />
+            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>Basado en las tablas de FEDIAF, la autoridad europea de nutrición canina.</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -888,6 +1080,8 @@ export default function CanislabOnboarding() {
 
   const pesoAdultoEsperado = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
   const etapaCalculada = useMemo(() => determinarEtapa(edad, pesoAdultoEsperado), [edad, pesoAdultoEsperado]);
+  const ETAPA_LABEL = { cachorro_joven: "Cachorro muy joven", cachorro_crecimiento: "Cachorro en crecimiento", adulto: "Adulto", senior: "Senior" };
+  const etapaLabel = ETAPA_LABEL[etapaCalculada] || "Adulto";
   const derReal = useMemo(
     () => calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx, perfil.esterilizado),
     [perfil.pesoActual, etapaCalculada, perfil.actividadIdx, perfil.esterilizado]
@@ -1602,7 +1796,7 @@ export default function CanislabOnboarding() {
       );
     }
     const menus = menuReal ? respuestaApiAMenu(menuReal, derReal) : MENUS_EJEMPLO;
-    return <VistaMenus menus={menus} onVolver={volverAElegir} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} />;
+    return <VistaMenus menus={menus} onVolver={volverAElegir} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
   }
 
   
