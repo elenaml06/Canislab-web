@@ -77,10 +77,16 @@ function generarCandidatosAleatorios(especieBase) {
   // Un menu con 4 carnes distintas es un lio de comprar y de preparar. Con
   // 2 de la especie base y 1 de apoyo hay variedad suficiente y el plato se
   // entiende de un vistazo.
+  // MAXIMO 3 PROTEINAS EN TOTAL, y el pescado cuenta como una de ellas:
+  // 2 carnes de la especie base + 1 pescado. Nada de carne "de apoyo" de otra
+  // especie, que sumaba una cuarta proteina al plato.
   const carneBase = POOL_CANDIDATOS["Carne muscular"].filter(esDe);
   const carneResto = POOL_CANDIDATOS["Carne muscular"].filter((n) => !esDe(n));
-  elegidos.push(...elegirAleatorios(carneBase, 2));
-  elegidos.push(...elegirAleatorios(carneResto, 1));
+  const deLaBase = elegirAleatorios(carneBase, 2);
+  elegidos.push(...deLaBase);
+  // si la especie base no tiene 2 cortes, se completa con otra para no
+  // quedarse con una sola carne
+  if (deLaBase.length < 2) elegidos.push(...elegirAleatorios(carneResto, 2 - deLaBase.length));
 
   // --- HUESO CARNOSO: NO entra en la rotacion de especie ---
   // Al usuario le importa que cambie la carne, no de que animal es el hueso.
@@ -92,14 +98,20 @@ function generarCandidatosAleatorios(especieBase) {
     POOL_CANDIDATOS["Hueso carnoso"].filter((n) => n !== "Pecho de ternera con hueso"), 2));
 
   // --- el resto no depende de la especie base ---
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vísceras"], 4));
-  elegidos.push(...POOL_CANDIDATOS["Hígado"]); // son pocos, mejor todos
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Pescados y mariscos"], 4));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Verduras y frutas"], 6));
+  // Se le dan al motor POCOS candidatos por categoria a proposito. Con muchos
+  // (antes: 4 visceras, 6 verduras, 4 pescados) el optimizador repartia entre
+  // demasiados alimentos y salian cantidades ridiculas, tipo 5 g de muslo de
+  // pavo. Con estos numeros, en el plato acaban saliendo ~2 carnes, 1-2
+  // huesos, 1 viscera, 1 higado y 1-2 verduras, que es un menu que se puede
+  // comprar y preparar de verdad. Comprobado: 100% de menus posibles.
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vísceras"], 2));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hígado"], 1));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Pescados y mariscos"], 1));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Verduras y frutas"], 3));
   // "Aceite de girasol": 57g de linoleico y 56mg de vitE, muy por encima del
   // resto de aceites (11-18mg) -- garantizarlo evita quedarse corto en ambos
   elegidos.push("Aceite de girasol");
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Extras"].filter((n) => n !== "Aceite de girasol"), 3));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Extras"].filter((n) => n !== "Aceite de girasol"), 1));
   // El multivitaminico va SIEMPRE (con el, el 100% de los menus salen
   // validos; sin el, el 0%), pero NO tiene por que ser siempre la misma
   // marca: se elige una de las equivalentes. Igual con la fuente de yodo.
@@ -112,7 +124,7 @@ function generarCandidatosAleatorios(especieBase) {
 // Construye la lista de candidatos a mandar a la API SEGUN EL MODO real
 // elegido -- antes esto siempre usaba la lista aleatoria generica, ignorando
 // lo que el usuario hubiera elegido en Personalizar o metido en Aprovechar.
-function construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieBase) {
+function construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieBase, holgado = false) {
   let elegidos;
 
   if (modo === "personalizar") {
@@ -150,15 +162,21 @@ function construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieB
   };
   const cuentaEnCategoria = (cat) => elegidos.filter((n) => categoriaDe(n) === cat).length;
 
-  // los 5 pilares BARF necesitan un minimo de opciones para que cuadre
-  const MINIMOS = {
-    "Carne muscular": 3,
-    "Hueso carnoso": 2,
-    "Vísceras": 2,
-    "Hígado": 1,
-    "Verduras y frutas": 3,
-    "Pescados y mariscos": 2,
-  };
+  // Opciones que se le dan al motor por categoria. Son a la vez el minimo
+  // para que el calculo cuadre y el maximo que rellena la app: con mas, el
+  // optimizador repartia entre demasiados alimentos y salian cantidades
+  // impracticables. Lo que el usuario haya elegido se respeta siempre.
+  // Los MISMOS topes que en Automático, para que un menú se vea igual venga
+  // de donde venga: máximo 3 proteínas contando el pescado (2 carnes + 1
+  // pescado), 2 huesos, 1 víscera, 1 hígado y 2-3 verduras.
+  const MINIMOS = holgado
+    // Reintento: si con los topes normales no hay solución posible, se le dan
+    // más opciones al motor antes de rendirse y decirle al usuario que no se
+    // puede. Mejor un menú con una proteína de más que ningún menú.
+    ? { "Carne muscular": 3, "Hueso carnoso": 3, "Vísceras": 2, "Hígado": 1,
+        "Verduras y frutas": 4, "Pescados y mariscos": 2 }
+    : { "Carne muscular": 2, "Hueso carnoso": 2, "Vísceras": 1, "Hígado": 1,
+        "Verduras y frutas": 3, "Pescados y mariscos": 1 };
   for (const [cat, minimo] of Object.entries(MINIMOS)) {
     // si el usuario dijo explicitamente "no" a esta categoria, se respeta
     if (modo === "personalizar" && configPersonalizar?.[cat]?.modo === "no") continue;
@@ -1852,12 +1870,12 @@ export default function CanislabOnboarding() {
     // Se pide UN menu por cada uno que haya elegido el usuario. Cada llamada
     // usa su propia tirada de candidatos, asi los menus salen distintos entre
     // si (antes solo se pedia uno y numMenus se ignoraba).
-    const pedirMenu = (especieBase) =>
+    const pedirMenu = (especieBase, holgado = false) =>
       fetch(`${API_BASE}/menu`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nombres_alimentos: construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieBase),
+          nombres_alimentos: construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieBase, holgado),
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           especies_excluidas: Array.from(especiesExcluidas),
@@ -1882,6 +1900,9 @@ export default function CanislabOnboarding() {
         let data = await pedirMenu(especieBase);
         // si con esa proteina concreta no cuadra, se reintenta sin restringir
         if (!data.factible && especieBase) data = await pedirMenu(null);
+        // y si aun asi no sale, se le dan mas opciones al motor antes de
+        // decirle al usuario que no se puede
+        if (!data.factible) data = await pedirMenu(null, true);
         if (data.factible) resultados.push(data);
       }
       return resultados;
