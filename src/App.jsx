@@ -2819,36 +2819,66 @@ function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, 
 }
 
 function Rueda({ valores, valor, onChange, ancho = 72 }) {
-  const alturaItem = 44;
+  // Antes esto era solo un scroll con scroll-snap: en movil iba bien, pero en
+  // ordenador las flechas del teclado no hacian nada y la rueda del raton
+  // pasaba varios valores de golpe, con lo que acertar uno era una lucha.
+  // Ahora va por indice, con flechas visibles, teclado y rueda paso a paso.
+  const alturaItem = 40;
+  const idx = Math.max(0, valores.indexOf(valor));
+
+  const mover = (delta) => {
+    const nuevo = Math.max(0, Math.min(valores.length - 1, idx + delta));
+    if (nuevo !== idx) onChange(valores[nuevo]);
+  };
+
+  const Flecha = ({ dir }) => (
+    <button
+      type="button"
+      onClick={() => mover(dir)}
+      disabled={dir < 0 ? idx === 0 : idx === valores.length - 1}
+      className="w-full flex items-center justify-center py-1"
+      style={{ opacity: (dir < 0 ? idx === 0 : idx === valores.length - 1) ? 0.25 : 1, cursor: "pointer" }}
+      aria-label={dir < 0 ? "Anterior" : "Siguiente"}
+    >
+      <ChevronRight size={15} style={{ color: VIOLETA, transform: dir < 0 ? "rotate(-90deg)" : "rotate(90deg)" }} />
+    </button>
+  );
+
   return (
-    <div style={{ width: ancho, position: "relative" }}>
-      <div style={{ position: "absolute", top: alturaItem, left: 0, right: 0, height: alturaItem, borderTop: `1.5px solid ${VIOLETA}`, borderBottom: `1.5px solid ${VIOLETA}`, pointerEvents: "none", borderRadius: 8 }} />
-      <div
-        style={{ height: alturaItem * 3, overflowY: "scroll", scrollSnapType: "y mandatory", scrollbarWidth: "none" }}
-        className="hide-scrollbar"
-        onScroll={(e) => {
-          const idx = Math.round(e.target.scrollTop / alturaItem);
-          const clamped = Math.max(0, Math.min(valores.length - 1, idx));
-          if (valores[clamped] !== valor) onChange(valores[clamped]);
-        }}
-      >
-        <div style={{ height: alturaItem }} />
-        {valores.map((v) => (
-          <div
-            key={v}
-            onClick={() => onChange(v)}
-            style={{
-              height: alturaItem, display: "flex", alignItems: "center", justifyContent: "center",
-              scrollSnapAlign: "center", fontFamily: fontDisplay,
-              fontSize: v === valor ? 19 : 16, color: v === valor ? TINTA : "#C9BEDD",
-              transition: "all 0.15s", cursor: "pointer",
-            }}
-          >
-            {v}
-          </div>
-        ))}
-        <div style={{ height: alturaItem }} />
+    <div
+      style={{ width: ancho, outline: "none" }}
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "ArrowUp") { e.preventDefault(); mover(-1); }
+        if (e.key === "ArrowDown") { e.preventDefault(); mover(1); }
+      }}
+      onWheel={(e) => { mover(e.deltaY > 0 ? 1 : -1); }}
+    >
+      <Flecha dir={-1} />
+      <div style={{ position: "relative", height: alturaItem * 3, overflow: "hidden" }}>
+        <div style={{ position: "absolute", top: alturaItem, left: 0, right: 0, height: alturaItem,
+                      borderTop: `1.5px solid ${VIOLETA}`, borderBottom: `1.5px solid ${VIOLETA}`,
+                      pointerEvents: "none", borderRadius: 8 }} />
+        <div style={{ transform: `translateY(${(1 - idx) * alturaItem}px)`, transition: "transform 0.18s ease-out" }}>
+          {valores.map((v, i) => (
+            <div
+              key={v}
+              onClick={() => onChange(v)}
+              style={{
+                height: alturaItem, display: "flex", alignItems: "center", justifyContent: "center",
+                fontFamily: fontDisplay,
+                fontSize: i === idx ? 19 : 15,
+                color: i === idx ? TINTA : "#C9BEDD",
+                opacity: Math.abs(i - idx) > 1 ? 0 : 1,
+                transition: "all 0.18s", cursor: "pointer",
+              }}
+            >
+              {v}
+            </div>
+          ))}
+        </div>
       </div>
+      <Flecha dir={1} />
     </div>
   );
 }
