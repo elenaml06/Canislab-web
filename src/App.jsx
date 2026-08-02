@@ -365,14 +365,25 @@ function categoriaDeAlimento(nombreAlimento) {
   return "Extras";
 }
 
-function respuestaApiAMenu(data, derObjetivo) {
-  // convierte {gramos: {alimento: gramos}} de la API al formato que espera VistaMenus
-  const items = Object.entries(data.gramos).map(([alimento, gramos]) => {
-    const categoria = categoriaDeAlimento(alimento);
-    const Icono = (CATEGORIAS_ICONOS.find((c) => c.nombre === categoria) || {}).Icono || Beef;
-    return { categoria, Icono, alimento, gramos, porque: null };
+function respuestaApiAMenu(respuestas, derObjetivo) {
+  // convierte una o varias respuestas {gramos: {alimento: gramos}} de la API
+  // al formato que espera VistaMenus. Los dias se reparten entre los menus.
+  const lista = Array.isArray(respuestas) ? respuestas : [respuestas];
+  const diasPorMenu = Math.max(1, Math.round(7 / lista.length));
+  return lista.map((data, i) => {
+    const items = Object.entries(data.gramos).map(([alimento, gramos]) => {
+      const categoria = categoriaDeAlimento(alimento);
+      const Icono = (CATEGORIAS_ICONOS.find((c) => c.nombre === categoria) || {}).Icono || Beef;
+      return { categoria, Icono, alimento, gramos, porque: null };
+    });
+    return {
+      id: i + 1,
+      nombre: `Menú ${i + 1}`,
+      dias: diasPorMenu,
+      kcal: Math.round(derObjetivo),
+      items,
+    };
   });
-  return [{ id: 1, nombre: "Menú 1", dias: 7, kcal: Math.round(derObjetivo), items }];
 }
 
 const MENUS_EJEMPLO = [
@@ -1420,6 +1431,9 @@ export default function CanislabOnboarding() {
     setMenuError(null);
     setMenuDespertando(false);
 
+    // Se pide UN menu por cada uno que haya elegido el usuario. Cada llamada
+    // usa su propia tirada de candidatos, asi los menus salen distintos entre
+    // si (antes solo se pedia uno y numMenus se ignoraba).
     const pedirMenu = () =>
       fetch(`${API_BASE}/menu`, {
         method: "POST",
@@ -1429,8 +1443,18 @@ export default function CanislabOnboarding() {
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           especies_excluidas: Array.from(especiesExcluidas),
+          peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
         }),
       }).then((res) => res.json());
+
+    const pedirTodos = async () => {
+      const resultados = [];
+      for (let i = 0; i < numMenus; i++) {
+        const data = await pedirMenu();
+        if (data.factible) resultados.push(data);
+      }
+      return resultados;
+    };
 
     const esperar = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -1439,12 +1463,12 @@ export default function CanislabOnboarding() {
       for (let intento = 1; intento <= MAX_INTENTOS; intento++) {
         if (cancelado) return;
         try {
-          const data = await pedirMenu();
+          const resultados = await pedirTodos();
           if (cancelado) return;
-          if (data.factible) {
-            setMenuReal(data);
+          if (resultados.length > 0) {
+            setMenuReal(resultados);
           } else {
-            setMenuError(data.motivo || "No se encontró una combinación posible.");
+            setMenuError("No se encontró una combinación posible con estos alimentos.");
           }
           setMenuCargando(false);
           return;
@@ -1467,7 +1491,7 @@ export default function CanislabOnboarding() {
     return () => {
       cancelado = true;
     };
-  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas, modo, configPersonalizar, itemsAprovechar]);
+  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas, modo, configPersonalizar, itemsAprovechar, numMenus, perfil]);
 
   // ---------- PASO 1: Nombre + Sexo ----------
   if (paso === 1) {
@@ -2091,7 +2115,7 @@ export default function CanislabOnboarding() {
           <Fuentes />
           <Dog size={36} strokeWidth={1.4} style={{ color: VIOLETA }} />
           <p className="mt-4" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
-            {menuDespertando ? "Despertando el servidor..." : `Calculando el menú real de ${nombreMostrar}...`}
+            {menuDespertando ? "Despertando el servidor..." : `Calculando ${numMenus === 1 ? "el menú" : `los ${numMenus} menús`} de ${nombreMostrar}...`}
           </p>
           <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
             {menuDespertando
