@@ -124,6 +124,25 @@ function generarCandidatosAleatorios(especieBase) {
 // Construye la lista de candidatos a mandar a la API SEGUN EL MODO real
 // elegido -- antes esto siempre usaba la lista aleatoria generica, ignorando
 // lo que el usuario hubiera elegido en Personalizar o metido en Aprovechar.
+// Lo que el usuario ha elegido EXPRESAMENTE (no lo que rellena la app).
+// Se le manda al motor como "forzar_presencia" para que no lo tire a 0 g:
+// si alguien dice que tiene conejo en casa, el menu tiene que llevar conejo.
+function eleccionesDelUsuario(modo, configPersonalizar, itemsAprovechar) {
+  if (modo === "personalizar") {
+    const e = [];
+    for (const [cat, c] of Object.entries(configPersonalizar || {})) {
+      if (c?.modo === "manual" && c.elegido?.length > 0) {
+        e.push(...c.elegido.filter((a) => !a.startsWith("Todo: ")));
+      }
+    }
+    return e;
+  }
+  if (modo === "aprovechar") {
+    return (itemsAprovechar || []).map((it) => it.alimento).filter((a) => !a.startsWith("Todo: "));
+  }
+  return [];   // en Automatico no hay nada elegido a mano
+}
+
 function construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieBase, holgado = false) {
   let elegidos;
 
@@ -579,6 +598,18 @@ function especiesExcluidasDePerfil(perfil) {
   return especies;
 }
 
+// Alimentos CONCRETOS que el usuario ha marcado para evitar (no la especie
+// entera). Antes se perdian: `especiesExcluidasDePerfil` solo recogia los
+// "Todo: X", asi que marcar "Higado de vaca" no servia de nada y el menu lo
+// incluia igual.
+function alimentosEvitadosDePerfil(perfil) {
+  const nombres = new Set();
+  [...(perfil?.alergias || []), ...(perfil?.otrosEvitar || [])].forEach((item) => {
+    if (item.alimento && !item.alimento.startsWith("Todo: ")) nombres.add(item.alimento);
+  });
+  return nombres;
+}
+
 function filtrarCategoriasPorEspecies(categoriasAlimento, especiesExcluidas) {
   if (!especiesExcluidas || especiesExcluidas.size === 0) return categoriasAlimento;
   const resultado = {};
@@ -829,7 +860,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, modo, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set }) {
+function VistaMenus({ menus, onVolver, modo, alimentosEvitados, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(false);
   const [selectorMascotaAbierto, setSelectorMascotaAbierto] = useState(false);
@@ -900,9 +931,20 @@ function VistaMenus({ menus, onVolver, modo, nombrePerro, necesitaTransicion, di
   const itemsBase = menu.items.map((it, idx) => {
     const alimentoActual = sobreescritos[idx] || it.alimento;
     const gramosDeVerdad = gramosReales ? gramosReales[alimentoActual] : undefined;
+    // Al cambiar un alimento con el lápiz hay que RECALCULAR su categoría y su
+    // icono. Antes, con "...it", la fila se quedaba con los del alimento
+    // anterior: se vio una "Carcasa de pollo" etiquetada como VÍSCERAS, que
+    // además hacía creer que el menú tenía vísceras cuando no las tenía.
+    const cambiado = alimentoActual !== it.alimento;
+    const categoriaActual = cambiado ? categoriaDeAlimento(alimentoActual) : it.categoria;
+    const IconoActual = cambiado
+      ? ((CATEGORIAS_ICONOS.find((x) => x.nombre === categoriaActual) || {}).Icono || Beef)
+      : it.Icono;
     return {
       ...it,
       alimento: alimentoActual,
+      categoria: categoriaActual,
+      Icono: IconoActual,
       gramos: gramosDeVerdad !== undefined ? gramosDeVerdad : Math.max(5, Math.round(it.gramos * factor)),
     };
   }).filter((it) => gramosReales ? gramosReales[it.alimento] !== undefined : true); // si ya recalculamos con la API, solo mostrar lo que la API diga que sigue teniendo gramos > 0
@@ -945,6 +987,7 @@ function VistaMenus({ menus, onVolver, modo, nombrePerro, necesitaTransicion, di
           der_objetivo: menu.kcal,
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
+          nombres_excluidos: Array.from(alimentosEvitados || []),
           // el peso hace falta para las dosis maximas de los suplementos
           // comerciales (el fabricante las da por kilos, no por calorias)
           peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
@@ -1845,6 +1888,7 @@ export default function CanislabOnboarding() {
   const nombreMostrar = perfil.nombre.trim() || "tu perro";
 
   const especiesExcluidas = useMemo(() => especiesExcluidasDePerfil(perfil), [perfil.alergias, perfil.otrosEvitar]);
+  const alimentosEvitados = useMemo(() => alimentosEvitadosDePerfil(perfil), [perfil.alergias, perfil.otrosEvitar]);
   const categoriasDisponibles = useMemo(
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
     [especiesExcluidas]
@@ -1880,6 +1924,8 @@ export default function CanislabOnboarding() {
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           especies_excluidas: Array.from(especiesExcluidas),
           peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
+          forzar_presencia: eleccionesDelUsuario(modo, configPersonalizar, itemsAprovechar),
+          nombres_excluidos: Array.from(alimentosEvitados),
         }),
       }).then((res) => res.json());
 
@@ -1943,7 +1989,7 @@ export default function CanislabOnboarding() {
     return () => {
       cancelado = true;
     };
-  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas, modo, configPersonalizar, itemsAprovechar, numMenus, perfil]);
+  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas, modo, configPersonalizar, itemsAprovechar, numMenus, perfil, alimentosEvitados]);
 
   // ---------- PASO 1: Nombre + Sexo ----------
   if (paso === 1) {
@@ -2601,7 +2647,7 @@ export default function CanislabOnboarding() {
       );
     }
     const menus = menuReal ? respuestaApiAMenu(menuReal, derReal) : MENUS_EJEMPLO;
-    return <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
+    return <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
   }
 
   
