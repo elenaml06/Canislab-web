@@ -568,6 +568,9 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(false);
   const [selectorMascotaAbierto, setSelectorMascotaAbierto] = useState(false);
   const [seccionActiva, setSeccionActiva] = useState(null);
+  // Confirmar la semana NO bloquea nada: es solo dejar constancia de que el
+  // plan esta revisado. El usuario puede seguir editando cuando quiera.
+  const [semanaConfirmada, setSemanaConfirmada] = useState(false);
   // --- modo analizador: el usuario mete lo que YA le da y le decimos que tal ---
   const [dietaAnalizar, setDietaAnalizar] = useState([]);   // [{categoria, alimento, gramos}]
   const [abiertoAnalizar, setAbiertoAnalizar] = useState(null);
@@ -1001,9 +1004,35 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
 
         <div className="flex-1" />
         <Curvita />
-        <button className="w-full py-4 rounded-2xl text-base" style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>
-          Confirmar semana
-        </button>
+        {semanaConfirmada ? (
+          <div className="w-full">
+            <div className="w-full py-3.5 rounded-2xl flex items-center justify-center gap-2 mb-2"
+                 style={{ background: "#EAF4EC", border: "1.5px solid #C8E0CE" }}>
+              <CheckCircle2 size={17} style={{ color: "#4A7C59" }} />
+              <span className="text-sm" style={{ color: "#2F5738", fontFamily: fontBody, fontWeight: 600 }}>
+                Semana confirmada
+              </span>
+            </div>
+            <p className="text-xs text-center mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+              Puedes seguir cambiando lo que quieras: los gramos se recalculan solos.
+            </p>
+            <button
+              onClick={() => setSemanaConfirmada(false)}
+              className="w-full py-2.5 rounded-xl text-sm"
+              style={{ background: "transparent", border: "1.5px solid #E3DAF0", color: VIOLETA, fontFamily: fontBody }}
+            >
+              Deshacer
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setSemanaConfirmada(true)}
+            className="w-full py-4 rounded-2xl text-base"
+            style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+          >
+            Confirmar semana
+          </button>
+        )}
       </div>
 
       {/* SELECTOR RAPIDO DE MASCOTA */}
