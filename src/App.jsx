@@ -1004,35 +1004,13 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
 
         <div className="flex-1" />
         <Curvita />
-        {semanaConfirmada ? (
-          <div className="w-full">
-            <div className="w-full py-3.5 rounded-2xl flex items-center justify-center gap-2 mb-2"
-                 style={{ background: "#EAF4EC", border: "1.5px solid #C8E0CE" }}>
-              <CheckCircle2 size={17} style={{ color: "#4A7C59" }} />
-              <span className="text-sm" style={{ color: "#2F5738", fontFamily: fontBody, fontWeight: 600 }}>
-                Semana confirmada
-              </span>
-            </div>
-            <p className="text-xs text-center mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
-              Puedes seguir cambiando lo que quieras: los gramos se recalculan solos.
-            </p>
-            <button
-              onClick={() => setSemanaConfirmada(false)}
-              className="w-full py-2.5 rounded-xl text-sm"
-              style={{ background: "transparent", border: "1.5px solid #E3DAF0", color: VIOLETA, fontFamily: fontBody }}
-            >
-              Deshacer
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={() => setSemanaConfirmada(true)}
-            className="w-full py-4 rounded-2xl text-base"
-            style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
-          >
-            Confirmar semana
-          </button>
-        )}
+        <button
+          onClick={() => setSemanaConfirmada(true)}
+          className="w-full py-4 rounded-2xl text-base"
+          style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+        >
+          Confirmar semana
+        </button>
       </div>
 
       {/* SELECTOR RAPIDO DE MASCOTA */}
@@ -1345,6 +1323,75 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* PANTALLA DE CONFIRMACION — tras pulsar "Confirmar semana" */}
+      {semanaConfirmada && (
+        <div className="fixed inset-0 z-50 flex flex-col items-center justify-center px-6 text-center overflow-y-auto" style={{ background: PAPEL }}>
+          <div className="w-16 h-16 rounded-full flex items-center justify-center mb-5" style={{ background: VIOLETA }}>
+            <Dog size={30} strokeWidth={1.4} style={{ color: ROSA }} />
+          </div>
+          <p className="text-2xl mb-1" style={{ color: VIOLETA, fontFamily: fontDisplay, fontWeight: 600 }}>
+            ¡Todo listo!
+          </p>
+          <p className="text-sm mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+            Hemos guardado la semana de {nombrePerro}
+          </p>
+          <p className="text-xs mb-7 max-w-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+            Puedes seguir cambiando lo que quieras cuando quieras: los gramos se recalculan solos.
+          </p>
+
+          <div className="flex flex-col gap-2 w-full max-w-sm">
+            <button
+              onClick={() => setSemanaConfirmada(false)}
+              className="flex items-center gap-3 p-4 rounded-2xl text-left"
+              style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+                <ClipboardList size={18} strokeWidth={1.6} style={{ color: VIOLETA }} />
+              </div>
+              <span className="flex-1" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                Volver a los menús
+              </span>
+              <ChevronRight size={18} style={{ color: "#C9BEDD" }} />
+            </button>
+
+            <button
+              onClick={() => { setSemanaConfirmada(false); setSeccionActiva("perfil"); }}
+              className="flex items-center gap-3 p-4 rounded-2xl text-left"
+              style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+                <Dog size={18} strokeWidth={1.6} style={{ color: VIOLETA }} />
+              </div>
+              <span className="flex-1" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                Ver el perfil de {nombrePerro}
+              </span>
+              <ChevronRight size={18} style={{ color: "#C9BEDD" }} />
+            </button>
+
+            <button
+              onClick={() => { setSemanaConfirmada(false); setSeccionActiva("analizar"); }}
+              className="flex items-center gap-3 p-4 rounded-2xl text-left"
+              style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}
+            >
+              <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+                <Search size={18} strokeWidth={1.6} style={{ color: VIOLETA }} />
+              </div>
+              <span className="flex-1" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                Analizar otra dieta
+              </span>
+              <ChevronRight size={18} style={{ color: "#C9BEDD" }} />
+            </button>
+          </div>
+
+          <div className="mt-8">
+            <svg width="180" height="34" viewBox="0 0 180 34" fill="none">
+              <path d="M0 30 C 30 28, 45 16, 70 13 S 120 5, 180 2" stroke={ROSA} strokeWidth="2" strokeLinecap="round" fill="none" />
+              <circle cx="180" cy="2" r="3" fill={ROSA} />
+            </svg>
+          </div>
         </div>
       )}
     </div>
