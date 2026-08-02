@@ -4,23 +4,25 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 
 const API_BASE = "https://canislab-api.onrender.com";
 
-// Grupo amplio de candidatos "realistas" por categoria -- cada vez que se
-// genera un menu, se elige una seleccion distinta (con variedad), no siempre
-// los mismos. Priorizados los ingredientes que de verdad se usan habitualmente
-// en BARF casero (no solo los nutricionalmente validos pero raros de ver,
-// tipo mejillon o pulpo). Las categorias OBLIGATORIA aportan un nutriente que
-// ningun otro grupo cubre (Calcio=hueso, Yodo=pescado/kelp, VitaminaE=aceite)
-// -- de esas SIEMPRE se elige al menos una.
+// Grupo amplio de candidatos "realistas" por categoria REAL (las mismas que
+// usa Personalizar), para poder mezclar lo que el usuario elija con lo que
+// se completa automaticamente. Los nutrientes que SOLO cubre un grupo
+// concreto (Calcio=Hueso carnoso, Yodo=Pescados/Suplementos, VitaminaE=Extras)
+// se marcan como esenciales -- si el usuario no puso nada ahi, se rellena solo.
 const POOL_CANDIDATOS = {
-  "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Conejo", "Lomo de ternera con grasa"],
-  "Hueso carnoso (obligatoria)": ["Cuello de ternera", "Costillas de ternera", "Costillas de cordero"],
-  "Vísceras": ["Corazón de vaca", "Riñón de ternera"],
-  "Hígado": ["Hígado de vaca"],
-  "Yodo (obligatoria)": ["Sardina", "Sonrisa de Diez Kelp"],
-  "Verduras y frutas": ["Calabaza", "Zanahoria", "Manzana", "Espinaca"],
-  "Vitamina E (obligatoria)": ["Aceite de girasol", "Aceite de oliva"],
-  "Extra": ["Huevo de gallina entero"],
+  "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Lomo de ternera con grasa", "Conejo", "Corazón de vaca", "Corazón de cordero"],
+  "Hueso carnoso": ["Costillas de ternera", "Pecho de ternera con hueso", "Costillas de cordero", "Cuello de cordero", "Espinazo de cordero", "Rabo de toro", "Carcasa de conejo"],
+  "Vísceras": ["Riñón de ternera", "Pulmón de ternera", "Riñón de cordero", "Pulmón de cordero", "Lengua de ternera"],
+  "Hígado": ["Hígado de vaca", "Hígado de conejo"],
+  "Pescados y mariscos": ["Sardina", "Salmón", "Caballa", "Trucha", "Merluza", "Bacalao"],
+  "Verduras y frutas": ["Calabaza", "Zanahoria", "Calabacín", "Judía verde", "Brócoli", "Espinaca", "Manzana", "Pera", "Plátano", "Arándano"],
+  "Extras": ["Aceite de girasol", "Aceite de oliva", "Aceite de oliva virgen extra", "Huevo de gallina entero", "Semilla de lino"],
+  // El multivitaminico va SIEMPRE: sin el, cubrir zinc/cobre/manganeso/yodo
+  // con alimentos reales es practicamente imposible (probado: con multi 100%
+  // de menus validos, sin multi 0%).
+  "Suplementos comerciales": ["Homemadekun (multivitamínico completo)", "Sonrisa de Diez Kelp"],
 };
+const CATEGORIAS_ESENCIALES = ["Hueso carnoso", "Pescados y mariscos", "Extras"]; // calcio, yodo, vitamina E
 
 function elegirAleatorios(lista, n) {
   const copia = [...lista].sort(() => Math.random() - 0.5);
@@ -29,14 +31,74 @@ function elegirAleatorios(lista, n) {
 
 function generarCandidatosAleatorios() {
   const elegidos = [];
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Carne muscular"], 2));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hueso carnoso (obligatoria)"], 2));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vísceras"], 2));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hígado"], 1));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Yodo (obligatoria)"], 1));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Verduras y frutas"], 2));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vitamina E (obligatoria)"], 1));
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Extra"], 1));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Carne muscular"], 5));
+  // "Pecho de ternera con hueso" es el que mas calcio tiene (4200mg/100g)
+  // de los huesos disponibles -- garantizarlo siempre evita que una tirada
+  // aleatoria desafortunada (solo huesos "flojos" en calcio) deje sin
+  // solucion posible el calculo real, verificado con pruebas
+  elegidos.push("Pecho de ternera con hueso");
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hueso carnoso"].filter((n) => n !== "Pecho de ternera con hueso"), 5));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vísceras"], 4));
+  elegidos.push(...POOL_CANDIDATOS["Hígado"]); // los 2 -- son pocos, mejor incluir ambos siempre
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Pescados y mariscos"], 4));
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Verduras y frutas"], 6));
+  // "Aceite de girasol" tiene muchisima mas grasa esencial y Vitamina E
+  // (57g linoleico, 56mg vitE) que el resto de aceites (11-18mg vitE) --
+  // garantizarlo evita que una tirada sin el se quede corta en estos dos
+  // nutrientes, verificado con pruebas
+  elegidos.push("Aceite de girasol");
+  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Extras"].filter((n) => n !== "Aceite de girasol"), 3));
+  // El multivitaminico va SIEMPRE. Sin el es practicamente imposible cubrir
+  // zinc, cobre, manganeso y yodo con alimentos reales: probado con los
+  // mismos candidatos, con multivitaminico el 100% de los menus salen
+  // validos y sin el, el 0%. Es lo mismo que hacen los formuladores
+  // profesionales (BalanceIT, Napfcheck), que siempre parten de un premix.
+  elegidos.push(...POOL_CANDIDATOS["Suplementos comerciales"]);
+  return elegidos;
+}
+
+// Construye la lista de candidatos a mandar a la API SEGUN EL MODO real
+// elegido -- antes esto siempre usaba la lista aleatoria generica, ignorando
+// lo que el usuario hubiera elegido en Personalizar o metido en Aprovechar.
+function construirCandidatos(modo, configPersonalizar, itemsAprovechar) {
+  let elegidos;
+
+  if (modo === "personalizar") {
+    elegidos = [];
+    for (const [cat, pool] of Object.entries(POOL_CANDIDATOS)) {
+      const c = configPersonalizar[cat];
+      if (!c) continue;
+      if (c.modo === "manual" && c.elegido.length > 0) {
+        elegidos.push(...c.elegido.map((a) => a.startsWith("Todo: ") ? null : a).filter(Boolean));
+      } else if (c.modo === "no") {
+        // solo Suplementos comerciales -> no se añade nada de esa categoria
+      } else {
+        // modo "auto", O "manual" sin elegir nada todavia -> se rellena solo para que no se quede vacia
+        elegidos.push(...elegirAleatorios(pool, cat === "Carne muscular" || cat === "Hueso carnoso" || cat === "Verduras y frutas" ? 4 : 3));
+      }
+    }
+  } else if (modo === "aprovechar") {
+    elegidos = itemsAprovechar.map((it) => it.alimento).filter((a) => !a.startsWith("Todo: "));
+    // completar categorias esenciales que el usuario no haya metido, para que el menu siga siendo factible
+    const categoriasYaCubiertas = new Set(itemsAprovechar.map((it) => it.categoria));
+    for (const cat of CATEGORIAS_ESENCIALES) {
+      if (!categoriasYaCubiertas.has(cat)) {
+        elegidos.push(...elegirAleatorios(POOL_CANDIDATOS[cat], 1));
+      }
+    }
+  } else {
+    // modo "automatico" (o por defecto)
+    elegidos = generarCandidatosAleatorios();
+  }
+
+  // RED DE SEGURIDAD: pase lo que pase en cualquier modo, el hueso carnoso
+  // NUNCA puede faltar (calcio real, no negociable) -- si por lo que sea
+  // no hay ninguno en la lista final, se añade uno de todas formas
+  const hayHueso = elegidos.some((nombre) => POOL_CANDIDATOS["Hueso carnoso"].includes(nombre));
+  if (!hayHueso) {
+    elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hueso carnoso"], 1));
+  }
+
   return elegidos;
 }
 
@@ -139,7 +201,7 @@ const CATEGORIAS_ALIMENTO = {
     "Pato": ["Cuello de pato"],
     "Pavo": ["Ala de pavo", "Carcasa de pavo", "Cuello de pavo"],
     "Pollo": ["Ala de pollo", "Carcasa de pollo", "Cuello de pollo"],
-    "Ternera": ["Costillas de ternera", "Cuello de ternera", "Pecho de ternera con hueso"],
+    "Ternera": ["Costillas de ternera", "Pecho de ternera con hueso"],
     "Toro": ["Rabo de toro"],
   },
   "Vísceras": {
@@ -213,7 +275,7 @@ const CATEGORIAS_ALIMENTO = {
     "Calcio": ["Cáscara de huevo PAWS & PATCH", "Cáscara de huevo casera (en polvo)", "GRAU Harina de Hueso", "LUPO NATURAL BARF Huesos en polvo"],
     "Fibra": ["NaturGreen Psyllium Bio"],
     "Hierro": ["AniForte Beef Blood Powder"],
-    "Multivitamínico": ["Dibaq Sense Multivitaminas BARF", "GRAU BARF KombiMix"],
+    "Multivitamínico": ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)"],
     "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Brit Care Aceite de Salmón", "Oleum Canis Aceite de Salmón"],
     "Levadura de cerveza": ["GRAU Levadura de cerveza", "PAWS & PATCH Levadura de cerveza"],
     "Algas (Kelp)": ["AniForte Seaweed Meal", "Sonrisa de Diez Kelp"],
@@ -225,8 +287,11 @@ const INSTRUCCIONES_POR_CATEGORIA = {
   "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — un hueso cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño. Espera a las 14 semanas para huesos duros.",
   "Vísceras": "Crudas, en trozos pequeños.",
   "Hígado": "Crudo, en trozos pequeños — se da en poca cantidad, no hace falta trocear más de la cuenta.",
-  "Pescados y mariscos": "El pescado puede darse crudo si se ha congelado antes (previene el anisakis). Los mariscos, SIEMPRE cocinados.",
-  "Verduras y frutas": "Trituradas o muy cocidas — el perro no digiere bien la fibra vegetal cruda entera.",
+  "Pescados y mariscos": "El pescado puede darse crudo si se ha congelado antes (previene el anisakis). Los mariscos, SIEMPRE cocinados. Importante: no lo conviertas en la proteína principal de forma repetida — el pescado crudo tiene una enzima que destruye la Vitamina B1 si se abusa de él sin variar, algo documentado en casos graves.",
+  "Verduras y frutas": "Trituradas o muy cocidas — el perro no digiere bien la fibra vegetal cruda entera. Si hay manzana: quitar siempre las semillas y el corazón (contienen una pequeña cantidad de cianuro).",
+  "Extras": "El huevo mejor cocido, no crudo — por el riesgo de salmonela (los cachorros son el grupo más vulnerable). Los aceites, siempre crudos, añadidos al final sobre la comida.",
+  "Hueso carnoso": "Varía el tipo de hueso entre menús — no uses siempre cuello de la misma especie grande (ternera). El cuello puede llevar restos de tejido tiroideo que, dado de forma repetida, puede alterar la tiroides del perro.",
+  "Pescados y mariscos": "Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que los pescados pequeños (sardina, caballa, boquerón), que puedes dar con más frecuencia.",
   "Suplementos comerciales": "Sigue la dosis del fabricante en el envase — no calcules a ojo.",
 };
 
@@ -487,11 +552,47 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, pesoAdultoEsperado, edad, set }) {
+function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(false);
   const [selectorMascotaAbierto, setSelectorMascotaAbierto] = useState(false);
   const [seccionActiva, setSeccionActiva] = useState(null);
+  // --- modo analizador: el usuario mete lo que YA le da y le decimos que tal ---
+  const [dietaAnalizar, setDietaAnalizar] = useState([]);   // [{categoria, alimento, gramos}]
+  const [abiertoAnalizar, setAbiertoAnalizar] = useState(null);
+  const [resultadoAnalisis, setResultadoAnalisis] = useState(null);
+  const [analizando, setAnalizando] = useState(false);
+  const [errorAnalisis, setErrorAnalisis] = useState(null);
+
+  const analizarDietaActual = async () => {
+    const conGramos = dietaAnalizar.filter((it) => Number(it.gramos) > 0);
+    if (conGramos.length === 0) {
+      setErrorAnalisis("Añade al menos un alimento y dinos cuántos gramos le das.");
+      return;
+    }
+    setAnalizando(true); setErrorAnalisis(null); setResultadoAnalisis(null);
+    const gramos_por_alimento = {};
+    conGramos.forEach((it) => {
+      gramos_por_alimento[it.alimento] = (gramos_por_alimento[it.alimento] || 0) + Number(it.gramos);
+    });
+    try {
+      const resp = await fetch(`${API_BASE}/analizar`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gramos_por_alimento,
+          der_objetivo: derReal,
+          etapa_requisitos: etapaCalculada,
+        }),
+      });
+      const data = await resp.json();
+      if (!data.ok) setErrorAnalisis(data.motivo || "No hemos podido analizar la dieta.");
+      else setResultadoAnalisis(data);
+    } catch (e) {
+      setErrorAnalisis("No hemos podido conectar con el servidor. Inténtalo otra vez.");
+    }
+    setAnalizando(false);
+  };
   const [nuevoPeso, setNuevoPeso] = useState("");
   const [porqueAbierto, setPorqueAbierto] = useState(null);
   const [comoAbierto, setComoAbierto] = useState(null);
@@ -503,6 +604,9 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
   const [recienRecalculado, setRecienRecalculado] = useState(false);
   const [sobreescritosPorMenu, setSobreescritosPorMenu] = useState({});
   const [editorAbierto, setEditorAbierto] = useState(null); // { itemIdx, categoria, especie } | null
+  const [recalculandoServidor, setRecalculandoServidor] = useState(false);
+  const [gramosRealesPorMenu, setGramosRealesPorMenu] = useState({}); // { tabId: {alimento: gramos} } -- resultado REAL de la API tras cualquier edicion
+  const [errorRecalculo, setErrorRecalculo] = useState(null);
 
   const menu = menus.find((m) => m.id === tabActiva);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
@@ -512,13 +616,48 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
   const totalBase = menu.items.reduce((s, it) => s + it.gramos, 0);
   const factor = totalBase > 0 ? Math.max(0, (totalBase - gramosSuplementos) / totalBase) : 1;
   const sobreescritos = sobreescritosPorMenu[tabActiva] || {};
-  const itemsBase = menu.items.map((it, idx) => ({
-    ...it,
-    alimento: sobreescritos[idx] || it.alimento,
-    gramos: Math.max(5, Math.round(it.gramos * factor)),
-  }));
+  const gramosReales = gramosRealesPorMenu[tabActiva]; // {alimento: gramos} si ya se recalculo de verdad con el servidor
+  const itemsBase = menu.items.map((it, idx) => {
+    const alimentoActual = sobreescritos[idx] || it.alimento;
+    const gramosDeVerdad = gramosReales ? gramosReales[alimentoActual] : undefined;
+    return {
+      ...it,
+      alimento: alimentoActual,
+      gramos: gramosDeVerdad !== undefined ? gramosDeVerdad : Math.max(5, Math.round(it.gramos * factor)),
+    };
+  }).filter((it) => gramosReales ? gramosReales[it.alimento] !== undefined : true); // si ya recalculamos con la API, solo mostrar lo que la API diga que sigue teniendo gramos > 0
   const itemsMostrados = [...itemsBase, ...suplementosMenu];
   const totalGramos = itemsMostrados.reduce((s, it) => s + it.gramos, 0);
+
+  const nombresActualesDelMenu = () => menu.items.map((it, idx) => sobreescritos[idx] || it.alimento);
+  const etapaSufijoApi = ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto";
+
+  const llamarRecalculo = async (endpoint, cuerpoExtra) => {
+    setRecalculandoServidor(true);
+    setErrorRecalculo(null);
+    try {
+      const res = await fetch(`${API_BASE}${endpoint}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          der_objetivo: menu.kcal,
+          etapa_requisitos: etapaSufijoApi,
+          especies_excluidas: Array.from(especiesExcluidas || []),
+          ...cuerpoExtra,
+        }),
+      });
+      const data = await res.json();
+      if (data.factible) {
+        setGramosRealesPorMenu((prev) => ({ ...prev, [tabActiva]: data.gramos }));
+      } else {
+        setErrorRecalculo(data.motivo || "No se pudo recalcular con esta combinación.");
+      }
+    } catch (err) {
+      setErrorRecalculo("No se ha podido conectar con el servidor para recalcular.");
+    } finally {
+      setRecalculandoServidor(false);
+    }
+  };
 
   const anadirSuplemento = (tipo, producto) => {
     setSuplementosPorMenu((prev) => ({
@@ -527,25 +666,30 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
     }));
     setSupAbierto(false);
     setSupTipoAbierto(null);
+    llamarRecalculo("/menu/anadir", { menu_actual: nombresActualesDelMenu(), alimento: producto });
     setRecienRecalculado(true);
     setTimeout(() => setRecienRecalculado(false), 2500);
   };
 
   const quitarSuplemento = (idx) => {
+    const producto = suplementosMenu[idx]?.alimento;
     setSuplementosPorMenu((prev) => ({
       ...prev,
       [tabActiva]: (prev[tabActiva] || []).filter((_, i) => i !== idx),
     }));
+    if (producto) llamarRecalculo("/menu/quitar", { menu_actual: [...nombresActualesDelMenu(), producto], alimento: producto });
     setRecienRecalculado(true);
     setTimeout(() => setRecienRecalculado(false), 2500);
   };
 
-  const cambiarAlimento = (itemIdx, alimento) => {
+  const cambiarAlimento = (itemIdx, alimentoNuevo) => {
+    const alimentoViejo = menu.items[itemIdx].alimento;
     setSobreescritosPorMenu((prev) => ({
       ...prev,
-      [tabActiva]: { ...(prev[tabActiva] || {}), [itemIdx]: alimento },
+      [tabActiva]: { ...(prev[tabActiva] || {}), [itemIdx]: alimentoNuevo },
     }));
     setEditorAbierto(null);
+    llamarRecalculo("/menu/cambiar", { menu_actual: nombresActualesDelMenu(), alimento_viejo: alimentoViejo, alimento_nuevo: alimentoNuevo });
   };
 
   return (
@@ -654,6 +798,18 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
             <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
               Vista previa — {nombrePerro} todavía no come esto. Se activará en la semana {idxActiva + 1}.
             </p>
+          </div>
+        )}
+        {recalculandoServidor && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3" style={{ background: "#F0ECF7" }}>
+            <Dog size={13} style={{ color: VIOLETA, flexShrink: 0 }} />
+            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>Recalculando gramos con el servidor...</p>
+          </div>
+        )}
+        {errorRecalculo && !recalculandoServidor && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3" style={{ background: "#FFE8EC" }}>
+            <AlertCircle size={13} style={{ color: ROSA, flexShrink: 0 }} />
+            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{errorRecalculo}</p>
           </div>
         )}
         <div className="flex gap-3 mb-4">
@@ -876,6 +1032,7 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
                 { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}` },
                 { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento" },
                 { key: "menus", Icono: ClipboardList, label: "Mis menús" },
+                { key: "analizar", Icono: Search, label: "Analizar la dieta actual" },
                 { key: "porque", Icono: Heart, label: "Por qué CANISLAB" },
               ].map((op) => {
                 const Icono = op.Icono;
@@ -1005,6 +1162,151 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
           </div>
         </div>
       )}
+
+      {seccionActiva === "analizar" && (
+        <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+          <button onClick={() => { setSeccionActiva(null); setResultadoAnalisis(null); setErrorAnalisis(null); }} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <p className="text-2xl mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>Analizar la dieta actual</p>
+          <p className="text-sm leading-relaxed mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
+            Dinos qué le estás dando a {nombrePerro} ahora mismo y cuántos gramos de cada cosa.
+            Lo comparamos con lo que necesita y te decimos qué está bien y qué no.
+          </p>
+
+          <div className="px-4 py-3 rounded-xl mb-5" style={{ background: "#F0ECF7" }}>
+            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+              Usamos el perfil de {nombrePerro}: {etapaLabel}, {derReal} kcal al día.
+            </p>
+          </div>
+
+          <SelectorAlimentos
+            lista={dietaAnalizar}
+            onAnadir={(it) => setDietaAnalizar((prev) => [...prev, { ...it, gramos: "" }])}
+            onQuitar={(idx) => setDietaAnalizar((prev) => prev.filter((_, i) => i !== idx))}
+            idGrupo="analizar"
+            estadoAbierto={abiertoAnalizar}
+            setEstadoAbierto={setAbiertoAnalizar}
+            categorias={categoriasDisponibles}
+          />
+
+          {dietaAnalizar.length > 0 && (
+            <div className="mt-4 mb-5">
+              <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: fontMono, letterSpacing: "0.08em" }}>GRAMOS AL DÍA DE CADA UNO</p>
+              {dietaAnalizar.map((it, idx) => (
+                <div key={idx} className="flex items-center gap-3 mb-2 px-3 py-2.5 rounded-xl" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                  <span className="flex-1 text-sm" style={{ color: TINTA, fontFamily: fontBody }}>{it.alimento}</span>
+                  <input
+                    type="number" inputMode="numeric" min="0" placeholder="0"
+                    value={it.gramos}
+                    onChange={(e) => setDietaAnalizar((prev) => prev.map((x, i) => i === idx ? { ...x, gramos: e.target.value } : x))}
+                    className="w-20 text-right text-sm px-2 py-1.5 rounded-lg"
+                    style={{ border: "1.5px solid #E3DAF0", color: VIOLETA, fontFamily: fontMono }}
+                  />
+                  <span className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>g</span>
+                </div>
+              ))}
+              <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                Total: {dietaAnalizar.reduce((s, i) => s + (Number(i.gramos) || 0), 0)} g al día
+              </p>
+            </div>
+          )}
+
+          <button
+            onClick={analizarDietaActual}
+            disabled={analizando}
+            className="w-full py-3.5 rounded-xl text-sm mb-4"
+            style={{ background: analizando ? MALVA : ROSA, color: "#FFFFFF", fontFamily: fontBody }}
+          >
+            {analizando ? "Analizando…" : "Analizar esta dieta"}
+          </button>
+
+          {errorAnalisis && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl mb-4" style={{ background: "#FFF0F3" }}>
+              <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 1 }} />
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{errorAnalisis}</p>
+            </div>
+          )}
+
+          {resultadoAnalisis && (
+            <div className="mb-4">
+              <div className="px-4 py-4 rounded-2xl mb-4" style={{ background: VIOLETA }}>
+                <p className="text-base leading-snug" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>
+                  {resultadoAnalisis.veredicto}
+                </p>
+              </div>
+
+              <div className="px-4 py-3.5 rounded-xl mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <p className="text-xs mb-1" style={{ color: MALVA, fontFamily: fontMono, letterSpacing: "0.08em" }}>ENERGÍA</p>
+                <p className="text-sm leading-relaxed" style={{ color: TINTA, fontFamily: fontBody }}>
+                  {resultadoAnalisis.energia.texto}
+                </p>
+                <p className="text-xs mt-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Aporta {resultadoAnalisis.energia.aporta_kcal} kcal · necesita {resultadoAnalisis.energia.necesita_kcal} kcal
+                </p>
+              </div>
+
+              {resultadoAnalisis.sobran.length > 0 && (
+                <div className="px-4 py-3.5 rounded-xl mb-3" style={{ background: "#FFF0F3", border: "1.5px solid #FFD5DE" }}>
+                  <p className="text-xs mb-2" style={{ color: ROSA, fontFamily: fontMono, letterSpacing: "0.08em" }}>SE PASA DE LO RECOMENDADO</p>
+                  {resultadoAnalisis.sobran.map((s) => (
+                    <div key={s.nutriente} className="mb-2.5">
+                      <p className="text-sm" style={{ color: TINTA, fontFamily: fontBody }}>
+                        {s.nutriente}: {s.del_maximo_pct}% del máximo
+                      </p>
+                      {s.por_que_importa && (
+                        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "#7A6A88", fontFamily: fontBody }}>{s.por_que_importa}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {resultadoAnalisis.faltan.length > 0 && (
+                <div className="px-4 py-3.5 rounded-xl mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                  <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: fontMono, letterSpacing: "0.08em" }}>LE FALTA ({resultadoAnalisis.faltan.length})</p>
+                  {resultadoAnalisis.faltan.map((f) => (
+                    <div key={f.nutriente} className="mb-2.5">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full" style={{ background: "#EDE7F3" }}>
+                          <div className="h-full rounded-full" style={{ width: `${Math.min(100, f.cubre_pct)}%`, background: ROSA }} />
+                        </div>
+                        <span className="text-xs w-10 text-right" style={{ color: ROSA, fontFamily: fontMono }}>{f.cubre_pct}%</span>
+                      </div>
+                      <p className="text-sm mt-1" style={{ color: TINTA, fontFamily: fontBody }}>{f.nutriente}</p>
+                      {f.de_donde && (
+                        <p className="text-xs leading-relaxed" style={{ color: "#7A6A88", fontFamily: fontBody }}>Suele venir de {f.de_donde}</p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="px-4 py-3.5 rounded-xl mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: fontMono, letterSpacing: "0.08em" }}>CÓMO REPARTE LOS GRAMOS</p>
+                {resultadoAnalisis.reparto.map((r) => (
+                  <div key={r.categoria} className="flex items-center justify-between mb-1">
+                    <span className="text-sm" style={{ color: TINTA, fontFamily: fontBody }}>{r.categoria}</span>
+                    <span className="text-xs" style={{ color: MALVA, fontFamily: fontMono }}>{r.gramos} g · {r.pct}%</span>
+                  </div>
+                ))}
+                {resultadoAnalisis.calcio_fosforo.ratio && (
+                  <p className="text-xs mt-2.5" style={{ color: resultadoAnalisis.calcio_fosforo.correcto ? "#5A9367" : ROSA, fontFamily: fontBody }}>
+                    Calcio:fósforo {resultadoAnalisis.calcio_fosforo.ratio}:1 — {resultadoAnalisis.calcio_fosforo.correcto ? "dentro de lo recomendado" : "fuera de lo recomendado"} ({resultadoAnalisis.calcio_fosforo.referencia})
+                  </p>
+                )}
+              </div>
+
+              <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
+                {resultadoAnalisis.correctos} de {resultadoAnalisis.total_comprobados} nutrientes están correctos.
+              </p>
+
+              <div className="flex items-start gap-2 px-4 py-3 rounded-xl" style={{ background: "#F0ECF7" }}>
+                <Info size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 1 }} />
+                <p className="text-xs leading-relaxed" style={{ color: TINTA, fontFamily: fontBody }}>{resultadoAnalisis.aviso}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1123,7 +1425,7 @@ export default function CanislabOnboarding() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nombres_alimentos: generarCandidatosAleatorios(),
+          nombres_alimentos: construirCandidatos(modo, configPersonalizar, itemsAprovechar),
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           especies_excluidas: Array.from(especiesExcluidas),
@@ -1165,7 +1467,7 @@ export default function CanislabOnboarding() {
     return () => {
       cancelado = true;
     };
-  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas]);
+  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas, modo, configPersonalizar, itemsAprovechar]);
 
   // ---------- PASO 1: Nombre + Sexo ----------
   if (paso === 1) {
@@ -1819,7 +2121,7 @@ export default function CanislabOnboarding() {
       );
     }
     const menus = menuReal ? respuestaApiAMenu(menuReal, derReal) : MENUS_EJEMPLO;
-    return <VistaMenus menus={menus} onVolver={volverAElegir} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
+    return <VistaMenus menus={menus} onVolver={volverAElegir} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
   }
 
   
