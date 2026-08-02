@@ -657,6 +657,9 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
           der_objetivo: menu.kcal,
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
+          // el peso hace falta para las dosis maximas de los suplementos
+          // comerciales (el fabricante las da por kilos, no por calorias)
+          peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
           ...cuerpoExtra,
         }),
       });
