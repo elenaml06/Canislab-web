@@ -2009,6 +2009,9 @@ export default function CanislabOnboarding() {
           // pancreatitis...) y en las que dependen de analiticas impiden
           // generarlo. Se recogian en el perfil pero no llegaban al motor.
           patologias: perfil?.patologias || [],
+          // activa el tope de calcio de raza grande en cachorros: en ellos el
+          // exceso de calcio causa osteocondrosis y no lo pueden regular
+          peso_adulto_esperado_kg: pesoAdultoEsperado || null,
         }),
       }).then((res) => res.json());
 
