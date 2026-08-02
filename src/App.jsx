@@ -20,7 +20,7 @@ const POOL_CANDIDATOS = {
   // El multivitaminico va SIEMPRE: sin el, cubrir zinc/cobre/manganeso/yodo
   // con alimentos reales es practicamente imposible (probado: con multi 100%
   // de menus validos, sin multi 0%).
-  "Suplementos comerciales": ["Homemadekun (multivitamínico completo)", "Sonrisa de Diez Kelp"],
+  "Suplementos comerciales": ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)", "Sonrisa de Diez Kelp", "AniForte Seaweed Meal", "GRAU Levadura de cerveza", "PAWS & PATCH Levadura de cerveza", "AniForte Aceite de Salmón", "Brit Care Aceite de Salmón", "Oleum Canis Aceite de Salmón", "Aceite de Salmón Natural Greatness", "GRAU Harina de Hueso", "LUPO NATURAL BARF Huesos en polvo", "Cáscara de huevo PAWS & PATCH", "Cáscara de huevo casera (en polvo)", "AniForte Beef Blood Powder", "NaturGreen Psyllium Bio"],
 };
 const CATEGORIAS_ESENCIALES = ["Hueso carnoso", "Pescados y mariscos", "Extras"]; // calcio, yodo, vitamina E
 
@@ -45,6 +45,15 @@ function especieDe(nombre) {
 // DISTINTAS, no tres variantes de lo mismo: antes cada menu se sorteaba por
 // separado y casi siempre ganaba la misma carne.
 const PROTEINAS_BASE = ["Ternera", "Pollo", "Conejo", "Cordero", "Pavo", "Pato"];
+
+// Suplementos que hacen LO MISMO. Antes se metian siempre los dos unicos que
+// habia en el pool y el usuario veia siempre el mismo producto, aunque en la
+// base hay 16. Ahora se coge uno de cada grupo, rotando: dos marcas de
+// multivitaminico cubren lo mismo, no hace falta usar siempre la misma.
+const SUPLEMENTOS_EQUIVALENTES = {
+  multivitaminico: ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)"],
+  yodo: ["Sonrisa de Diez Kelp", "AniForte Seaweed Meal"],
+};
 // Nota: "Vaca" (corazon) y "Toro" (rabo) se consideran parte de Ternera a
 // efectos de alergia, pero no se usan como especie base propia.
 
@@ -91,9 +100,12 @@ function generarCandidatosAleatorios(especieBase) {
   // resto de aceites (11-18mg) -- garantizarlo evita quedarse corto en ambos
   elegidos.push("Aceite de girasol");
   elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Extras"].filter((n) => n !== "Aceite de girasol"), 3));
-  // El multivitaminico va SIEMPRE: con el, el 100% de los menus salen validos;
-  // sin el, el 0%. Es lo que hacen los formuladores profesionales.
-  elegidos.push(...POOL_CANDIDATOS["Suplementos comerciales"]);
+  // El multivitaminico va SIEMPRE (con el, el 100% de los menus salen
+  // validos; sin el, el 0%), pero NO tiene por que ser siempre la misma
+  // marca: se elige una de las equivalentes. Igual con la fuente de yodo.
+  for (const opciones of Object.values(SUPLEMENTOS_EQUIVALENTES)) {
+    elegidos.push(...elegirAleatorios(opciones, 1));
+  }
   return [...new Set(elegidos)];
 }
 
@@ -160,7 +172,11 @@ function construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieB
   // sin ellos el 0% de los menus sale valido (probado). No son "un alimento
   // mas" que el usuario elija, son lo que hace posible el calculo.
   if (!yaEsta("Aceite de girasol")) elegidos.push("Aceite de girasol");
-  for (const s of POOL_CANDIDATOS["Suplementos comerciales"]) if (!yaEsta(s)) elegidos.push(s);
+  // uno de cada grupo de suplementos equivalentes, salvo que el usuario ya
+  // haya elegido uno de ese grupo (entonces se respeta el suyo)
+  for (const opciones of Object.values(SUPLEMENTOS_EQUIVALENTES)) {
+    if (!opciones.some(yaEsta)) elegidos.push(...elegirAleatorios(opciones, 1));
+  }
   // fuente de calcio garantizada
   if (!yaEsta("Pecho de ternera con hueso")) elegidos.push("Pecho de ternera con hueso");
 
@@ -745,7 +761,22 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
       gramos: gramosDeVerdad !== undefined ? gramosDeVerdad : Math.max(5, Math.round(it.gramos * factor)),
     };
   }).filter((it) => gramosReales ? gramosReales[it.alimento] !== undefined : true); // si ya recalculamos con la API, solo mostrar lo que la API diga que sigue teniendo gramos > 0
-  const itemsMostrados = [...itemsBase, ...suplementosMenu];
+  // Orden fijo en pantalla: primero la carne, luego el hueso, después las
+  // vísceras y el hígado, las verduras y frutas, y al final los suplementos.
+  // Antes salían en el orden que devolvía el motor (por gramos), que no se
+  // corresponde con cómo uno prepara la comida.
+  const ORDEN_CATEGORIAS = [
+    "Carne muscular", "Pescados y mariscos", "Hueso carnoso",
+    "Vísceras", "Hígado", "Verduras y frutas", "Extras",
+    "Suplementos comerciales", "Multivitamínico", "Yodo", "Calcio",
+    "Omega-3", "Vitamina B", "Hierro", "Fibra",
+  ];
+  const itemsMostrados = [...itemsBase, ...suplementosMenu].sort((a, b) => {
+    const ia = ORDEN_CATEGORIAS.indexOf(a.categoria);
+    const ib = ORDEN_CATEGORIAS.indexOf(b.categoria);
+    if (ia !== ib) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
+    return b.gramos - a.gramos;   // dentro de la categoría, de más a menos
+  });
   // Se redondea a 1 decimal: sumar flotantes daba cosas como
   // "868.8000000000001g" en pantalla
   const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * 10) / 10;
@@ -1655,8 +1686,12 @@ export default function CanislabOnboarding() {
     // lo que el usuario haya elegido, asi que no se toca.
     const pedirTodos = async () => {
       const especies = modo === "automatico" ? especiesBaseDisponibles(especiesExcluidas) : [null];
+      // "Cuántos menús" solo se pregunta en Automático. En Personalizar y en
+      // Aprovechar el usuario ya ha dicho qué quiere en ESE menú concreto, no
+      // tiene sentido devolverle 3 variantes de lo mismo.
+      const cuantos = modo === "automatico" ? numMenus : 1;
       const resultados = [];
-      for (let i = 0; i < numMenus; i++) {
+      for (let i = 0; i < cuantos; i++) {
         const especieBase = especies[i % especies.length];
         let data = await pedirMenu(especieBase);
         // si con esa proteina concreta no cuadra, se reintenta sin restringir
