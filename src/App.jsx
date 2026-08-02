@@ -411,6 +411,7 @@ const CATEGORIAS_ALIMENTO = {
     "Ternera": ["Lengua de ternera", "Pulmón de ternera", "Riñón de ternera"],
   },
   "Hígado": {
+    "Conejo": ["Hígado de conejo"],
     "Pollo": ["Hígado de pollo"],
     "Vaca": ["Hígado de vaca"],
   },
@@ -602,6 +603,12 @@ function categoriaDeAlimento(nombreAlimento) {
     for (const alimentos of Object.values(especies)) {
       if (alimentos.includes(nombreAlimento)) return categoria;
     }
+  }
+  // Red de seguridad: si un alimento esta en el POOL pero se olvido en
+  // CATEGORIAS_ALIMENTO, antes caia en "Extras" y se ordenaba mal en pantalla
+  // (un higado apareciendo entre los aceites). Se mira tambien el POOL.
+  for (const [categoria, alimentos] of Object.entries(POOL_CANDIDATOS)) {
+    if (alimentos.includes(nombreAlimento)) return categoria;
   }
   return "Extras";
 }
@@ -996,7 +1003,8 @@ function VistaMenus({ menus, onVolver, modo, nombrePerro, necesitaTransicion, di
           Semana de {nombrePerro}
         </p>
         <h1 className="text-3xl leading-tight mb-5" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
-          Tus {menus.length} {menus.length === 1 ? "menú" : "menús"}
+          {/* "Tus 1 menú" quedaba fatal: en singular va "Tu menú" */}
+          {menus.length === 1 ? "Tu menú" : `Tus ${menus.length} menús`}
         </h1>
         {menus.length > 1 && (
           <div className="flex gap-2">
@@ -2538,7 +2546,11 @@ export default function CanislabOnboarding() {
           <Fuentes />
           <Dog size={36} strokeWidth={1.4} style={{ color: VIOLETA }} />
           <p className="mt-4" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
-            {menuDespertando ? "Despertando el servidor..." : `Calculando ${numMenus === 1 ? "el menú" : `los ${numMenus} menús`} de ${nombreMostrar}...`}
+            {menuDespertando
+              ? "Despertando el servidor..."
+              // ojo: los menus que se generan de verdad son numMenus solo en
+              // Automatico; en Personalizar y Aprovechar siempre es 1
+              : `Calculando ${(modo === "automatico" ? numMenus : 1) === 1 ? "el menú" : `los ${modo === "automatico" ? numMenus : 1} menús`} de ${nombreMostrar}...`}
           </p>
           <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
             {menuDespertando
