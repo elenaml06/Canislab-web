@@ -10,7 +10,7 @@ const API_BASE = "https://canislab-api.onrender.com";
 // concreto (Calcio=Hueso carnoso, Yodo=Pescados/Suplementos, VitaminaE=Extras)
 // se marcan como esenciales -- si el usuario no puso nada ahi, se rellena solo.
 const POOL_CANDIDATOS = {
-  "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Lomo de ternera con grasa", "Conejo", "Corazón de vaca", "Corazón de cordero", "Pollo pechuga con piel", "Pollo muslo con piel", "Corazón de pollo", "Pavo pechuga sin piel", "Pavo muslo con piel", "Pato entero"],
+  "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Lomo de ternera con grasa", "Conejo", "Corazón de vaca", "Corazón de cordero", "Pollo pechuga con piel", "Pollo muslo con piel", "Corazón de pollo", "Pavo pechuga sin piel", "Pavo muslo con piel", "Pato (carne sin hueso)"],
   "Hueso carnoso": ["Costillas de ternera", "Pecho de ternera con hueso", "Costillas de cordero", "Cuello de cordero", "Espinazo de cordero", "Rabo de toro", "Carcasa de conejo", "Patas de conejo", "Cuello de pollo", "Carcasa de pollo", "Ala de pollo", "Cuello de pavo", "Ala de pavo", "Carcasa de pavo", "Cuello de pato"],
   "Vísceras": ["Riñón de ternera", "Pulmón de ternera", "Riñón de cordero", "Pulmón de cordero", "Lengua de ternera"],
   "Hígado": ["Hígado de vaca", "Hígado de conejo"],
@@ -228,10 +228,10 @@ const CATEGORIAS_ALIMENTO = {
   "Carne muscular": {
     "Conejo": ["Conejo"],
     "Cordero": ["Corazón de cordero"],
-    "Gallina": ["Gallina entera"],
-    "Pato": ["Pato entero"],
+    "Gallina": ["Gallina (carne sin hueso)"],
+    "Pato": ["Pato (carne sin hueso)"],
     "Pavo": ["Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
-    "Pollo": ["Corazón de pollo", "Pollo ala con piel", "Pollo entero con piel", "Pollo muslo con piel", "Pollo pechuga con piel"],
+    "Pollo": ["Corazón de pollo", "Pollo ala con piel (sin hueso)", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo pechuga con piel"],
     "Ternera": ["Lomo de ternera con grasa", "Ternera con grasa", "Ternera solomillo sin grasa"],
     "Vaca": ["Corazón de vaca"],
   },
