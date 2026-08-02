@@ -768,21 +768,77 @@ const MULTIPLICADOR_SENIOR = { sedentario: 1.0, normal: 1.2, activo: 1.4 };
 const FACTOR_ESTERILIZADO = 0.889;
 const ACTIVIDAD_KEY = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]; // indice del slider -> clave
 
-function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado) {
-  if (!pesoActualKg || pesoActualKg <= 0) return null;
-  const rer = 70 * Math.pow(pesoActualKg, 0.75);
-  let multiplicador;
-  if (MULTIPLICADOR_FIJO[etapa] !== undefined) {
-    multiplicador = MULTIPLICADOR_FIJO[etapa];
-  } else if (etapa === "senior") {
-    multiplicador = MULTIPLICADOR_SENIOR[ACTIVIDAD_KEY[Math.min(actividadIdx, 2)]];
-  } else {
-    multiplicador = MULTIPLICADOR_ADULTO[ACTIVIDAD_KEY[actividadIdx]];
-  }
-  if (esterilizado === "si") multiplicador *= FACTOR_ESTERILIZADO;
-  return Math.round(rer * multiplicador);
-}
+// ===========================================================================
+// CÁLCULO DE LAS KCAL DIARIAS — MÉTODO EUROPEO
+// Réplica exacta de der.py. Fuentes: FEDIAF (crecimiento, gestación,
+// lactancia) + estudio de la Univ. de Múnich sobre 586 perros europeos
+// reales (adultos). Si se cambia aquí, hay que cambiar der.py IGUAL.
+//
+// Diferencia con el método americano: allí es RER x UN factor; aquí es un
+// COEFICIENTE en kcal/kg^0.75 al que se le SUMAN ajustes. Por eso no se
+// pueden apilar factores por error.
+//
+// La actividad NO se usa en cachorros, gestación ni lactancia: en esas
+// etapas manda el crecimiento o la leche, no cuánto pasea.
+// ===========================================================================
+const BASE_ACTIVIDAD = { sedentario: 88, normal: 98, activo: 110, muy_activo: 120, trabajo: 150 };
+const AJUSTE_EDAD = { joven: 15, adulto: 0, senior: -5 };
+const RAZAS_MAS_GASTO = new Set(["Jack Russell Terrier","Parson Russell Terrier","Dálmata",
+  "Braco Húngaro (Vizsla)","Bearded Collie","Greyhound","Whippet","Galgo Español",
+  "Galgo Afgano","Boxer","Rhodesian Ridgeback","Flat Coated Retriever"]);
+const RAZAS_MENOS_GASTO = new Set(["Dachshund Estándar","Dachshund Miniatura","Bichón Maltés",
+  "Bichón Habanero","Bichón Frisé","West Highland White Terrier","Collie de Pelo Largo",
+  "Shetland Sheepdog","Airedale Terrier","American Staffordshire Terrier","Golden Retriever"]);
+// Crecimiento (FEDIAF): por % del peso ADULTO esperado, no por edad
+const CRECIMIENTO = [[0.50, 210], [0.80, 175], [null, 140]];
 
+function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones = {}) {
+  if (!pesoActualKg || pesoActualKg <= 0) return null;
+  const { pesoAdultoKg, pesoIdealKg, raza, nCachorros, semanaLactancia = 3,
+          machoEntero = false, conOtrosPerros = false } = opciones;
+  const enCrecimiento = etapa === "cachorro_joven" || etapa === "cachorro_crecimiento";
+
+  // El peso ideal manda: con sobrepeso se baja al reposo, pase lo que pase
+  let pesoCalculo = pesoActualKg, subirPorDelgadez = false;
+  if (pesoIdealKg > 0 && !enCrecimiento) {
+    const ratio = pesoActualKg / pesoIdealKg;
+    if (ratio >= 1.10) return Math.round(70 * Math.pow(pesoIdealKg, 0.75));
+    pesoCalculo = pesoIdealKg;
+    if (ratio <= 0.90) subirPorDelgadez = true;
+  }
+
+  let der;
+  if (enCrecimiento) {
+    const frac = pesoAdultoKg > 0 ? pesoActualKg / pesoAdultoKg : 1;
+    let coef = CRECIMIENTO[CRECIMIENTO.length - 1][1];
+    for (const [limite, kcal] of CRECIMIENTO) {
+      if (limite === null || frac <= limite) { coef = kcal; break; }
+    }
+    der = coef * Math.pow(pesoActualKg, 0.75);
+  } else if (etapa === "gestante_temprana" || etapa === "gestante_tardia") {
+    der = 132 * Math.pow(pesoCalculo, 0.75);
+    if (etapa === "gestante_tardia") der += 26 * pesoCalculo;
+  } else if (etapa === "lactante") {
+    const n = nCachorros > 0 ? nCachorros : 4;
+    const extra = n <= 4 ? 24 * n * pesoCalculo : (96 + 12 * (n - 4)) * pesoCalculo;
+    const pesoSem = [0.75, 0.95, 1.1, 1.4][Math.min(Math.max(semanaLactancia, 1), 4) - 1];
+    der = 145 * Math.pow(pesoCalculo, 0.75) + extra * pesoSem;
+    // Tope de seguridad: el extra escala con el peso vivo y en perros grandes
+    // se dispara. La tabla clinica no pasa de x6 del RER ni con 9 cachorros.
+    // Igual que en der.py.
+    der = Math.min(der, 6.0 * 70 * Math.pow(pesoCalculo, 0.75));
+  } else {
+    let coef = BASE_ACTIVIDAD[ACTIVIDAD_KEY[actividadIdx]] ?? BASE_ACTIVIDAD.normal;
+    coef += AJUSTE_EDAD[etapa === "senior" ? "senior" : "adulto"];
+    if (conOtrosPerros) coef += 10;
+    if (machoEntero) coef += 10;
+    if (RAZAS_MAS_GASTO.has(raza)) coef += 15;
+    else if (RAZAS_MENOS_GASTO.has(raza)) coef -= 15;
+    der = coef * Math.pow(pesoCalculo, 0.75);
+  }
+  if (subirPorDelgadez) der *= 1.20;
+  return Math.round(der);
+}
 function SiluetaDesdeArriba({ tuck, color }) {
   const pellizco = 30 - tuck * 16;
   return (
@@ -893,7 +949,12 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         body: JSON.stringify({
           gramos_por_alimento,
           der_objetivo: derReal,
-          etapa_requisitos: etapaCalculada,
+          // OJO: hay que traducir la clave. etapaCalculada usa el formato de
+          // der.py ("cachorro_crecimiento") y el backend espera el de los
+          // requisitos ("CachorroCrecimiento"). Mandarlo sin traducir hacia
+          // que el analizador NO comprobara ningun nutriente y dijera que
+          // todo estaba bien.
+          etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
         }),
       });
       const data = await resp.json();
@@ -1977,8 +2038,17 @@ export default function CanislabOnboarding() {
   const ETAPA_LABEL = { cachorro_joven: "Cachorro muy joven", cachorro_crecimiento: "Cachorro en crecimiento", adulto: "Adulto", senior: "Senior" };
   const etapaLabel = ETAPA_LABEL[etapaCalculada] || "Adulto";
   const derReal = useMemo(
-    () => calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx, perfil.esterilizado),
-    [perfil.pesoActual, etapaCalculada, perfil.actividadIdx, perfil.esterilizado]
+    () => calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx,
+        perfil.esterilizado, {
+          pesoAdultoKg: pesoAdultoEsperado,
+          raza: perfil.raza?.nombre,
+          machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
+        }),
+    // OJO: el metodo europeo usa el peso adulto esperado (decide el tramo de
+    // crecimiento), la raza (+-15 kcal/kg^0.75) y el sexo (macho entero +10).
+    // Si no estan aqui, cambiar la raza NO recalcularia las kcal.
+    [perfil.pesoActual, etapaCalculada, perfil.actividadIdx, perfil.esterilizado,
+     pesoAdultoEsperado, perfil.raza?.nombre, perfil.sexo]
   );
 
   // Llamada real a la API cuando estamos en la pantalla de resultado
