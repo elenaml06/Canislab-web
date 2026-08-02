@@ -111,35 +111,60 @@ function construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieB
       if (c.modo === "manual" && c.elegido.length > 0) {
         elegidos.push(...c.elegido.map((a) => a.startsWith("Todo: ") ? null : a).filter(Boolean));
       } else if (c.modo === "no") {
-        // solo Suplementos comerciales -> no se añade nada de esa categoria
+        // el usuario ha dicho que NO quiere esta categoria
       } else {
-        // modo "auto", O "manual" sin elegir nada todavia -> se rellena solo para que no se quede vacia
         elegidos.push(...elegirAleatorios(pool, cat === "Carne muscular" || cat === "Hueso carnoso" || cat === "Verduras y frutas" ? 4 : 3));
       }
     }
   } else if (modo === "aprovechar") {
     elegidos = itemsAprovechar.map((it) => it.alimento).filter((a) => !a.startsWith("Todo: "));
-    // completar categorias esenciales que el usuario no haya metido, para que el menu siga siendo factible
-    const categoriasYaCubiertas = new Set(itemsAprovechar.map((it) => it.categoria));
-    for (const cat of CATEGORIAS_ESENCIALES) {
-      if (!categoriasYaCubiertas.has(cat)) {
-        elegidos.push(...elegirAleatorios(POOL_CANDIDATOS[cat], 1));
-      }
-    }
   } else {
-    // modo "automatico" (o por defecto)
     elegidos = generarCandidatosAleatorios(especieBase);
   }
 
-  // RED DE SEGURIDAD: pase lo que pase en cualquier modo, el hueso carnoso
-  // NUNCA puede faltar (calcio real, no negociable) -- si por lo que sea
-  // no hay ninguno en la lista final, se añade uno de todas formas
-  const hayHueso = elegidos.some((nombre) => POOL_CANDIDATOS["Hueso carnoso"].includes(nombre));
-  if (!hayHueso) {
-    elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hueso carnoso"], 1));
+  // ===================================================================
+  // COMPLETAR PARA QUE SIEMPRE HAYA SOLUCION POSIBLE
+  // ===================================================================
+  // Lo que elige el usuario se respeta siempre y se queda tal cual. Pero si
+  // solo se le pasan al motor 3 o 4 alimentos sueltos, no hay forma humana
+  // de cuadrar los 27 nutrientes y el usuario recibia un "no se encontro
+  // combinacion posible" sin entender por que. Aqui se le añaden
+  // alternativas de apoyo para que el calculo salga: el motor usara lo del
+  // usuario y completara con lo que haga falta.
+  const yaEsta = (n) => elegidos.includes(n);
+  const categoriaDe = (n) => {
+    for (const [cat, pool] of Object.entries(POOL_CANDIDATOS)) if (pool.includes(n)) return cat;
+    return null;
+  };
+  const cuentaEnCategoria = (cat) => elegidos.filter((n) => categoriaDe(n) === cat).length;
+
+  // los 5 pilares BARF necesitan un minimo de opciones para que cuadre
+  const MINIMOS = {
+    "Carne muscular": 3,
+    "Hueso carnoso": 2,
+    "Vísceras": 2,
+    "Hígado": 1,
+    "Verduras y frutas": 3,
+    "Pescados y mariscos": 2,
+  };
+  for (const [cat, minimo] of Object.entries(MINIMOS)) {
+    // si el usuario dijo explicitamente "no" a esta categoria, se respeta
+    if (modo === "personalizar" && configPersonalizar?.[cat]?.modo === "no") continue;
+    const faltan = minimo - cuentaEnCategoria(cat);
+    if (faltan > 0) {
+      elegidos.push(...elegirAleatorios(POOL_CANDIDATOS[cat].filter((n) => !yaEsta(n)), faltan));
+    }
   }
 
-  return elegidos;
+  // El aceite de girasol y el multivitaminico van SIEMPRE en cualquier modo:
+  // sin ellos el 0% de los menus sale valido (probado). No son "un alimento
+  // mas" que el usuario elija, son lo que hace posible el calculo.
+  if (!yaEsta("Aceite de girasol")) elegidos.push("Aceite de girasol");
+  for (const s of POOL_CANDIDATOS["Suplementos comerciales"]) if (!yaEsta(s)) elegidos.push(s);
+  // fuente de calcio garantizada
+  if (!yaEsta("Pecho de ternera con hueso")) elegidos.push("Pecho de ternera con hueso");
+
+  return [...new Set(elegidos)];
 }
 
 const ETAPA_A_SUFIJO_API = {
@@ -324,15 +349,55 @@ const CATEGORIAS_ALIMENTO = {
 
 const INSTRUCCIONES_POR_CATEGORIA = {
   "Carne muscular": "Cruda. En trozos, no picada — la carne picada tarda más en congelarse del todo y eso aumenta el riesgo bacteriano.",
-  "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — un hueso cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño. Espera a las 14 semanas para huesos duros.",
   "Vísceras": "Crudas, en trozos pequeños.",
   "Hígado": "Crudo, en trozos pequeños — se da en poca cantidad, no hace falta trocear más de la cuenta.",
-  "Pescados y mariscos": "El pescado puede darse crudo si se ha congelado antes (previene el anisakis). Los mariscos, SIEMPRE cocinados. Importante: no lo conviertas en la proteína principal de forma repetida — el pescado crudo tiene una enzima que destruye la Vitamina B1 si se abusa de él sin variar, algo documentado en casos graves.",
   "Verduras y frutas": "Trituradas o muy cocidas — el perro no digiere bien la fibra vegetal cruda entera. Si hay manzana: quitar siempre las semillas y el corazón (contienen una pequeña cantidad de cianuro).",
-  "Extras": "El huevo mejor cocido, no crudo — por el riesgo de salmonela (los cachorros son el grupo más vulnerable). Los aceites, siempre crudos, añadidos al final sobre la comida.",
-  "Hueso carnoso": "Varía el tipo de hueso entre menús — no uses siempre cuello de la misma especie grande (ternera). El cuello puede llevar restos de tejido tiroideo que, dado de forma repetida, puede alterar la tiroides del perro.",
-  "Pescados y mariscos": "Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que los pescados pequeños (sardina, caballa, boquerón), que puedes dar con más frecuencia.",
+  "Extras": "Los aceites y las semillas se añaden crudos al final, por encima de la comida. Cada alimento de esta categoría tiene además su propia indicación aquí abajo.",
+  // ojo: antes "Hueso carnoso" y "Pescados y mariscos" estaban DUPLICADOS en
+  // este objeto y la segunda entrada machacaba a la primera, asi que se
+  // perdia el aviso de "crudo siempre, nunca cocinado". Ahora van fundidos.
+  "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño: el perro tiene que roerlo, no tragarlo. Que coma tranquilo y supervisado, sobre todo las primeras veces. Espera a las 14 semanas para los huesos más duros, y ve variando el tipo entre menús.",
+  "Pescados y mariscos": "Puede darse crudo si se ha congelado antes (previene el anisakis). Los mariscos, SIEMPRE cocinados. No lo conviertas en la proteína principal de forma repetida: el pescado crudo lleva una enzima que destruye la Vitamina B1. Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que la sardina, la caballa o el boquerón.",
   "Suplementos comerciales": "Sigue la dosis del fabricante en el envase — no calcules a ojo.",
+};
+
+// Cómo dar CADA alimento en concreto. El texto de categoria se queda corto:
+// a quien tiene un aceite de girasol delante no le sirve leer un aviso sobre
+// el huevo y la salmonela. Cada alimento con particularidades propias tiene
+// aqui su nota, y solo se muestra en ESE alimento.
+const COMO_DAR_ALIMENTO = {
+  // --- extras: cada uno tiene su cuento, no valen todos igual ---
+  "Aceite de girasol": { pieza: "una cucharadita rasa son unos 5 g", como: "Crudo, añadido por encima justo antes de servir. Nunca lo calientes: pierde la vitamina E, que es justo para lo que está. Guárdalo cerrado y lejos de la luz." },
+  "Aceite de oliva": { pieza: "una cucharadita rasa son unos 5 g", como: "Crudo, por encima al servir. No lo calientes." },
+  "Aceite de oliva virgen extra": { pieza: "una cucharadita rasa son unos 5 g", como: "Crudo, por encima al servir. No lo calientes." },
+  "Aceite de linaza": { pieza: "una cucharadita rasa son unos 5 g", como: "Crudo y muy fresco: se oxida rápido. Guárdalo en la nevera y gástalo en pocas semanas." },
+  "Huevo de gallina entero": { pieza: "un huevo M pesa unos 55 g sin cáscara", como: "Mejor cocido que crudo, sobre todo en cachorros, por el riesgo de salmonela. Cocido puede darse entero, troceado sobre la comida." },
+  "Huevo de codorniz": { pieza: "un huevo pesa unos 10 g", como: "Cocido. Por su tamaño, son fáciles de dosificar en perros pequeños." },
+  "Huevo clara": { pieza: "la clara de un huevo M son unos 35 g", como: "SIEMPRE cocida. La clara cruda lleva avidina, que bloquea la absorción de biotina si se da con frecuencia." },
+  "Huevo yema": { pieza: "una yema pesa unos 18 g", como: "Puede darse cruda si el huevo es fresco y de confianza. Es la parte más nutritiva del huevo." },
+  "Semilla de lino": { pieza: "una cucharadita son unos 4 g", como: "SIEMPRE molida justo antes de dar. Entera pasa de largo sin digerirse y no aporta nada." },
+  "Pipa de calabaza": { pieza: "una cucharadita son unos 5 g", como: "Molidas o muy trituradas, si no pasan enteras." },
+  "Pipa de girasol": { pieza: "una cucharadita son unos 5 g", como: "Peladas y molidas." },
+  "Semilla de sésamo": { pieza: "una cucharadita son unos 4 g", como: "Molido, si no pasa entero sin digerir." },
+  "Yogur griego": { pieza: "una cucharada son unos 20 g", como: "Natural y sin azúcar ni edulcorantes. Empieza con poca cantidad: no todos los perros digieren bien la lactosa." },
+  // --- huesos carnosos ---
+  "Cuello de pollo": { pieza: "un cuello entero pesa unos 35-50 g", como: "Entero, sin trocear. Es de los más blandos: buen hueso para empezar. En perros muy tragones, dáselo semicongelado para que tenga que roerlo en vez de tragárselo de golpe." },
+  "Carcasa de pollo": { pieza: "media carcasa son unos 150-200 g", como: "Partida por la mitad o en cuartos según el tamaño del perro. Lleva poca carne, así que suele ir acompañada de carne aparte." },
+  "Ala de pollo": { pieza: "un ala entera pesa unos 90-100 g", como: "Entera, con la punta. Es el hueso más graso de los de pollo, ojo si el perro tiende a engordar." },
+  "Cuello de pavo": { pieza: "un cuello entero pesa 300-500 g", como: "Casi siempre hay que partirlo: un tercio o medio cuello por toma según el perro. Es duro, mejor a partir de los 6 meses." },
+  "Ala de pavo": { pieza: "un ala entera pesa 200-300 g", como: "Suele darse partida por la articulación. Bastante dura, no es un hueso para principiantes." },
+  "Carcasa de pavo": { pieza: "una carcasa entera pesa 400-700 g", como: "Partida en trozos grandes. Igual que la de pollo, lleva poca carne." },
+  "Cuello de pato": { pieza: "un cuello entero pesa 60-100 g", como: "Entero. Es más blando que el de pavo y muy bien aceptado." },
+  "Codorniz entera": { pieza: "una codorniz entera pesa 130-180 g", como: "Entera, es presa completa. Ideal para perros medianos; en pequeños, partida por la mitad." },
+  "Carcasa de conejo": { pieza: "media carcasa son unos 200-300 g", como: "En trozos grandes. Los huesos de conejo son finos y quebradizos: dáselos siempre crudos y vigila que roa, no que trague." },
+  "Cabeza de conejo": { pieza: "una cabeza pesa 80-120 g", como: "Entera. Muy completa y muy entretenida para el perro, aunque impresione al principio." },
+  "Patas de conejo": { pieza: "una pata pesa 40-70 g", como: "Enteras. Pequeñas y manejables, buenas para perros de tamaño mediano." },
+  "Costillas de cordero": { pieza: "una costilla pesa 60-90 g", como: "De una en una, sin trocear. Es un hueso graso: no abuses si el perro tiene tendencia a la pancreatitis." },
+  "Cuello de cordero": { pieza: "un cuello entero pesa 300-500 g", como: "Partido en rodajas por el carnicero. Ojo: el cuello puede llevar restos de tejido tiroideo, así que no lo repitas en todos los menús." },
+  "Espinazo de cordero": { pieza: "un trozo de espinazo pesa 150-250 g", como: "En trozos grandes, tal como lo corte el carnicero. Bastante duro." },
+  "Costillas de ternera": { pieza: "una costilla pesa 200-400 g", como: "De una en una. Son huesos grandes y duros: para perros con experiencia, y siempre supervisado. Si el perro es de morder fuerte, retíralo cuando quede solo el hueso pelado." },
+  "Pecho de ternera con hueso": { pieza: "un trozo pesa 300-600 g", como: "En trozos grandes, que el perro tenga que trabajarlo. Es de los más ricos en calcio, por eso suele salir en cantidades pequeñas." },
+  "Rabo de toro": { pieza: "una pieza de rabo pesa 150-250 g", como: "Por vértebras, tal como viene cortado. Duro pero muy carnoso, gusta mucho." },
 };
 
 const PATOLOGIAS = [
@@ -681,7 +746,9 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
     };
   }).filter((it) => gramosReales ? gramosReales[it.alimento] !== undefined : true); // si ya recalculamos con la API, solo mostrar lo que la API diga que sigue teniendo gramos > 0
   const itemsMostrados = [...itemsBase, ...suplementosMenu];
-  const totalGramos = itemsMostrados.reduce((s, it) => s + it.gramos, 0);
+  // Se redondea a 1 decimal: sumar flotantes daba cosas como
+  // "868.8000000000001g" en pantalla
+  const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * 10) / 10;
 
   const nombresActualesDelMenu = () => menu.items.map((it, idx) => sobreescritos[idx] || it.alimento);
   const etapaSufijoApi = ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto";
@@ -919,7 +986,7 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
                     <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{item.alimento}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>{item.gramos}g</span>
+                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>{Math.round(item.gramos * 10) / 10}g</span>
                     {item.porque && (
                       <button onClick={() => { setPorqueAbierto(porqueAbierto === i ? null : i); setEditorAbierto(null); setComoAbierto(null); }}>
                         <Info size={16} style={{ color: porqueAbierto === i ? ROSA : "#C9BEDD" }} />
@@ -986,9 +1053,24 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
                   </div>
                 )}
                 {comoAbierto === i && (
-                  <div className="mt-3 pt-3 flex gap-2 items-start" style={{ borderTop: "1px solid #F0ECF7" }}>
-                    <UtensilsCrossed size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
-                    <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{INSTRUCCIONES_POR_CATEGORIA[item.categoria]}</p>
+                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
+                    <div className="flex gap-2 items-start">
+                      <UtensilsCrossed size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+                      <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{INSTRUCCIONES_POR_CATEGORIA[item.categoria]}</p>
+                    </div>
+                    {COMO_DAR_ALIMENTO[item.alimento] && (
+                      <div className="mt-2.5 p-2.5 rounded-xl" style={{ background: PAPEL }}>
+                        <p className="text-[10px] tracking-[0.1em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          Este alimento en concreto
+                        </p>
+                        <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+                          {COMO_DAR_ALIMENTO[item.alimento].como}
+                        </p>
+                        <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                          Como referencia, {COMO_DAR_ALIMENTO[item.alimento].pieza} — con los {Math.round(item.gramos * 10) / 10} g de hoy te haces una idea de cuánto es.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
