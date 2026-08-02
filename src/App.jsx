@@ -860,7 +860,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, modo, alimentosEvitados, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set }) {
+function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(false);
   const [selectorMascotaAbierto, setSelectorMascotaAbierto] = useState(false);
@@ -969,9 +969,24 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, nombrePerro, nec
     if (ia !== ib) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     return b.gramos - a.gramos;   // dentro de la categoría, de más a menos
   });
+  // ---- PREPARACION POR LOTES (perros pequeños) ----
+  // Un perro de 2 kg come ~150 kcal al dia: repartidas entre 10 alimentos
+  // salen cantidades de 3-5 g que no hay balanza domestica que pese. La
+  // solucion que usa la gente de verdad no es cambiar la dieta, es PREPARAR
+  // PARA VARIOS DIAS y repartir. Los gramos diarios siguen siendo los
+  // correctos; solo se muestran multiplicados para que se puedan pesar.
+  const menorGramo = itemsBase.length
+    ? Math.min(...itemsBase.filter((it) => it.gramos > 0).map((it) => it.gramos))
+    : 99;
+  // se busca el nº de días que hace que hasta lo más pequeño llegue a 10 g,
+  // con un tope de 7 (más de una semana no se conserva bien en nevera)
+  const diasLote = menorGramo >= 10 ? 1 : Math.min(7, Math.ceil(10 / Math.max(menorGramo, 0.5)));
+  const [verPorLote, setVerPorLote] = useState(false);
+  const multiplicador = verPorLote ? diasLote : 1;
+
   // Se redondea a 1 decimal: sumar flotantes daba cosas como
   // "868.8000000000001g" en pantalla
-  const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * 10) / 10;
+  const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * multiplicador * 10) / 10;
 
   const nombresActualesDelMenu = () => menu.items.map((it, idx) => sobreescritos[idx] || it.alimento);
   const etapaSufijoApi = ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto";
@@ -1198,7 +1213,69 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, nombrePerro, nec
         )}
 
         <div className="flex flex-col gap-2 mb-3">
-          {itemsMostrados.map((item, i) => {
+          {/* AVISO VETERINARIO. Va SIEMPRE, no solo con patología: este menú
+            es una propuesta calculada, no una prescripción. Con patología el
+            aviso se refuerza y cambia de color, porque ahí no es opcional. */}
+        {(patologias || []).length > 0 ? (
+          <div className="rounded-xl p-3 mb-3 flex gap-2 items-start"
+               style={{ background: "#FFF4F6", border: `1.5px solid ${ROSA}` }}>
+            <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
+            <div>
+              <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                Este menú TIENE que aprobarlo tu veterinario
+              </p>
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                {nombrePerro} tiene una condición diagnosticada. Hemos ajustado el menú en
+                esa dirección, pero son ajustes orientativos: la cantidad exacta depende del
+                estadio y de sus analíticas, y eso solo puede pautarlo un veterinario.
+                Enséñale este menú antes de empezar y ve revisándolo con él.
+              </p>
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl p-3 mb-3 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
+            <Info size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+              Este menú es una propuesta calculada sobre los requisitos FEDIAF, no una
+              prescripción. Antes de cambiarle la alimentación a {nombrePerro},
+              enséñaselo a tu veterinario — y consúltale también si notas cualquier cambio
+              en su digestión, su peso o su ánimo.
+            </p>
+          </div>
+        )}
+        {diasLote > 1 && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: "#F0ECF7" }}>
+            <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+              {nombrePerro} es pequeño: mejor preparar para varios días
+            </p>
+            <p className="text-xs mb-2.5" style={{ color: MALVA, fontFamily: fontBody }}>
+              Con su ración diaria algunos alimentos salen a 3 o 4 gramos, que no hay
+              balanza de cocina que pese bien. Prepara la mezcla para {diasLote} días,
+              guárdala en la nevera y dale {Math.round(100 / diasLote)}% cada día.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setVerPorLote(false)}
+                className="flex-1 py-2 rounded-lg text-xs"
+                style={{ background: verPorLote ? "transparent" : VIOLETA,
+                         color: verPorLote ? VIOLETA : "#FFFFFF",
+                         border: `1.5px solid ${VIOLETA}`, fontFamily: fontBody, fontWeight: 600 }}
+              >
+                Ver 1 día
+              </button>
+              <button
+                onClick={() => setVerPorLote(true)}
+                className="flex-1 py-2 rounded-lg text-xs"
+                style={{ background: verPorLote ? VIOLETA : "transparent",
+                         color: verPorLote ? "#FFFFFF" : VIOLETA,
+                         border: `1.5px solid ${VIOLETA}`, fontFamily: fontBody, fontWeight: 600 }}
+              >
+                Ver {diasLote} días
+              </button>
+            </div>
+          </div>
+        )}
+        {itemsMostrados.map((item, i) => {
             const Icono = item.Icono;
             return (
               <div key={i} className="rounded-2xl p-4" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
@@ -1211,7 +1288,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, nombrePerro, nec
                     <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{item.alimento}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>{Math.round(item.gramos * 10) / 10}g</span>
+                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>{Math.round(item.gramos * multiplicador * 10) / 10}g</span>
                     {item.porque && (
                       <button onClick={() => { setPorqueAbierto(porqueAbierto === i ? null : i); setEditorAbierto(null); setComoAbierto(null); }}>
                         <Info size={16} style={{ color: porqueAbierto === i ? ROSA : "#C9BEDD" }} />
@@ -1844,6 +1921,7 @@ export default function CanislabOnboarding() {
   const [menuReal, setMenuReal] = useState(null);
   const [menuCargando, setMenuCargando] = useState(false);
   const [menuError, setMenuError] = useState(null);
+  const [necesitaVeterinario, setNecesitaVeterinario] = useState(false);
   const [menuDespertando, setMenuDespertando] = useState(false);
   const [dietaActual, setDietaActual] = useState(null);
   const [modo, setModo] = useState(null);
@@ -1909,6 +1987,7 @@ export default function CanislabOnboarding() {
     let cancelado = false;
     setMenuCargando(true);
     setMenuError(null);
+    setNecesitaVeterinario(false);
     setMenuDespertando(false);
 
     // Se pide UN menu por cada uno que haya elegido el usuario. Cada llamada
@@ -1926,6 +2005,10 @@ export default function CanislabOnboarding() {
           peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
           forzar_presencia: eleccionesDelUsuario(modo, configPersonalizar, itemsAprovechar),
           nombres_excluidos: Array.from(alimentosEvitados),
+          // Las patologias ajustan el menu (fosforo en renal, grasa en
+          // pancreatitis...) y en las que dependen de analiticas impiden
+          // generarlo. Se recogian en el perfil pero no llegaban al motor.
+          patologias: perfil?.patologias || [],
         }),
       }).then((res) => res.json());
 
@@ -1934,6 +2017,7 @@ export default function CanislabOnboarding() {
     // ganaba la misma carne, asi que pedir 3 menus daba 3 versiones de lo
     // mismo. En modo Automatico se rota; en Personalizar y Aprovechar manda
     // lo que el usuario haya elegido, asi que no se toca.
+    let ultimaRespuesta = null;
     const pedirTodos = async () => {
       const especies = modo === "automatico" ? especiesBaseDisponibles(especiesExcluidas) : [null];
       // "Cuántos menús" solo se pregunta en Automático. En Personalizar y en
@@ -1950,6 +2034,7 @@ export default function CanislabOnboarding() {
         // decirle al usuario que no se puede
         if (!data.factible) data = await pedirMenu(null, true);
         if (data.factible) resultados.push(data);
+        else ultimaRespuesta = data;
       }
       return resultados;
     };
@@ -1965,6 +2050,12 @@ export default function CanislabOnboarding() {
           if (cancelado) return;
           if (resultados.length > 0) {
             setMenuReal(resultados);
+          } else if (ultimaRespuesta?.requiere_veterinario) {
+            // Cálculos de estruvita/cistina/urato: dependen del pH de la orina
+            // y de analíticas que la app no ve. No es un fallo del cálculo, es
+            // que aquí NO se debe generar un menú automático.
+            setMenuError(ultimaRespuesta.motivo);
+            setNecesitaVeterinario(true);
           } else {
             setMenuError("No se encontró una combinación posible con estos alimentos.");
           }
@@ -2633,7 +2724,7 @@ export default function CanislabOnboarding() {
           <Fuentes />
           <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
           <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
-            No se pudo calcular el menú
+            {necesitaVeterinario ? "Esto lo tiene que pautar tu veterinario" : "No se pudo calcular el menú"}
           </p>
           <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>{menuError}</p>
           <button
@@ -2647,7 +2738,7 @@ export default function CanislabOnboarding() {
       );
     }
     const menus = menuReal ? respuestaApiAMenu(menuReal, derReal) : MENUS_EJEMPLO;
-    return <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
+    return <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
   }
 
   
