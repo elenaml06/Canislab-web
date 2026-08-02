@@ -684,7 +684,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set }) {
+function VistaMenus({ menus, onVolver, modo, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   const [menuLateralAbierto, setMenuLateralAbierto] = useState(false);
   const [selectorMascotaAbierto, setSelectorMascotaAbierto] = useState(false);
@@ -765,6 +765,11 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
   // vísceras y el hígado, las verduras y frutas, y al final los suplementos.
   // Antes salían en el orden que devolvía el motor (por gramos), que no se
   // corresponde con cómo uno prepara la comida.
+  const ETIQUETA_MODO = {
+    automatico: "AUTOMÁTICO",
+    personalizar: "PERSONALIZADO",
+    aprovechar: "CON LO QUE TENÍAS",
+  };
   const ORDEN_CATEGORIAS = [
     "Carne muscular", "Pescados y mariscos", "Hueso carnoso",
     "Vísceras", "Hígado", "Verduras y frutas", "Extras",
@@ -1037,11 +1042,9 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
                         <UtensilsCrossed size={15} style={{ color: comoAbierto === i ? ROSA : "#C9BEDD" }} />
                       </button>
                     )}
-                    {item.categoria === "Suplementos comerciales" && (
-                      <button onClick={() => quitarSuplemento(i - itemsBase.length)}>
-                        <X size={16} style={{ color: "#C9BEDD" }} />
-                      </button>
-                    )}
+                    {/* Quitar suplementos se retiro a proposito: el usuario
+                        solo modifica, no elimina. Si quiere un menu a su
+                        medida, para eso esta el modo Personalizar. */}
                   </div>
                 </div>
                 {editorAbierto && editorAbierto.itemIdx === i && !editorAbierto.especie && (
@@ -1192,7 +1195,9 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
 
       {/* MENU LATERAL DE HAMBURGUESA */}
       {menuLateralAbierto && (
-        <div className="fixed inset-0 z-50 flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
+        // z-[60]: por encima de las secciones (z-50), si no quedaria tapado
+        // al abrirlo desde dentro de Perfil o Evolucion
+        <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
           <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
               <div>
@@ -1228,7 +1233,14 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
       {/* PERFIL */}
       {seccionActiva === "perfil" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
-          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            {/* La hamburguesa tambien aqui dentro: antes, estando en Perfil
+                habia que volver atras para poder ir a Evolucion. */}
+            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
+              <Menu size={20} style={{ color: VIOLETA }} />
+            </button>
+          </div>
           <div className="flex items-center gap-3 mb-6">
             <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: VIOLETA }}>
               <Dog size={26} style={{ color: ROSA }} />
@@ -1256,7 +1268,14 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
       {/* EVOLUCION Y CRECIMIENTO */}
       {seccionActiva === "evolucion" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
-          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            {/* La hamburguesa tambien aqui dentro: antes, estando en Perfil
+                habia que volver atras para poder ir a Evolucion. */}
+            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
+              <Menu size={20} style={{ color: VIOLETA }} />
+            </button>
+          </div>
           <p className="text-2xl mb-1" style={{ color: TINTA, fontFamily: fontDisplay }}>Evolución de {nombrePerro}</p>
           <p className="text-xs mb-6" style={{ color: MALVA, fontFamily: fontBody }}>Peso esperado vs. peso real registrado</p>
           <div className="rounded-2xl p-4 mb-5" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
@@ -1292,7 +1311,14 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
       {/* MIS MENUS */}
       {seccionActiva === "menus" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8" style={{ background: PAPEL }}>
-          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            {/* La hamburguesa tambien aqui dentro: antes, estando en Perfil
+                habia que volver atras para poder ir a Evolucion. */}
+            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
+              <Menu size={20} style={{ color: VIOLETA }} />
+            </button>
+          </div>
           <p className="text-2xl mb-4" style={{ color: TINTA, fontFamily: fontDisplay }}>Mis menús</p>
           <div className="flex flex-col gap-2">
             {menus.map((m) => (
@@ -1302,10 +1328,34 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
                 </div>
                 <div className="flex-1 min-w-0">
                   <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{m.nombre} · {m.kcal}kcal</p>
+                  {/* De que tipo es este menu: automatico, personalizado o
+                      hecho con lo que el usuario ya tenia */}
+                  <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>
+                    {ETIQUETA_MODO[modo] || "AUTOMÁTICO"}
+                  </p>
                 </div>
                 <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
               </button>
             ))}
+
+            {/* Crear otro menu: el perro ya esta configurado, asi que se va
+                directo a elegir el tipo, sin repetir el onboarding */}
+            <button
+              onClick={() => { setSeccionActiva(null); onVolver(); }}
+              className="flex items-center gap-3 p-4 rounded-2xl text-left mt-1"
+              style={{ background: "transparent", border: "1.5px dashed #C9BEDD" }}
+            >
+              <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: PAPEL }}>
+                <Plus size={17} style={{ color: VIOLETA }} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 16 }}>Crear otro menú</p>
+                <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Automático, personalizado o con lo que tengas en casa
+                </p>
+              </div>
+              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+            </button>
           </div>
         </div>
       )}
@@ -1313,7 +1363,14 @@ function VistaMenus({ menus, onVolver, nombrePerro, necesitaTransicion, dietaAct
       {/* POR QUE CANISLAB */}
       {seccionActiva === "porque" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
-          <button onClick={() => setSeccionActiva(null)} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          <div className="flex items-center justify-between mb-6">
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            {/* La hamburguesa tambien aqui dentro: antes, estando en Perfil
+                habia que volver atras para poder ir a Evolucion. */}
+            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
+              <Menu size={20} style={{ color: VIOLETA }} />
+            </button>
+          </div>
           <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué CANISLAB</p>
           <p className="text-sm leading-relaxed mb-4" style={{ color: TINTA, fontFamily: fontBody }}>
             Cuando decidí alimentar a mi perro con BARF, mi mayor preocupación era hacerlo bien. Quería ofrecerle
@@ -1752,7 +1809,7 @@ export default function CanislabOnboarding() {
               type="text"
               value={perfil.nombre}
               onChange={(e) => set("nombre", e.target.value)}
-              placeholder="Cairo"
+              placeholder="Nombre de tu perro"
               className="w-full text-2xl pb-3 outline-none bg-transparent"
               style={{ color: TINTA, fontFamily: fontDisplay, borderBottom: `2px solid ${perfil.nombre ? VIOLETA : "#E3DAF0"}` }}
             />
@@ -1938,7 +1995,7 @@ export default function CanislabOnboarding() {
               <input
                 type="number" inputMode="decimal" value={perfil.pesoActual}
                 onChange={(e) => set("pesoActual", e.target.value)}
-                placeholder="16"
+                placeholder="0"
                 className="text-3xl pb-2 outline-none bg-transparent w-28"
                 style={{ color: TINTA, fontFamily: fontDisplay, borderBottom: `2px solid ${perfil.pesoActual ? VIOLETA : "#E3DAF0"}` }}
               />
@@ -2390,7 +2447,7 @@ export default function CanislabOnboarding() {
       );
     }
     const menus = menuReal ? respuestaApiAMenu(menuReal, derReal) : MENUS_EJEMPLO;
-    return <VistaMenus menus={menus} onVolver={volverAElegir} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
+    return <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
   }
 
   
