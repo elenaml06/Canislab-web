@@ -10,8 +10,8 @@ const API_BASE = "https://canislab-api.onrender.com";
 // concreto (Calcio=Hueso carnoso, Yodo=Pescados/Suplementos, VitaminaE=Extras)
 // se marcan como esenciales -- si el usuario no puso nada ahi, se rellena solo.
 const POOL_CANDIDATOS = {
-  "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Lomo de ternera con grasa", "Conejo", "Corazón de vaca", "Corazón de cordero"],
-  "Hueso carnoso": ["Costillas de ternera", "Pecho de ternera con hueso", "Costillas de cordero", "Cuello de cordero", "Espinazo de cordero", "Rabo de toro", "Carcasa de conejo"],
+  "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Lomo de ternera con grasa", "Conejo", "Corazón de vaca", "Corazón de cordero", "Pollo pechuga con piel", "Pollo muslo con piel", "Corazón de pollo", "Pavo pechuga sin piel", "Pavo muslo con piel", "Pato entero"],
+  "Hueso carnoso": ["Costillas de ternera", "Pecho de ternera con hueso", "Costillas de cordero", "Cuello de cordero", "Espinazo de cordero", "Rabo de toro", "Carcasa de conejo", "Patas de conejo", "Cuello de pollo", "Carcasa de pollo", "Ala de pollo", "Cuello de pavo", "Ala de pavo", "Carcasa de pavo", "Cuello de pato"],
   "Vísceras": ["Riñón de ternera", "Pulmón de ternera", "Riñón de cordero", "Pulmón de cordero", "Lengua de ternera"],
   "Hígado": ["Hígado de vaca", "Hígado de conejo"],
   "Pescados y mariscos": ["Sardina", "Salmón", "Caballa", "Trucha", "Merluza", "Bacalao"],
@@ -29,38 +29,78 @@ function elegirAleatorios(lista, n) {
   return copia.slice(0, Math.min(n, copia.length));
 }
 
-function generarCandidatosAleatorios() {
+// Misma logica que especies.py en el backend: "Cuello de pollo" -> Pollo,
+// "Pavo pechuga con piel" -> Pavo
+function especieDe(nombre) {
+  if (nombre.includes(" de ")) {
+    const resto = nombre.split(" de ")[1];
+    const p = resto.split(" ")[0];
+    return p.charAt(0).toUpperCase() + p.slice(1).toLowerCase();
+  }
+  return nombre.split(" ")[0];
+}
+
+// Orden en el que se van rotando las proteinas base cuando el usuario pide
+// varios menus. La gracia de pedir 3 menus es que el perro coma proteinas
+// DISTINTAS, no tres variantes de lo mismo: antes cada menu se sorteaba por
+// separado y casi siempre ganaba la misma carne.
+const PROTEINAS_BASE = ["Ternera", "Pollo", "Conejo", "Cordero", "Pavo", "Pato"];
+// Nota: "Vaca" (corazon) y "Toro" (rabo) se consideran parte de Ternera a
+// efectos de alergia, pero no se usan como especie base propia.
+
+function especiesBaseDisponibles(especiesExcluidas) {
+  const excl = new Set(Array.from(especiesExcluidas || []).map((e) => e.toLowerCase()));
+  const disponibles = PROTEINAS_BASE.filter((e) => {
+    if (excl.has(e.toLowerCase())) return false;
+    // Solo hace falta que haya CARNE de esa especie. El hueso carnoso no
+    // entra en la rotacion: al usuario le importa que cambie la carne, no
+    // de que animal es el hueso.
+    return POOL_CANDIDATOS["Carne muscular"].some((n) => especieDe(n) === e);
+  });
+  return disponibles.length > 0 ? disponibles : [null];
+}
+
+function generarCandidatosAleatorios(especieBase) {
   const elegidos = [];
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Carne muscular"], 5));
-  // "Pecho de ternera con hueso" es el que mas calcio tiene (4200mg/100g)
-  // de los huesos disponibles -- garantizarlo siempre evita que una tirada
-  // aleatoria desafortunada (solo huesos "flojos" en calcio) deje sin
-  // solucion posible el calculo real, verificado con pruebas
+  const esDe = (n) => !especieBase || especieDe(n) === especieBase;
+
+  // --- CARNE: es lo que rota entre menus, y como mucho 3 cortes ---
+  // Un menu con 4 carnes distintas es un lio de comprar y de preparar. Con
+  // 2 de la especie base y 1 de apoyo hay variedad suficiente y el plato se
+  // entiende de un vistazo.
+  const carneBase = POOL_CANDIDATOS["Carne muscular"].filter(esDe);
+  const carneResto = POOL_CANDIDATOS["Carne muscular"].filter((n) => !esDe(n));
+  elegidos.push(...elegirAleatorios(carneBase, 2));
+  elegidos.push(...elegirAleatorios(carneResto, 1));
+
+  // --- HUESO CARNOSO: NO entra en la rotacion de especie ---
+  // Al usuario le importa que cambie la carne, no de que animal es el hueso.
+  // Se eligen 2 libremente de los que haya disponibles.
+  // "Pecho de ternera con hueso" es el mas rico en calcio (4200mg/100g) y se
+  // garantiza siempre: sin el hay tiradas que se quedan sin solucion posible.
   elegidos.push("Pecho de ternera con hueso");
-  elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Hueso carnoso"].filter((n) => n !== "Pecho de ternera con hueso"), 5));
+  elegidos.push(...elegirAleatorios(
+    POOL_CANDIDATOS["Hueso carnoso"].filter((n) => n !== "Pecho de ternera con hueso"), 2));
+
+  // --- el resto no depende de la especie base ---
   elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Vísceras"], 4));
-  elegidos.push(...POOL_CANDIDATOS["Hígado"]); // los 2 -- son pocos, mejor incluir ambos siempre
+  elegidos.push(...POOL_CANDIDATOS["Hígado"]); // son pocos, mejor todos
   elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Pescados y mariscos"], 4));
   elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Verduras y frutas"], 6));
-  // "Aceite de girasol" tiene muchisima mas grasa esencial y Vitamina E
-  // (57g linoleico, 56mg vitE) que el resto de aceites (11-18mg vitE) --
-  // garantizarlo evita que una tirada sin el se quede corta en estos dos
-  // nutrientes, verificado con pruebas
+  // "Aceite de girasol": 57g de linoleico y 56mg de vitE, muy por encima del
+  // resto de aceites (11-18mg) -- garantizarlo evita quedarse corto en ambos
   elegidos.push("Aceite de girasol");
   elegidos.push(...elegirAleatorios(POOL_CANDIDATOS["Extras"].filter((n) => n !== "Aceite de girasol"), 3));
-  // El multivitaminico va SIEMPRE. Sin el es practicamente imposible cubrir
-  // zinc, cobre, manganeso y yodo con alimentos reales: probado con los
-  // mismos candidatos, con multivitaminico el 100% de los menus salen
-  // validos y sin el, el 0%. Es lo mismo que hacen los formuladores
-  // profesionales (BalanceIT, Napfcheck), que siempre parten de un premix.
+  // El multivitaminico va SIEMPRE: con el, el 100% de los menus salen validos;
+  // sin el, el 0%. Es lo que hacen los formuladores profesionales.
   elegidos.push(...POOL_CANDIDATOS["Suplementos comerciales"]);
-  return elegidos;
+  return [...new Set(elegidos)];
 }
 
 // Construye la lista de candidatos a mandar a la API SEGUN EL MODO real
 // elegido -- antes esto siempre usaba la lista aleatoria generica, ignorando
 // lo que el usuario hubiera elegido en Personalizar o metido en Aprovechar.
-function construirCandidatos(modo, configPersonalizar, itemsAprovechar) {
+function construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieBase) {
   let elegidos;
 
   if (modo === "personalizar") {
@@ -88,7 +128,7 @@ function construirCandidatos(modo, configPersonalizar, itemsAprovechar) {
     }
   } else {
     // modo "automatico" (o por defecto)
-    elegidos = generarCandidatosAleatorios();
+    elegidos = generarCandidatosAleatorios(especieBase);
   }
 
   // RED DE SEGURIDAD: pase lo que pase en cualquier modo, el hueso carnoso
@@ -1513,12 +1553,12 @@ export default function CanislabOnboarding() {
     // Se pide UN menu por cada uno que haya elegido el usuario. Cada llamada
     // usa su propia tirada de candidatos, asi los menus salen distintos entre
     // si (antes solo se pedia uno y numMenus se ignoraba).
-    const pedirMenu = () =>
+    const pedirMenu = (especieBase) =>
       fetch(`${API_BASE}/menu`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          nombres_alimentos: construirCandidatos(modo, configPersonalizar, itemsAprovechar),
+          nombres_alimentos: construirCandidatos(modo, configPersonalizar, itemsAprovechar, especieBase),
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           especies_excluidas: Array.from(especiesExcluidas),
@@ -1526,10 +1566,19 @@ export default function CanislabOnboarding() {
         }),
       }).then((res) => res.json());
 
+    // Cada menu gira en torno a una proteina base DISTINTA (ternera, pollo,
+    // conejo...). Antes cada menu se sorteaba por separado y casi siempre
+    // ganaba la misma carne, asi que pedir 3 menus daba 3 versiones de lo
+    // mismo. En modo Automatico se rota; en Personalizar y Aprovechar manda
+    // lo que el usuario haya elegido, asi que no se toca.
     const pedirTodos = async () => {
+      const especies = modo === "automatico" ? especiesBaseDisponibles(especiesExcluidas) : [null];
       const resultados = [];
       for (let i = 0; i < numMenus; i++) {
-        const data = await pedirMenu();
+        const especieBase = especies[i % especies.length];
+        let data = await pedirMenu(especieBase);
+        // si con esa proteina concreta no cuadra, se reintenta sin restringir
+        if (!data.factible && especieBase) data = await pedirMenu(null);
         if (data.factible) resultados.push(data);
       }
       return resultados;
