@@ -2002,6 +2002,10 @@ export default function CanislabOnboarding() {
           peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
           patologias: perfil?.patologias || [],
           peso_adulto_esperado_kg: pesoAdultoEsperado || null,
+          // ⚠️ AÑADIDO (5 agosto): para que el backend pueda intentar
+          // primero la vía rápida del catálogo (mismo tamaño y etapa)
+          // antes de la búsqueda libre completa.
+          tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
         }),
       }).then((res) => res.json());
 
