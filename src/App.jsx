@@ -1869,6 +1869,12 @@ export default function CanislabOnboarding() {
   const [menuError, setMenuError] = useState(null);
   const [necesitaVeterinario, setNecesitaVeterinario] = useState(false);
   const [menuDespertando, setMenuDespertando] = useState(false);
+  // ⚠️ AÑADIDO (5 agosto): vista previa APROXIMADA del catálogo fijo,
+  // mientras se calcula el menú EXACTO del perro real con /menu/v2. Se
+  // pide en paralelo porque es instantáneo (no resuelve nada, solo lee
+  // un archivo). Se reescala a las kcal reales del perro -- sin eso,
+  // seguiría siendo el menú de un peso distinto, no el suyo aproximado.
+  const [menuAproximado, setMenuAproximado] = useState(null);
   const [dietaActual, setDietaActual] = useState(null);
   const [modo, setModo] = useState(null);
   const [pantalla, setPantalla] = useState("elegir");
@@ -1946,6 +1952,37 @@ export default function CanislabOnboarding() {
     setMenuError(null);
     setNecesitaVeterinario(false);
     setMenuDespertando(false);
+    setMenuAproximado(null);
+
+    // Vista previa APROXIMADA del catálogo, en paralelo, mientras se
+    // calcula el menú EXACTO abajo. Es una petición GET instantánea (no
+    // resuelve nada), así que no compite en tiempo con /menu/v2.
+    const ETAPA_A_CATALOGO = {
+      cachorro_joven: "CachorroJoven", cachorro_crecimiento: "CachorroCrecimiento",
+      adulto: "Adulto", senior: "Senior",
+    };
+    const tamanoCatalogo = perfil?.raza?.tamano || perfil?.tamanoManual;
+    const etapaCatalogo = ETAPA_A_CATALOGO[etapaCalculada];
+    if (tamanoCatalogo && etapaCatalogo) {
+      // ⚠️ CORREGIDO (5 agosto): el reescalado a las kcal reales YA NO se
+      // hace aquí. Antes se multiplicaba TODO por igual (incluidos los
+      // suplementos comerciales), pero la dosis máxima de un suplemento
+      // la marca el fabricante por el PESO del perro, no por sus kcal --
+      // las dos proporciones no coinciden, y escalar por kcal podía
+      // pasarse de la dosis segura. Ahora el backend hace el reescalado
+      // (normal para la comida, topado a la dosis real para cada
+      // suplemento), mandándole el peso de verdad del perro.
+      const peso = perfil?.pesoActual ? Number(perfil.pesoActual) : null;
+      const url = `${API_BASE}/catalogo/${tamanoCatalogo}/${etapaCatalogo}` +
+        (peso ? `?der_objetivo=${derReal}&peso_perro_kg=${peso}` : "");
+      fetch(url)
+        .then((res) => res.json())
+        .then((data) => {
+          if (cancelado || !data.encontrado) return;
+          setMenuAproximado({ gramos: data.gramos, pesoOrigen: data.peso_kg, derOrigen: data.der });
+        })
+        .catch(() => {});
+    }
 
     const pedirMenu = () =>
       fetch(`${API_BASE}/menu/v2`, {
@@ -2643,6 +2680,59 @@ export default function CanislabOnboarding() {
 
   if (fase === "generador" && pantalla === "resultado") {
     if (menuCargando) {
+      // ⚠️ AÑADIDO (5 agosto): si ya llegó la vista previa aproximada del
+      // catálogo, se enseña en vez de la pantalla vacía de "cargando" --
+      // dejando MUY claro que es aproximada, mientras se sigue calculando
+      // el menú exacto por detrás.
+      if (menuAproximado) {
+        const items = Object.entries(menuAproximado.gramos).map(([alimento, gramos]) => {
+          const categoria = categoriaDeAlimento(alimento);
+          const Icono = (CATEGORIAS_ICONOS.find((c) => c.nombre === categoria) || {}).Icono || Beef;
+          return { categoria, Icono, alimento, gramos };
+        });
+        return (
+          <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+            <Fuentes />
+            <div style={{ background: VIOLETA }} className="w-full px-6 pt-8 pb-6">
+              <div className="flex items-center gap-2 mb-3">
+                <Dog size={18} style={{ color: ROSA }} />
+                <p className="text-xs" style={{ color: "#FFFFFF", fontFamily: fontBody, fontWeight: 600 }}>
+                  Calculando el menú exacto de {nombreMostrar}...
+                </p>
+              </div>
+              <h1 className="text-2xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+                Mientras tanto, así sería<br />aproximadamente
+              </h1>
+            </div>
+            <div className="flex-1 px-6 pt-6 pb-6 flex flex-col overflow-y-auto">
+              <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: "#FFF7E8" }}>
+                <Info size={14} style={{ color: "#B8860B", flexShrink: 0, marginTop: 2 }} />
+                <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                  Esto NO es el menú final de {nombreMostrar} — es una aproximación de un perro parecido,
+                  ajustada a sus kcal. En un momento aparece el suyo exacto, calculado con su peso real.
+                </p>
+              </div>
+              {items.map((item, i) => {
+                const Icono = item.Icono;
+                return (
+                  <div key={i} className="rounded-2xl p-4 mb-2" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0", opacity: 0.7 }}>
+                    <div className="flex items-center gap-3">
+                      <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+                        <Icono size={18} strokeWidth={1.6} style={{ color: VIOLETA }} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[10px] tracking-[0.1em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>{item.categoria}</p>
+                        <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{item.alimento}</p>
+                      </div>
+                      <span style={{ color: MALVA, fontFamily: fontDisplay, fontSize: 16 }}>~{Math.round(item.gramos)}g</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
           <Fuentes />
@@ -2661,6 +2751,66 @@ export default function CanislabOnboarding() {
       );
     }
     if (menuError) {
+      // ⚠️ AÑADIDO (5 agosto): si el motor de verdad falla del todo (el
+      // servidor no responde, por ejemplo) pero SÍ llegó la vista previa
+      // aproximada del catálogo, se ofrece como respaldo -- mejor un
+      // menú aproximado y avisado que una pantalla vacía. Nunca se ofrece
+      // en el caso de patología bloqueante: ahí el problema no es técnico,
+      // es que de verdad hace falta un veterinario.
+      if (menuAproximado && !necesitaVeterinario) {
+        const items = Object.entries(menuAproximado.gramos).map(([alimento, gramos]) => {
+          const categoria = categoriaDeAlimento(alimento);
+          const Icono = (CATEGORIAS_ICONOS.find((c) => c.nombre === categoria) || {}).Icono || Beef;
+          return { categoria, Icono, alimento, gramos };
+        });
+        return (
+          <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+            <Fuentes />
+            <div style={{ background: VIOLETA }} className="w-full px-6 pt-8 pb-6">
+              <h1 className="text-2xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+                No se pudo calcular el<br />menú exacto de {nombreMostrar}
+              </h1>
+            </div>
+            <div className="flex-1 px-6 pt-6 pb-6 flex flex-col overflow-y-auto">
+              <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: "#FFE8EC" }}>
+                <AlertCircle size={14} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
+                <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{menuError}</p>
+              </div>
+              <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: "#FFF7E8" }}>
+                <Info size={14} style={{ color: "#B8860B", flexShrink: 0, marginTop: 2 }} />
+                <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                  Esto de aquí abajo NO es el menú de {nombreMostrar} — es una aproximación de un
+                  perro parecido, ajustada a sus kcal, mientras se puede calcular el suyo exacto.
+                </p>
+              </div>
+              {items.map((item, i) => {
+                const Icono = item.Icono;
+                return (
+                  <div key={i} className="rounded-2xl p-4 mb-2" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0", opacity: 0.7 }}>
+                    <div className="flex items-center gap-3">
+                      <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+                        <Icono size={18} strokeWidth={1.6} style={{ color: VIOLETA }} />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-[10px] tracking-[0.1em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>{item.categoria}</p>
+                        <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{item.alimento}</p>
+                      </div>
+                      <span style={{ color: MALVA, fontFamily: fontDisplay, fontSize: 16 }}>~{Math.round(item.gramos)}g</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <button
+                onClick={() => setPantalla("elegir")}
+                className="px-5 py-3 rounded-xl text-sm mt-3"
+                style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+              >
+                Volver e intentarlo de nuevo
+              </button>
+            </div>
+          </div>
+        );
+      }
       return (
         <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
           <Fuentes />
