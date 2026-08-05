@@ -2854,7 +2854,7 @@ export default function CanislabOnboarding() {
         </div>
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
           <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>
-            Dinos qué te queda por gastar — repartimos el resto de la semana de {nombrePerro} alrededor de esto.
+            Dinos qué te queda por gastar — repartimos el resto de la semana de {nombreMostrar} alrededor de esto.
           </p>
           <SelectorAlimentos
             lista={itemsAprovechar}
@@ -2904,7 +2904,7 @@ export default function CanislabOnboarding() {
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
           <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>
             Lo que dejes en Automático, lo elige el sistema. Lo que pongas en Manual, tú eliges el alimento
-            — la cantidad la calculamos nosotros para que cuadren los nutrientes de {nombrePerro}.
+            — la cantidad la calculamos nosotros para que cuadren los nutrientes de {nombreMostrar}.
           </p>
           <div className="flex flex-col gap-3 mb-6">
             {CATEGORIAS_ICONOS.map((cat) => {
