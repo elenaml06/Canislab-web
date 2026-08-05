@@ -861,9 +861,15 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const menorGramo = itemsBase.length
     ? Math.min(...itemsBase.filter((it) => it.gramos > 0).map((it) => it.gramos))
     : 99;
-  const diasLote = menorGramo >= 10 ? 1 : Math.min(7, Math.ceil(10 / Math.max(menorGramo, 0.5)));
-  const [verPorLote, setVerPorLote] = useState(false);
-  const multiplicador = verPorLote ? diasLote : 1;
+  // ⚠️ CAMBIADO (5 agosto): antes solo se ofrecía preparar por lotes
+  // cuando el perro era tan pequeño que hacía falta a la fuerza (menos de
+  // 10 g del alimento más pequeño). Ahora el selector está SIEMPRE
+  // disponible -- cualquiera puede querer preparar la semana de golpe,
+  // no solo quien no tiene más remedio. Se sigue sugiriendo el lote
+  // mínimo necesario cuando aplica, pero 1/2/7 días están siempre ahí.
+  const diasMinimoNecesario = menorGramo >= 10 ? 1 : Math.min(7, Math.ceil(10 / Math.max(menorGramo, 0.5)));
+  const [diasSeleccionados, setDiasSeleccionados] = useState(1);
+  const multiplicador = diasSeleccionados;
 
   const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * multiplicador * 10) / 10;
 
@@ -1134,38 +1140,50 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </p>
           </div>
         )}
-        {diasLote > 1 && (
-          <div className="rounded-xl p-3 mb-3" style={{ background: "#F0ECF7" }}>
-            <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
-              {nombrePerro} es pequeño: mejor preparar para varios días
+        {diasMinimoNecesario > 1 && diasSeleccionados === 1 && (
+          <div className="rounded-xl p-3 mb-3 flex gap-2 items-start" style={{ background: "#FFF7E8" }}>
+            <Info size={14} style={{ color: "#B8860B", flexShrink: 0, marginTop: 2 }} />
+            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+              Algunos alimentos de {nombrePerro} salen a pocos gramos al día, que cuesta
+              pesar bien. Te recomendamos preparar para {diasMinimoNecesario} días — puedes
+              elegirlo aquí abajo.
             </p>
-            <p className="text-xs mb-2.5" style={{ color: MALVA, fontFamily: fontBody }}>
-              Con su ración diaria algunos alimentos salen a 3 o 4 gramos, que no hay
-              balanza de cocina que pese bien. Prepara la mezcla para {diasLote} días,
-              guárdala en la nevera y dale {Math.round(100 / diasLote)}% cada día.
-            </p>
-            <div className="flex gap-2">
-              <button
-                onClick={() => setVerPorLote(false)}
-                className="flex-1 py-2 rounded-lg text-xs"
-                style={{ background: verPorLote ? "transparent" : VIOLETA,
-                         color: verPorLote ? VIOLETA : "#FFFFFF",
-                         border: `1.5px solid ${VIOLETA}`, fontFamily: fontBody, fontWeight: 600 }}
-              >
-                Ver 1 día
-              </button>
-              <button
-                onClick={() => setVerPorLote(true)}
-                className="flex-1 py-2 rounded-lg text-xs"
-                style={{ background: verPorLote ? VIOLETA : "transparent",
-                         color: verPorLote ? "#FFFFFF" : VIOLETA,
-                         border: `1.5px solid ${VIOLETA}`, fontFamily: fontBody, fontWeight: 600 }}
-              >
-                Ver {diasLote} días
-              </button>
-            </div>
           </div>
         )}
+        <div className="rounded-xl p-3 mb-3" style={{ background: "#F0ECF7" }}>
+          <p className="text-sm mb-2.5" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+            Preparar de golpe para
+          </p>
+          <div className="flex gap-2">
+            {[
+              { dias: 1, label: "1 día" },
+              { dias: 2, label: "2 días" },
+              { dias: 7, label: "1 semana" },
+            ].map((op) => {
+              const activo = diasSeleccionados === op.dias;
+              return (
+                <button
+                  key={op.dias}
+                  onClick={() => setDiasSeleccionados(op.dias)}
+                  className="flex-1 py-2 rounded-lg text-xs"
+                  style={{ background: activo ? VIOLETA : "transparent",
+                           color: activo ? "#FFFFFF" : VIOLETA,
+                           border: `1.5px solid ${VIOLETA}`, fontFamily: fontBody, fontWeight: 600 }}
+                >
+                  {op.label}
+                </button>
+              );
+            })}
+          </div>
+          {diasSeleccionados > 1 && (
+            <p className="text-xs mt-2.5" style={{ color: MALVA, fontFamily: fontBody }}>
+              Estos son los gramos totales para {diasSeleccionados} días de cada alimento — prepara
+              la mezcla de golpe, guárdala en la nevera (o congelador si es para más de 2-3 días),
+              y dale {Math.round(100 / diasSeleccionados)}% de esto cada día.
+            </p>
+          )}
+        </div>
+
         {itemsMostrados.map((item, i) => {
             const Icono = item.Icono;
             return (
