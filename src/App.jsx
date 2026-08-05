@@ -525,6 +525,10 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       dias: diasPorMenu,
       kcal: Math.round(derObjetivo),
       items,
+      // ⚠️ AÑADIDO (5 agosto): antes el "27/27 OK" era texto fijo, sin
+      // ningún dato real detrás. Ahora se lleva la ficha de verdad que
+      // devuelve /menu/v2 (semáforo, correctos, total) para mostrarla.
+      ficha: data.ficha || null,
     };
   });
 }
@@ -810,6 +814,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const [recalculandoServidor, setRecalculandoServidor] = useState(false);
   const [gramosRealesPorMenu, setGramosRealesPorMenu] = useState({});
   const [errorRecalculo, setErrorRecalculo] = useState(null);
+  const [fichaPorMenu, setFichaPorMenu] = useState({});
 
   const menu = menus.find((m) => m.id === tabActiva);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
@@ -884,6 +889,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       const data = await res.json();
       if (data.factible) {
         setGramosRealesPorMenu((prev) => ({ ...prev, [tabActiva]: data.gramos }));
+        setFichaPorMenu((prev) => ({ ...prev, [tabActiva]: data.ficha }));
       } else {
         setErrorRecalculo(data.motivo || "No se pudo recalcular con esta combinación.");
       }
@@ -1056,13 +1062,30 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 22 }}>{menu.kcal}</p>
             <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>kcal / día</p>
           </div>
-          <div className="flex-1 rounded-2xl p-4 text-center flex flex-col items-center justify-center" style={{ background: VERDE }}>
-            <div className="flex items-center gap-1">
-              <CheckCircle2 size={18} style={{ color: VERDE_TEXTO }} />
-              <button onClick={() => setInfoNutrientes(!infoNutrientes)}><Info size={13} style={{ color: VERDE_TEXTO, opacity: 0.6 }} /></button>
-            </div>
-            <p className="text-[10px] tracking-[0.1em] uppercase mt-1" style={{ color: VERDE_TEXTO, fontFamily: "monospace" }}>27/27 OK</p>
-          </div>
+          {(() => {
+            // ⚠️ CORREGIDO (5 agosto): esto era texto fijo "27/27 OK", sin
+            // ningún dato real detrás -- salía igual aunque el menú
+            // estuviera roto. Ahora usa la ficha real que devuelve el
+            // backend (ficha.correctos / ficha.total / ficha.semaforo).
+            const ficha = fichaPorMenu[tabActiva] || menu.ficha;
+            const COLORES = {
+              verde: { fondo: VERDE, texto: VERDE_TEXTO },
+              ambar: { fondo: "#FFF7E8", texto: "#B8860B" },
+              rojo: { fondo: "#FFE8EC", texto: ROSA },
+            };
+            const col = COLORES[ficha?.semaforo] || COLORES.verde;
+            return (
+              <div className="flex-1 rounded-2xl p-4 text-center flex flex-col items-center justify-center" style={{ background: col.fondo }}>
+                <div className="flex items-center gap-1">
+                  <CheckCircle2 size={18} style={{ color: col.texto }} />
+                  <button onClick={() => setInfoNutrientes(!infoNutrientes)}><Info size={13} style={{ color: col.texto, opacity: 0.6 }} /></button>
+                </div>
+                <p className="text-[10px] tracking-[0.1em] uppercase mt-1" style={{ color: col.texto, fontFamily: "monospace" }}>
+                  {ficha ? `${ficha.correctos}/${ficha.total} OK` : "sin verificar"}
+                </p>
+              </div>
+            );
+          })()}
         </div>
 
         {mostrarAyuda && (
