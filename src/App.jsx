@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, Dog, Fish, Flame, Footprints, Hand, HeartPulse, Info, Lock, Moon, Pencil, Pill, Plus, Refrigerator, Salad, Scissors, Search, SlidersHorizontal, Sparkles, UtensilsCrossed, X, Zap } from "lucide-react";
 
 const API_BASE = "https://canislab-api.onrender.com";
@@ -1982,16 +1982,49 @@ function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, 
 
 function Rueda({ valores, valor, onChange, ancho = 72 }) {
   const alturaItem = 44;
+  // ⚠️ AÑADIDO (5 agosto): la rueda solo respondía a arrastrar/gesto de
+  // trackpad (onScroll). En un ordenador con ratón normal, sin trackpad,
+  // no se movía bien. Se añaden dos formas más de moverla: la rueda del
+  // ratón (onWheel) y las flechas arriba/abajo del teclado (onKeyDown),
+  // avanzando de UNO EN UNO cada vez, como se había pedido.
+  const idxActual = Math.max(0, valores.indexOf(valor));
+  const ref = useRef(null);
+  const moverA = (idx) => {
+    const clamped = Math.max(0, Math.min(valores.length - 1, idx));
+    if (valores[clamped] !== valor) onChange(valores[clamped]);
+  };
+  // ⚠️ AÑADIDO (5 agosto): al mover con rueda/flechas, el valor cambiaba
+  // "por dentro" pero la rueda VISUAL no se desplazaba a enseñarlo -- solo
+  // se veía si por casualidad ya estaba a la vista. Esto la hace seguir
+  // al valor real cada vez que cambia desde fuera del propio gesto de
+  // scroll (para no pelearse con el scroll nativo mientras el usuario
+  // arrastra con el dedo).
+  useEffect(() => {
+    if (ref.current && Math.round(ref.current.scrollTop / alturaItem) !== idxActual) {
+      ref.current.scrollTo({ top: idxActual * alturaItem, behavior: "smooth" });
+    }
+  }, [idxActual]);
   return (
     <div style={{ width: ancho, position: "relative" }}>
       <div style={{ position: "absolute", top: alturaItem, left: 0, right: 0, height: alturaItem, borderTop: `1.5px solid ${VIOLETA}`, borderBottom: `1.5px solid ${VIOLETA}`, pointerEvents: "none", borderRadius: 8 }} />
       <div
-        style={{ height: alturaItem * 3, overflowY: "scroll", scrollSnapType: "y mandatory", scrollbarWidth: "none" }}
+        ref={ref}
+        tabIndex={0}
+        role="listbox"
+        aria-label="Selector de valor"
+        style={{ height: alturaItem * 3, overflowY: "scroll", scrollSnapType: "y mandatory", scrollbarWidth: "none", outline: "none" }}
         className="hide-scrollbar"
         onScroll={(e) => {
           const idx = Math.round(e.target.scrollTop / alturaItem);
-          const clamped = Math.max(0, Math.min(valores.length - 1, idx));
-          if (valores[clamped] !== valor) onChange(valores[clamped]);
+          moverA(idx);
+        }}
+        onWheel={(e) => {
+          e.preventDefault();
+          moverA(idxActual + (e.deltaY > 0 ? 1 : -1));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); moverA(idxActual + 1); }
+          if (e.key === "ArrowUp") { e.preventDefault(); moverA(idxActual - 1); }
         }}
       >
         <div style={{ height: alturaItem }} />
