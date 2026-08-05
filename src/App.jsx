@@ -372,14 +372,19 @@ const CATEGORIAS_ALIMENTO = {
     "Grasa": ["Grasa de pollo", "Manteca"],
     "Semillas": ["Pipa de calabaza", "Pipa de girasol", "Semilla de lino", "Semilla de sésamo"],
   },
+  // ⚠️ CORREGIDO (5 agosto): el backend tiene 6 multivitamínicos y un
+  // yoduro potásico que el frontend no conocía -- por eso "V-INTEGRA
+  // Perro Adulto" (y cualquiera de los otros 3 que faltaban) caía en
+  // "Extras" al no encontrarse aquí, aunque el motor SÍ lo usa de verdad.
   "Suplementos comerciales": {
     "Calcio": ["Cáscara de huevo PAWS & PATCH", "Cáscara de huevo casera (en polvo)", "GRAU Harina de Hueso", "LUPO NATURAL BARF Huesos en polvo"],
     "Fibra": ["NaturGreen Psyllium Bio"],
     "Hierro": ["AniForte Beef Blood Powder"],
-    "Multivitamínico": ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)"],
+    "Multivitamínico": ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)", "napfcheck Novomineral proLEBER", "astoral MultiVital BARF", "V-INTEGRA Perro Adulto", "Nutratop Vitamínico-Mineral 7:1"],
     "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Brit Care Aceite de Salmón", "Oleum Canis Aceite de Salmón"],
     "Levadura de cerveza": ["GRAU Levadura de cerveza", "PAWS & PATCH Levadura de cerveza"],
     "Algas (Kelp)": ["AniForte Seaweed Meal", "Sonrisa de Diez Kelp"],
+    "Yodo": ["Yoduro potásico (comprimidos 200 µg)"],
   },
 };
 
@@ -876,6 +881,13 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const nombresActualesDelMenu = () => menu.items.map((it, idx) => sobreescritos[idx] || it.alimento);
   const etapaSufijoApi = ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto";
 
+  // ⚠️ CORREGIDO (5 agosto): antes esta función solo avisaba de un fallo
+  // con un banner que era fácil no ver, y quien la llamaba (cambiarAlimento,
+  // anadirSuplemento...) YA había cambiado el nombre/lista en pantalla ANTES
+  // de saber si el cambio era válido -- así que si fallaba, el usuario veía
+  // el nombre nuevo con los gramos viejos congelados, como si "no hiciera
+  // nada". Ahora devuelve si funcionó o no, para que el cambio visual solo
+  // se aplique DESPUÉS de confirmar que hay una combinación válida.
   const llamarRecalculo = async (endpoint, cuerpoExtra) => {
     setRecalculandoServidor(true);
     setErrorRecalculo(null);
@@ -896,47 +908,57 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       if (data.factible) {
         setGramosRealesPorMenu((prev) => ({ ...prev, [tabActiva]: data.gramos }));
         setFichaPorMenu((prev) => ({ ...prev, [tabActiva]: data.ficha }));
+        return true;
       } else {
         setErrorRecalculo(data.motivo || "No se pudo recalcular con esta combinación.");
+        return false;
       }
     } catch (err) {
       setErrorRecalculo("No se ha podido conectar con el servidor para recalcular.");
+      return false;
     } finally {
       setRecalculandoServidor(false);
     }
   };
 
-  const anadirSuplemento = (tipo, producto) => {
+  const anadirSuplemento = async (tipo, producto) => {
+    setSupAbierto(false);
+    setSupTipoAbierto(null);
+    const ok = await llamarRecalculo("/menu/anadir", { menu_actual: nombresActualesDelMenu(), alimento: producto });
+    if (!ok) return;   // si no había combinación válida, no se añade nada a la vista
     setSuplementosPorMenu((prev) => ({
       ...prev,
       [tabActiva]: [...(prev[tabActiva] || []), { categoria: "Suplementos comerciales", alimento: producto, gramos: 3, Icono: Pill }],
     }));
-    setSupAbierto(false);
-    setSupTipoAbierto(null);
-    llamarRecalculo("/menu/anadir", { menu_actual: nombresActualesDelMenu(), alimento: producto });
     setRecienRecalculado(true);
     setTimeout(() => setRecienRecalculado(false), 2500);
   };
 
-  const quitarSuplemento = (idx) => {
+  const quitarSuplemento = async (idx) => {
     const producto = suplementosMenu[idx]?.alimento;
+    if (!producto) return;
+    const ok = await llamarRecalculo("/menu/quitar", { menu_actual: [...nombresActualesDelMenu(), producto], alimento: producto });
+    if (!ok) return;
     setSuplementosPorMenu((prev) => ({
       ...prev,
       [tabActiva]: (prev[tabActiva] || []).filter((_, i) => i !== idx),
     }));
-    if (producto) llamarRecalculo("/menu/quitar", { menu_actual: [...nombresActualesDelMenu(), producto], alimento: producto });
     setRecienRecalculado(true);
     setTimeout(() => setRecienRecalculado(false), 2500);
   };
 
-  const cambiarAlimento = (itemIdx, alimentoNuevo) => {
+  const cambiarAlimento = async (itemIdx, alimentoNuevo) => {
     const alimentoViejo = menu.items[itemIdx].alimento;
+    setEditorAbierto(null);
+    const ok = await llamarRecalculo("/menu/cambiar", { menu_actual: nombresActualesDelMenu(), alimento_viejo: alimentoViejo, alimento_nuevo: alimentoNuevo });
+    if (!ok) return;   // sin esto, antes el nombre cambiaba en pantalla igual
+                        // aunque no hubiera combinación válida, y los gramos
+                        // se quedaban congelados en los de antes -- parecía
+                        // que "no hacía nada" cuando en realidad había fallado
     setSobreescritosPorMenu((prev) => ({
       ...prev,
       [tabActiva]: { ...(prev[tabActiva] || {}), [itemIdx]: alimentoNuevo },
     }));
-    setEditorAbierto(null);
-    llamarRecalculo("/menu/cambiar", { menu_actual: nombresActualesDelMenu(), alimento_viejo: alimentoViejo, alimento_nuevo: alimentoNuevo });
   };
 
   return (
@@ -1054,9 +1076,23 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           </div>
         )}
         {errorRecalculo && !recalculandoServidor && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3" style={{ background: "#FFE8EC" }}>
-            <AlertCircle size={13} style={{ color: ROSA, flexShrink: 0 }} />
-            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{errorRecalculo}</p>
+          // ⚠️ CORREGIDO (5 agosto): antes era un banner pequeño, fácil de no
+          // ver bajo la barra morada, sobre todo justo después de tocar el
+          // lápiz. Ahora es más grande, con borde y negrita, y explica que
+          // NO se ha aplicado ningún cambio -- porque ahora es verdad: con
+          // el arreglo de cambiarAlimento/anadirSuplemento/quitarSuplemento
+          // de arriba, si esto sale, el menú se ha quedado tal cual estaba.
+          <div className="flex items-start gap-2 px-4 py-3.5 rounded-xl mb-4" style={{ background: "#FFE8EC", border: `1.5px solid ${ROSA}` }}>
+            <AlertCircle size={18} style={{ color: ROSA, flexShrink: 0, marginTop: 1 }} />
+            <div>
+              <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                No se ha podido hacer ese cambio
+              </p>
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{errorRecalculo}</p>
+              <p className="text-xs mt-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                El menú sigue tal como estaba — no se ha aplicado nada.
+              </p>
+            </div>
           </div>
         )}
         <div className="flex gap-3 mb-4">
@@ -1203,9 +1239,15 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                         <Info size={16} style={{ color: porqueAbierto === i ? ROSA : "#C9BEDD" }} />
                       </button>
                     )}
-                    {i < itemsBase.length && (categoriasDisponibles || CATEGORIAS_ALIMENTO)[item.categoria] && (
+                    {i < itemsBase.length && (
                       <button onClick={() => {
-                          setEditorAbierto(editorAbierto && editorAbierto.itemIdx === i ? null : { itemIdx: i, categoria: item.categoria, especie: null });
+                          // ⚠️ CORREGIDO (5 agosto): antes se abría ya con la
+                          // categoría del alimento actual fijada, así que solo
+                          // se podía cambiar dentro de la misma categoría (pez
+                          // por pez, nunca pez por carne). Ahora se abre igual
+                          // que "Añadir alimento": eligiendo categoría primero,
+                          // libre entre las seis.
+                          setEditorAbierto(editorAbierto && editorAbierto.itemIdx === i ? null : { itemIdx: i, categoria: null, especie: null });
                           setPorqueAbierto(null);
                           setComoAbierto(null);
                         }}>
@@ -1219,9 +1261,22 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                     )}
                   </div>
                 </div>
-                {editorAbierto && editorAbierto.itemIdx === i && !editorAbierto.especie && (
+                {editorAbierto && editorAbierto.itemIdx === i && !editorAbierto.categoria && (
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
-                    <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>CAMBIAR POR</p>
+                    <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>CAMBIAR A QUÉ CATEGORÍA</p>
+                    <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                      {Object.keys(categoriasDisponibles || CATEGORIAS_ALIMENTO).map((cat) => (
+                        <button key={cat} onClick={() => setEditorAbierto({ ...editorAbierto, categoria: cat })}
+                          className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {editorAbierto && editorAbierto.itemIdx === i && editorAbierto.categoria && !editorAbierto.especie && (
+                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
+                    <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{editorAbierto.categoria.toUpperCase()}</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                       {Object.keys((categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]).map((especie) => {
                         const opciones = (categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][especie];
@@ -1236,6 +1291,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                         );
                       })}
                     </div>
+                    <button onClick={() => setEditorAbierto({ ...editorAbierto, categoria: null })} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>← Otra categoría</button>
                   </div>
                 )}
                 {editorAbierto && editorAbierto.itemIdx === i && editorAbierto.especie && (
