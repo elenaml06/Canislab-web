@@ -877,6 +877,10 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const multiplicador = diasSeleccionados;
 
   const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * multiplicador * 10) / 10;
+  // ⚠️ AÑADIDO (5 agosto): se sube aquí para que tanto el badge de arriba
+  // como la nota informativa de abajo usen el MISMO dato real, en vez de
+  // que cada uno lo calculara (o no) por su cuenta.
+  const ficha = fichaPorMenu[tabActiva] || menu.ficha;
 
   const nombresActualesDelMenu = () => menu.items.map((it, idx) => sobreescritos[idx] || it.alimento);
   const etapaSufijoApi = ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto";
@@ -1107,9 +1111,8 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           {(() => {
             // ⚠️ CORREGIDO (5 agosto): esto era texto fijo "27/27 OK", sin
             // ningún dato real detrás -- salía igual aunque el menú
-            // estuviera roto. Ahora usa la ficha real que devuelve el
-            // backend (ficha.correctos / ficha.total / ficha.semaforo).
-            const ficha = fichaPorMenu[tabActiva] || menu.ficha;
+            // estuviera roto. Ahora usa la ficha real (definida arriba,
+            // compartida con la nota informativa de más abajo).
             const COLORES = {
               verde: { fondo: VERDE, texto: VERDE_TEXTO },
               ambar: { fondo: "#FFF7E8", texto: "#B8860B" },
@@ -1139,14 +1142,35 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           </div>
         )}
 
-        {infoNutrientes && (
-          <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: VERDE }}>
-            <Info size={14} style={{ color: VERDE_TEXTO, flexShrink: 0, marginTop: 2 }} />
-            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
-              FEDIAF exige revisar 27 nutrientes distintos para que una dieta esté completa. Este menú los cumple todos.
-            </p>
-          </div>
-        )}
+        {infoNutrientes && (() => {
+          // ⚠️ CORREGIDO (5 agosto): antes decía "FEDIAF exige revisar 27
+          // nutrientes" y "los cumple todos" SIEMPRE, aunque el menú
+          // estuviera en ámbar o rojo -- eso sería falso en esos casos.
+          // Además, decir "FEDIAF exige 30" habría sido inexacto: la tabla
+          // real de FEDIAF tiene más de 40 (incluye aminoácidos
+          // individuales que no trackeamos, agrupados en la proteína
+          // total). Se habla de "nutrientes clave" en vez de dar un
+          // número que invite a preguntar "¿y los demás?".
+          const COLORES = {
+            verde: { fondo: VERDE, texto: VERDE_TEXTO },
+            ambar: { fondo: "#FFF7E8", texto: "#B8860B" },
+            rojo: { fondo: "#FFE8EC", texto: ROSA },
+          };
+          const col = COLORES[ficha?.semaforo] || COLORES.verde;
+          const TEXTOS = {
+            verde: `Comprobamos los nutrientes clave para que ${nombrePerro} crezca y se mantenga sano: minerales, vitaminas y grasas esenciales, siguiendo las tablas de FEDIAF. Este menú los cumple todos.`,
+            ambar: `Comprobamos los nutrientes clave para que ${nombrePerro} crezca y se mantenga sano. Este menú cumple ${ficha?.correctos ?? "?"} de ${ficha?.total ?? "?"} — el resto están cerca del mínimo, pero no llegan del todo. Conviene revisarlo.`,
+            rojo: `Comprobamos los nutrientes clave para que ${nombrePerro} crezca y se mantenga sano. Este menú se queda corto en varios. No deberías usarlo tal cual — vuelve a generarlo o edítalo.`,
+          };
+          return (
+            <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: col.fondo }}>
+              <Info size={14} style={{ color: col.texto, flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                {TEXTOS[ficha?.semaforo] || TEXTOS.verde}
+              </p>
+            </div>
+          );
+        })()}
 
         <div className="flex flex-col gap-2 mb-3">
         {(patologias || []).length > 0 ? (
