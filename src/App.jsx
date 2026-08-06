@@ -2657,6 +2657,13 @@ export default function CanislabOnboarding() {
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
+          {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
+              cuantos/aprovechar/personalizar, no había forma de volver
+              a tocar alergias o exclusiones -- solo se podía cambiar de
+              modo, nunca de perfil. */}
+          <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+            Editar perfil (alergias, exclusiones...)
+          </button>
           <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal · automático</p>
           <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>¿Cuántos menús<br />distintos quieres?</h1>
         </div>
@@ -2739,6 +2746,13 @@ export default function CanislabOnboarding() {
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
+          {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
+              cuantos/aprovechar/personalizar, no había forma de volver
+              a tocar alergias o exclusiones -- solo se podía cambiar de
+              modo, nunca de perfil. */}
+          <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+            Editar perfil (alergias, exclusiones...)
+          </button>
           <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal · aprovechar</p>
           <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>¿Qué tienes<br />por casa?</h1>
         </div>
@@ -2788,6 +2802,13 @@ export default function CanislabOnboarding() {
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
+          {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
+              cuantos/aprovechar/personalizar, no había forma de volver
+              a tocar alergias o exclusiones -- solo se podía cambiar de
+              modo, nunca de perfil. */}
+          <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+            Editar perfil (alergias, exclusiones...)
+          </button>
           <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú 1 · personalizar</p>
           <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>A tu gusto,<br />categoría a categoría</h1>
         </div>
