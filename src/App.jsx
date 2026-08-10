@@ -286,6 +286,11 @@ const CATEGORIAS_ALIMENTO = {
     "Vaca": ["Corazón de vaca"],
   },
   "Pescados y mariscos": {
+    // ⚠️ CORREGIDO (5 agosto, noche): Calamar/Gamba/Langostino(s)/
+    // Mejillón/Pulpo/Sepia necesitan cocinarse siempre, así que el
+    // AUTOMÁTICO no los usa nunca (se filtran de ACCESIBLES) -- pero
+    // si el usuario los quiere elegir él mismo aquí, sabiendo que hay
+    // que cocinarlos, puede.
     "Atún": ["Atún"],
     "Bacaladilla": ["Bacaladilla"],
     "Bacalao": ["Bacalao"],
@@ -299,7 +304,6 @@ const CATEGORIAS_ALIMENTO = {
     "Langostinos": ["Langostinos"],
     "Lenguado": ["Lenguado"],
     "Lubina": ["Lubina"],
-    "Mejillón": ["Mejillón"],
     "Merluza": ["Merluza"],
     "Perca": ["Perca"],
     "Pescadilla": ["Pescadilla"],
@@ -310,18 +314,20 @@ const CATEGORIAS_ALIMENTO = {
     "Trucha": ["Trucha"],
   },
   "Hueso carnoso": {
-    "Codorniz": ["Codorniz entera"],
-    "Conejo": ["Cabeza de conejo", "Carcasa de conejo", "Espinazo de conejo", "Patas de conejo"],
-    "Cordero": ["Costillas de cordero", "Cuello de cordero", "Espinazo de cordero"],
+    // ⚠️ CORREGIDO (5 agosto, noche) — segunda pasada, con datos reales
+    // confirmados: 12 de los que había vuelto a poner NO EXISTEN en
+    // absoluto en el catálogo (ni con datos incompletos, no hay ficha
+    // en ningún sitio) -- Codorniz, Ternera y Toro se quedan sin ningún
+    // alimento real, así que se quitan enteras. El resto de especies se
+    // queda solo con lo que sí tiene ficha de verdad.
+    "Conejo": ["Carcasa de conejo", "Espinazo de conejo"],
+    "Cordero": ["Costillas de cordero"],
     "Pato": ["Carcasa de pato", "Cuello de pato"],
-    "Pavo": ["Ala de pavo", "Carcasa de pavo", "Cuello de pavo"],
-    "Pollo": ["Ala de pollo", "Carcasa de pollo", "Cuello de pollo"],
-    "Ternera": ["Costillas de ternera", "Pecho de ternera con hueso"],
-    "Toro": ["Rabo de toro"],
+    "Pavo": ["Cuello de pavo"],
+    "Pollo": ["Carcasa de pollo"],
   },
   "Vísceras": {
     "Buey": ["Lengua de buey"],
-    "Conejo": ["Corazón de conejo"],
     "Cordero": ["Lengua de cordero", "Pulmón de cordero", "Riñón de cordero"],
     "Pavo": ["Molleja de pavo"],
     "Pollo": ["Molleja de pollo"],
@@ -341,10 +347,8 @@ const CATEGORIAS_ALIMENTO = {
     "Apio": ["Apio"],
     "Arándano": ["Arándano"],
     "Berenjena": ["Berenjena"],
-    "Berro": ["Berro"],
     "Boniato": ["Boniato"],
     "Borraja": ["Borraja"],
-    "Brecol": ["Brecol"],
     "Bruselas": ["Coles de Bruselas"],
     "Brócoli": ["Brócoli"],
     "Calabacín": ["Calabacín"],
@@ -363,9 +367,7 @@ const CATEGORIAS_ALIMENTO = {
     "Fresa": ["Fresa"],
     "Grelo": ["Grelo"],
     "Judía": ["Judía verde"],
-    "Kiwi": ["Kiwi"],
     "Lechuga": ["Lechuga"],
-    "Lombarda": ["Lombarda"],
     "Mandarina": ["Mandarina"],
     "Mango": ["Mango"],
     "Manzana": ["Manzana"],
@@ -2127,18 +2129,32 @@ export default function CanislabOnboarding() {
       let ultimoError = null;
       const especiesUsadas = [];
       for (let i = 0; i < cuantos; i++) {
-        const data = await pedirMenu(especiesUsadas);
-        if (data.factible) {
-          resultados.push(data);
-          // especie principal de este menú (la carne/pescado con más
-          // gramos) -- se excluye en el siguiente para forzar que rote
-          const gramosMenu = data.menu || data.gramos || {};
-          const principal = Object.entries(gramosMenu)
-            .filter(([n]) => ["Carne muscular", "Pescados y mariscos"].includes(categoriaDeAlimento(n)))
-            .sort((a, b) => b[1] - a[1])[0];
-          if (principal) especiesUsadas.push(especieDe(principal[0]));
-        } else {
-          ultimoError = data;
+        // ⚠️ CORREGIDO (5 agosto, noche) — FALLO GRAVE ENCONTRADO: pedir
+        // varios menús hace las llamadas una detrás de otra (pueden
+        // sumar hasta 90s con 4 menús), y si CUALQUIERA de ellas fallaba
+        // por la red (muy fácil en móvil), la excepción escapaba fuera
+        // de esta función, hasta el reintento general de más arriba --
+        // que empieza TODO desde cero, perdiendo los menús que ya se
+        // habían conseguido. Por eso siempre acababa saliendo 1 solo:
+        // la primera llamada solía completar antes de que algo fallara,
+        // las siguientes no llegaban nunca. Ahora un fallo en una
+        // llamada no tira las demás: se sigue intentando el resto.
+        try {
+          const data = await pedirMenu(especiesUsadas);
+          if (data.factible) {
+            resultados.push(data);
+            // especie principal de este menú (la carne/pescado con más
+            // gramos) -- se excluye en el siguiente para forzar que rote
+            const gramosMenu = data.menu || data.gramos || {};
+            const principal = Object.entries(gramosMenu)
+              .filter(([n]) => ["Carne muscular", "Pescados y mariscos"].includes(categoriaDeAlimento(n)))
+              .sort((a, b) => b[1] - a[1])[0];
+            if (principal) especiesUsadas.push(especieDe(principal[0]));
+          } else {
+            ultimoError = data;
+          }
+        } catch (err) {
+          ultimoError = { motivo: "Uno de los menús no se pudo calcular por un problema de conexión." };
         }
       }
       return { resultados, ultimoError };
