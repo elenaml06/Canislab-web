@@ -325,7 +325,8 @@ const CATEGORIAS_ALIMENTO = {
     "Pato": ["Carcasa de pato", "Cuello de pato"],
     "Pavo": ["Cuello de pavo"],
     "Pollo": ["Carcasa de pollo"],
-    "Ternera": ["Pecho de ternera con hueso"],
+    "Ternera": ["Pecho de ternera con hueso", "Cuello de ternera"],
+    "Vaca": ["Laringe de vacuno"],
   },
   "Vísceras": {
     "Buey": ["Lengua de buey"],
@@ -2131,7 +2132,26 @@ export default function CanislabOnboarding() {
           // forzar variedad, así que igualmente cae a la búsqueda libre
           tamano: especiesYaUsadas.length === 0 ? (perfil?.raza?.tamano || perfil?.tamanoManual || null) : null,
         }),
-      }).then((res) => res.json());
+      }).then(async (res) => {
+        // ⚠️ AÑADIDO (5 agosto, noche): antes esto era solo
+        // `res.json()` -- si el servidor devolvía algo vacío o
+        // recortado (un proxy cortando la respuesta a medio camino,
+        // por ejemplo), esto fallaba en silencio y el registro
+        // de diagnóstico decía "no factible -- (sin motivo)", sin
+        // decir POR QUÉ. Ahora se captura el código HTTP siempre,
+        // y si el cuerpo no es JSON válido, se dice explícitamente
+        // en vez de fingir que fue una respuesta normal sin motivo.
+        let cuerpo;
+        try {
+          cuerpo = await res.json();
+        } catch (e) {
+          return { factible: false, motivo: `Respuesta no válida del servidor (HTTP ${res.status}).` };
+        }
+        if (!res.ok && !cuerpo?.motivo) {
+          return { factible: false, motivo: `El servidor respondió con error (HTTP ${res.status}).` };
+        }
+        return cuerpo;
+      });
 
     const pedirTodos = async () => {
       const cuantos = modo === "automatico" ? numMenus : 1;
