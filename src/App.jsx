@@ -1984,6 +1984,14 @@ export default function CanislabOnboarding() {
 
   const [fase, setFase] = useState("onboarding");
   const [menuReal, setMenuReal] = useState(null);
+  // ⚠️ AÑADIDO (5 agosto, noche): la usuaria lleva varias rondas viendo
+  // que pedir varios menús automáticos solo le da 1 -- revisado el
+  // código a fondo y en mis pruebas SÍ funciona bien, así que sospecho
+  // que sigue con una versión vieja desplegada. Para no seguir
+  // adivinando a ciegas, esto guarda cuántos se pidieron de verdad y
+  // cuántos se consiguieron, visible en la pantalla si no coinciden --
+  // así la próxima vez hay datos reales, no solo sospechas.
+  const [diagnosticoMenus, setDiagnosticoMenus] = useState(null);
   const [menuCargando, setMenuCargando] = useState(false);
   const [menuError, setMenuError] = useState(null);
   const [necesitaVeterinario, setNecesitaVeterinario] = useState(false);
@@ -2091,6 +2099,7 @@ export default function CanislabOnboarding() {
     let cancelado = false;
     setMenuCargando(true);
     setMenuError(null);
+    setDiagnosticoMenus(null);
     setNecesitaVeterinario(false);
     setMenuDespertando(false);
 
@@ -2129,6 +2138,7 @@ export default function CanislabOnboarding() {
       const resultados = [];
       let ultimoError = null;
       const especiesUsadas = [];
+      const registro = [];
       for (let i = 0; i < cuantos; i++) {
         // ⚠️ CORREGIDO (5 agosto, noche) — FALLO GRAVE ENCONTRADO: pedir
         // varios menús hace las llamadas una detrás de otra (pueden
@@ -2144,6 +2154,7 @@ export default function CanislabOnboarding() {
           const data = await pedirMenu(especiesUsadas);
           if (data.factible) {
             resultados.push(data);
+            registro.push({ intento: i + 1, resultado: "ok" });
             // especie principal de este menú (la carne/pescado con más
             // gramos) -- se excluye en el siguiente para forzar que rote
             const gramosMenu = data.menu || data.gramos || {};
@@ -2153,11 +2164,14 @@ export default function CanislabOnboarding() {
             if (principal) especiesUsadas.push(especieDe(principal[0]));
           } else {
             ultimoError = data;
+            registro.push({ intento: i + 1, resultado: "no factible", motivo: data?.motivo || "(sin motivo)" });
           }
         } catch (err) {
           ultimoError = { motivo: "Uno de los menús no se pudo calcular por un problema de conexión." };
+          registro.push({ intento: i + 1, resultado: "error de red", motivo: String(err?.message || err) });
         }
       }
+      setDiagnosticoMenus({ pedidos: cuantos, conseguidos: resultados.length, registro });
       return { resultados, ultimoError };
     };
 
@@ -2884,7 +2898,28 @@ export default function CanislabOnboarding() {
       );
     }
     const menus = menuReal ? respuestaApiAMenu(menuReal, derReal) : MENUS_EJEMPLO;
-    return <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
+    const huboDiscrepancia = diagnosticoMenus && diagnosticoMenus.conseguidos < diagnosticoMenus.pedidos;
+    return (
+      <>
+        {/* ⚠️ AÑADIDO (5 agosto, noche): si se pidieron más menús de los
+            que se consiguieron, esto lo dice aquí mismo, con el motivo
+            real de cada intento fallido -- para diagnosticar sin
+            depender de las herramientas de desarrollador del móvil. */}
+        {huboDiscrepancia && (
+          <div className="fixed top-0 inset-x-0 z-[80] px-4 py-3" style={{ background: "#FFE8EC", borderBottom: `1.5px solid ${ROSA}` }}>
+            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+              Pediste {diagnosticoMenus.pedidos} menús, se consiguieron {diagnosticoMenus.conseguidos}.
+            </p>
+            {diagnosticoMenus.registro.filter((r) => r.resultado !== "ok").map((r, i) => (
+              <p key={i} className="text-[11px]" style={{ color: TINTA, fontFamily: fontBody }}>
+                Menú {r.intento}: {r.resultado} — {r.motivo}
+              </p>
+            ))}
+          </div>
+        )}
+        <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />
+      </>
+    );
   }
 
 
