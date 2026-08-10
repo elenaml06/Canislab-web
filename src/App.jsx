@@ -1077,10 +1077,23 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </p>
           </div>
         )}
+        {/* ⚠️ CORREGIDO (5 agosto, noche): antes era un banner pequeño
+            arriba del todo, que quedaba fuera de la vista si estabas
+            haciendo scroll más abajo (justo donde se toca el lápiz de
+            un alimento) -- fácil de no verlo nunca. Ahora es un aviso
+            fijo, centrado, que se superpone a toda la pantalla mientras
+            dura el recálculo -- imposible de perder de vista. */}
         {recalculandoServidor && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl mb-3" style={{ background: "#F0ECF7" }}>
-            <Dog size={13} style={{ color: VIOLETA, flexShrink: 0 }} />
-            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>Recalculando gramos con el servidor...</p>
+          <div className="fixed inset-0 z-[70] flex items-center justify-center px-6" style={{ background: "rgba(35,21,57,0.55)" }}>
+            <div className="flex flex-col items-center gap-3 px-8 py-7 rounded-2xl" style={{ background: "#FFFFFF" }}>
+              <Dog size={28} style={{ color: VIOLETA }} />
+              <p className="text-sm text-center" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+                Recalculando el menú...
+              </p>
+              <p className="text-xs text-center" style={{ color: MALVA, fontFamily: fontBody }}>
+                Un momento, esto puede tardar unos segundos
+              </p>
+            </div>
           </div>
         )}
         {errorRecalculo && !recalculandoServidor && (
