@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Refrigerator, Salad, Scissors, Search, SlidersHorizontal, Sparkles, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 
 const API_BASE = "https://canislab-api.onrender.com";
@@ -69,7 +69,7 @@ function generarCandidatosAleatorios(especieBase) {
   return [...new Set(elegidos)];
 }
 
-function eleccionesDelUsuario(modo, configPersonalizar, itemsAprovechar) {
+function eleccionesDelUsuario(modo, configPersonalizar) {
   if (modo === "personalizar") {
     const e = [];
     for (const [cat, c] of Object.entries(configPersonalizar || {})) {
@@ -79,10 +79,25 @@ function eleccionesDelUsuario(modo, configPersonalizar, itemsAprovechar) {
     }
     return e;
   }
-  if (modo === "aprovechar") {
-    return (itemsAprovechar || []).map((it) => it.alimento).filter((a) => !a.startsWith("Todo: "));
-  }
   return [];
+}
+
+// ⚠️ AÑADIDO (5 agosto, noche): antes "Todo: Pollo" se descartaba sin más
+// al construir la petición -- no forzaba nada, no hacía nada de verdad.
+// Esto recoge esas selecciones y las traduce a {categoría: especie} para
+// que el backend restrinja esa categoría concreta a esa especie, dejando
+// que el motor elija libremente qué corte usar dentro de ella.
+function restriccionesDeEspecie(modo, configPersonalizar) {
+  const restricciones = {};
+  if (modo === "personalizar") {
+    for (const [cat, c] of Object.entries(configPersonalizar || {})) {
+      if (c?.modo === "manual") {
+        const todoEspecie = (c.elegido || []).find((a) => a.startsWith("Todo: "));
+        if (todoEspecie) restricciones[cat] = todoEspecie.replace("Todo: ", "");
+      }
+    }
+  }
+  return restricciones;
 }
 
 const ETAPA_A_SUFIJO_API = {
@@ -485,8 +500,6 @@ function filtrarCategoriasPorEspecies(categoriasAlimento, especiesExcluidas) {
 const MODOS = [
   { key: "automatico", Icono: Sparkles, titulo: "Automático", resumen: "El sistema decide todo",
     nota: "Genera los menús solo, rotando alimentos para cubrir todos los nutrientes. La forma más rápida." },
-  { key: "aprovechar", Icono: Refrigerator, titulo: "Tengo cosas que aprovechar", resumen: "Dime qué tienes y lo reparto",
-    nota: "Metes lo que tengas por casa y el sistema decide en qué días y cantidades encaja mejor." },
   { key: "personalizar", Icono: SlidersHorizontal, titulo: "Personalizar", resumen: "Eliges tú, menú por menú",
     nota: "Entras en cada categoría y decides el alimento. Lo que no toques, se calcula solo." },
 ];
@@ -853,7 +866,6 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const ETIQUETA_MODO = {
     automatico: "AUTOMÁTICO",
     personalizar: "PERSONALIZADO",
-    aprovechar: "CON LO QUE TENÍAS",
   };
   const ORDEN_CATEGORIAS = [
     "Carne muscular", "Pescados y mariscos", "Hueso carnoso",
@@ -1916,9 +1928,6 @@ export default function CanislabOnboarding() {
 
   const [numMenus, setNumMenus] = useState(3);
 
-  const [itemsAprovechar, setItemsAprovechar] = useState([]);
-  const [estadoAbiertoAprovechar, setEstadoAbiertoAprovechar] = useState(null);
-
   const [configPersonalizar, setConfigPersonalizar] = useState(
     Object.fromEntries(CATEGORIAS_ICONOS.map((c) => [c.nombre, { modo: c.nombre === "Suplementos comerciales" ? "no" : "auto", elegido: [] }]))
   );
@@ -1927,7 +1936,6 @@ export default function CanislabOnboarding() {
   const irAModo = (m) => {
     setModo(m);
     if (m === "automatico") setPantalla("cuantos");
-    if (m === "aprovechar") setPantalla("aprovechar-input");
     if (m === "personalizar") setPantalla("personalizar");
   };
 
@@ -1978,7 +1986,7 @@ export default function CanislabOnboarding() {
   // requisitos, con maximo 2 suplementos -- ya NO hace falta darle una lista
   // de candidatos "razonable" a mano: el motor busca de verdad entre TODOS
   // los alimentos accesibles. Se le sigue mandando nombres_alimentos/
-  // forzar_presencia porque el backend los usa para personalizar/aprovechar
+  // forzar_presencia porque el backend lo usa para personalizar
   // (via el campo "modo").
   useEffect(() => {
     if (!(fase === "generador" && pantalla === "resultado" && derReal)) return;
@@ -2000,10 +2008,10 @@ export default function CanislabOnboarding() {
         body: JSON.stringify({
           modo: modo || "automatico",
           nombres_alimentos:
-            modo === "aprovechar" ? itemsAprovechar.map((it) => it.alimento) :
-            modo === "personalizar" ? eleccionesDelUsuario(modo, configPersonalizar, itemsAprovechar) :
+            modo === "personalizar" ? eleccionesDelUsuario(modo, configPersonalizar) :
             [],
-          forzar_presencia: eleccionesDelUsuario(modo, configPersonalizar, itemsAprovechar),
+          forzar_presencia: eleccionesDelUsuario(modo, configPersonalizar),
+          restringir_especie: restriccionesDeEspecie(modo, configPersonalizar),
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           especies_excluidas: [...Array.from(especiesExcluidas), ...especiesYaUsadas],
@@ -2079,7 +2087,7 @@ export default function CanislabOnboarding() {
     return () => {
       cancelado = true;
     };
-  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas, modo, configPersonalizar, itemsAprovechar, numMenus, perfil, alimentosEvitados]);
+  }, [fase, pantalla, derReal, etapaCalculada, especiesExcluidas, modo, configPersonalizar, numMenus, perfil, alimentosEvitados]);
 
   if (paso === 1) {
     const puedeContinuar = perfil.nombre.trim().length > 0 && perfil.sexo !== null;
@@ -2675,7 +2683,7 @@ export default function CanislabOnboarding() {
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
           {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
-              cuantos/aprovechar/personalizar, no había forma de volver
+              cuantos/personalizar, no había forma de volver
               a tocar alergias o exclusiones -- solo se podía cambiar de
               modo, nunca de perfil. */}
           <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -2751,52 +2759,6 @@ export default function CanislabOnboarding() {
     return <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} />;
   }
 
-  if (fase === "generador" && pantalla === "aprovechar-input") {
-    const anadir = (item) => {
-      setItemsAprovechar([...itemsAprovechar, item]);
-      setEstadoAbiertoAprovechar(null);
-    };
-    const quitar = (idx) => setItemsAprovechar(itemsAprovechar.filter((_, i) => i !== idx));
-
-    return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
-        <Fuentes />
-        <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
-          <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
-          {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
-              cuantos/aprovechar/personalizar, no había forma de volver
-              a tocar alergias o exclusiones -- solo se podía cambiar de
-              modo, nunca de perfil. */}
-          <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
-            Editar perfil (alergias, exclusiones...)
-          </button>
-          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal · aprovechar</p>
-          <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>¿Qué tienes<br />por casa?</h1>
-        </div>
-        <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
-          <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>
-            Dinos qué te queda por gastar — repartimos el resto de la semana de {nombreMostrar} alrededor de esto.
-          </p>
-          <SelectorAlimentos
-            lista={itemsAprovechar}
-            onAnadir={anadir}
-            onQuitar={quitar}
-            idGrupo="aprovechar"
-            estadoAbierto={estadoAbiertoAprovechar}
-            setEstadoAbierto={setEstadoAbiertoAprovechar}
-            categorias={categoriasDisponibles}
-          />
-          <div className="flex-1" />
-          <Curvita />
-          <BotonPrincipal
-            activo={itemsAprovechar.length > 0}
-            onClick={() => setPantalla("resultado")}
-            texto={itemsAprovechar.length === 0 ? "Añade algo primero" : "Repartir esto en la semana"}
-          />
-        </div>
-      </div>
-    );
-  }
 
   if (fase === "generador" && pantalla === "personalizar") {
     const setModoCat = (cat, m) => {
@@ -2820,7 +2782,7 @@ export default function CanislabOnboarding() {
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
           {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
-              cuantos/aprovechar/personalizar, no había forma de volver
+              cuantos/personalizar, no había forma de volver
               a tocar alergias o exclusiones -- solo se podía cambiar de
               modo, nunca de perfil. */}
           <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
