@@ -982,6 +982,10 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           especies_excluidas: Array.from(especiesExcluidas || []),
           nombres_excluidos: Array.from(alimentosEvitados || []),
           peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
+          // ⚠️ AÑADIDO (5 agosto, noche): sin esto, el tope de calcio de
+          // razas grandes/gigantes en crecimiento se perdía al editar un
+          // alimento -- solo se respetaba al generar el menú por primera vez.
+          peso_adulto_esperado_kg: pesoAdultoEsperado || null,
           ...cuerpoExtra,
         }),
       });
