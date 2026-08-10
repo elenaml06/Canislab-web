@@ -1679,36 +1679,95 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </p>
           </div>
 
-          <SelectorAlimentos
-            lista={dietaAnalizar}
-            onAnadir={(it) => setDietaAnalizar((prev) => [...prev, { ...it, gramos: "" }])}
-            onQuitar={(idx) => setDietaAnalizar((prev) => prev.filter((_, i) => i !== idx))}
-            idGrupo="analizar"
-            estadoAbierto={abiertoAnalizar}
-            setEstadoAbierto={setAbiertoAnalizar}
-            categorias={categoriasDisponibles}
-          />
+          {/* ⚠️ REDISEÑADO (5 agosto, noche): antes era una sola lista
+              plana -- añadir un alimento de cada categoría significaba
+              volver a abrir el selector entero cada vez, eligiendo
+              categoría otra vez desde cero. Ahora, igual que en
+              Personalizar, cada categoría es su propia tarjeta siempre
+              visible, con su botón de añadir dentro -- se puede ir
+              completando categoría a categoría sin perder el sitio. */}
+          {CATEGORIAS_ICONOS.map((cat) => {
+            const Icono = cat.Icono;
+            const itemsDeEstaCategoria = dietaAnalizar
+              .map((it, idxReal) => ({ ...it, idxReal }))
+              .filter((it) => it.categoria === cat.nombre);
+            const abierto = abiertoAnalizar && abiertoAnalizar.categoria === cat.nombre ? abiertoAnalizar : null;
+            const catsParaEsta = { [cat.nombre]: (categoriasDisponibles || CATEGORIAS_ALIMENTO)[cat.nombre] };
+            return (
+              <div key={cat.nombre} className="rounded-2xl p-4 mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
+                    <Icono size={16} strokeWidth={1.6} style={{ color: VIOLETA }} />
+                  </div>
+                  <p className="flex-1" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{cat.nombre}</p>
+                </div>
+                {itemsDeEstaCategoria.length > 0 && (
+                  <div className="mt-3 pl-12 flex flex-col gap-2">
+                    {itemsDeEstaCategoria.map((it) => (
+                      <div key={it.idxReal} className="flex items-center gap-2">
+                        <span className="flex-1 text-sm" style={{ color: TINTA, fontFamily: fontBody }}>{it.alimento}</span>
+                        <input
+                          type="number" inputMode="numeric" min="0" placeholder="0"
+                          value={it.gramos}
+                          onChange={(e) => setDietaAnalizar((prev) => prev.map((x, i) => i === it.idxReal ? { ...x, gramos: e.target.value } : x))}
+                          className="w-16 text-right text-sm px-2 py-1.5 rounded-lg"
+                          style={{ border: "1.5px solid #E3DAF0", color: VIOLETA, fontFamily: fontMono }}
+                        />
+                        <span className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>g</span>
+                        <button onClick={() => setDietaAnalizar((prev) => prev.filter((_, i) => i !== it.idxReal))}>
+                          <X size={14} style={{ color: ROSA }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-3 pl-12">
+                  {!abierto && (
+                    <button onClick={() => setAbiertoAnalizar({ categoria: cat.nombre, especie: null })}
+                      className="px-3 py-2 rounded-lg text-sm" style={{ background: PAPEL, color: MALVA, fontFamily: fontBody, border: "1.5px dashed #C9BEDD" }}>
+                      {itemsDeEstaCategoria.length > 0 ? "+ Añadir otro" : "+ Añadir alimento"}
+                    </button>
+                  )}
+                  {abierto && !abierto.especie && (
+                    <div className="rounded-xl p-3" style={{ background: PAPEL }}>
+                      <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>ESPECIE</p>
+                      <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                        {Object.keys(catsParaEsta[cat.nombre] || {}).map((especie) => (
+                          <button key={especie} onClick={() => setAbiertoAnalizar({ categoria: cat.nombre, especie })}
+                            className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
+                            {especie}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => setAbiertoAnalizar(null)} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>Cancelar</button>
+                    </div>
+                  )}
+                  {abierto && abierto.especie && (
+                    <div className="rounded-xl p-3" style={{ background: PAPEL }}>
+                      <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{abierto.especie.toUpperCase()}</p>
+                      <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                        {(catsParaEsta[cat.nombre]?.[abierto.especie] || []).map((alimento) => (
+                          <button key={alimento} onClick={() => {
+                              setDietaAnalizar((prev) => [...prev, { categoria: cat.nombre, alimento, gramos: "" }]);
+                              setAbiertoAnalizar(null);
+                            }}
+                            className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
+                            {alimento}
+                          </button>
+                        ))}
+                      </div>
+                      <button onClick={() => setAbiertoAnalizar({ categoria: cat.nombre, especie: null })} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>← Otra especie</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
 
           {dietaAnalizar.length > 0 && (
-            <div className="mt-4 mb-5">
-              <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: fontMono, letterSpacing: "0.08em" }}>GRAMOS AL DÍA DE CADA UNO</p>
-              {dietaAnalizar.map((it, idx) => (
-                <div key={idx} className="flex items-center gap-3 mb-2 px-3 py-2.5 rounded-xl" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
-                  <span className="flex-1 text-sm" style={{ color: TINTA, fontFamily: fontBody }}>{it.alimento}</span>
-                  <input
-                    type="number" inputMode="numeric" min="0" placeholder="0"
-                    value={it.gramos}
-                    onChange={(e) => setDietaAnalizar((prev) => prev.map((x, i) => i === idx ? { ...x, gramos: e.target.value } : x))}
-                    className="w-20 text-right text-sm px-2 py-1.5 rounded-lg"
-                    style={{ border: "1.5px solid #E3DAF0", color: VIOLETA, fontFamily: fontMono }}
-                  />
-                  <span className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>g</span>
-                </div>
-              ))}
-              <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
-                Total: {dietaAnalizar.reduce((s, i) => s + (Number(i.gramos) || 0), 0)} g al día
-              </p>
-            </div>
+            <p className="text-xs mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
+              Total: {dietaAnalizar.reduce((s, i) => s + (Number(i.gramos) || 0), 0)} g al día
+            </p>
           )}
 
           <button
