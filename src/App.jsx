@@ -314,17 +314,18 @@ const CATEGORIAS_ALIMENTO = {
     "Trucha": ["Trucha"],
   },
   "Hueso carnoso": {
-    // ⚠️ CORREGIDO (5 agosto, noche) — segunda pasada, con datos reales
-    // confirmados: 12 de los que había vuelto a poner NO EXISTEN en
-    // absoluto en el catálogo (ni con datos incompletos, no hay ficha
-    // en ningún sitio) -- Codorniz, Ternera y Toro se quedan sin ningún
-    // alimento real, así que se quitan enteras. El resto de especies se
-    // queda solo con lo que sí tiene ficha de verdad.
+    // ⚠️ CORREGIDO (5 agosto, noche) — tercera pasada: la usuaria ya
+    // había pasado un estudio real (Köber et al. 2017, ESVCN) con datos
+    // de laboratorio de Ca/P para varios huesos, incluido "Pecho de
+    // ternera con hueso" -- se había quitado por error pensando que no
+    // existía ningún dato, sin saber que ese estudio ya lo respaldaba.
+    // Reconstruido con esos datos reales más micronutrientes estimados.
     "Conejo": ["Carcasa de conejo", "Espinazo de conejo"],
     "Cordero": ["Costillas de cordero"],
     "Pato": ["Carcasa de pato", "Cuello de pato"],
     "Pavo": ["Cuello de pavo"],
     "Pollo": ["Carcasa de pollo"],
+    "Ternera": ["Pecho de ternera con hueso"],
   },
   "Vísceras": {
     "Buey": ["Lengua de buey"],
