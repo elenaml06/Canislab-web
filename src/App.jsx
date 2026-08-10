@@ -1109,22 +1109,30 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           </div>
         )}
         {errorRecalculo && !recalculandoServidor && (
-          // ⚠️ CORREGIDO (5 agosto): antes era un banner pequeño, fácil de no
-          // ver bajo la barra morada, sobre todo justo después de tocar el
-          // lápiz. Ahora es más grande, con borde y negrita, y explica que
-          // NO se ha aplicado ningún cambio -- porque ahora es verdad: con
-          // el arreglo de cambiarAlimento/anadirSuplemento/quitarSuplemento
-          // de arriba, si esto sale, el menú se ha quedado tal cual estaba.
-          <div className="flex items-start gap-2 px-4 py-3.5 rounded-xl mb-4" style={{ background: "#FFE8EC", border: `1.5px solid ${ROSA}` }}>
-            <AlertCircle size={18} style={{ color: ROSA, flexShrink: 0, marginTop: 1 }} />
-            <div>
-              <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+          // ⚠️ CORREGIDO (5 agosto, noche): antes esto era un banner fijo en
+          // el flujo de la página, arriba del todo -- si estabas editando
+          // un alimento más abajo en la lista, quedaba fuera de la vista y
+          // era fácil no verlo nunca. Ahora es un aviso superpuesto,
+          // centrado, igual de visible que el de "recalculando" -- con un
+          // botón para cerrarlo, porque a diferencia de "recalculando"
+          // este se queda abierto hasta que el usuario lo lea.
+          <div className="fixed inset-0 z-[70] flex items-center justify-center px-6" style={{ background: "rgba(35,21,57,0.55)" }}>
+            <div className="flex flex-col items-center gap-2 px-6 py-6 rounded-2xl max-w-sm" style={{ background: "#FFFFFF" }}>
+              <AlertCircle size={28} style={{ color: ROSA, flexShrink: 0 }} />
+              <p className="text-sm text-center" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
                 No se ha podido hacer ese cambio
               </p>
-              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{errorRecalculo}</p>
-              <p className="text-xs mt-1" style={{ color: MALVA, fontFamily: fontBody }}>
+              <p className="text-xs text-center" style={{ color: TINTA, fontFamily: fontBody }}>{errorRecalculo}</p>
+              <p className="text-xs text-center mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
                 El menú sigue tal como estaba — no se ha aplicado nada.
               </p>
+              <button
+                onClick={() => setErrorRecalculo(null)}
+                className="px-6 py-2.5 rounded-xl text-sm w-full"
+                style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+              >
+                Entendido
+              </button>
             </div>
           </div>
         )}
@@ -1332,12 +1340,8 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{editorAbierto.categoria.toUpperCase()}</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                       {Object.keys((categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]).map((especie) => {
-                        const opciones = (categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][especie];
                         return (
-                          <button key={especie} onClick={() => {
-                              if (opciones.length === 1) cambiarAlimento(i, opciones[0]);
-                              else setEditorAbierto({ ...editorAbierto, especie });
-                            }}
+                          <button key={especie} onClick={() => setEditorAbierto({ ...editorAbierto, especie })}
                             className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
                             {especie}
                           </button>
@@ -1927,6 +1931,13 @@ export default function CanislabOnboarding() {
   const [pantalla, setPantalla] = useState("elegir");
 
   const [numMenus, setNumMenus] = useState(3);
+  // ⚠️ AÑADIDO (5 agosto, noche): la barra de arriba con el menú lateral
+  // desaparecía en cuantos/personalizar/resultado -- vivía solo dentro de
+  // VistaMenus, que no existe todavía en esas pantallas (aún no hay
+  // ningún menú generado). Versión ligera para estas pantallas: solo
+  // "Editar perfil", que es lo único que tiene sentido antes de generar
+  // nada (Mis menús, Evolución... necesitan un menú ya hecho).
+  const [menuLigeroAbierto, setMenuLigeroAbierto] = useState(false);
 
   const [configPersonalizar, setConfigPersonalizar] = useState(
     Object.fromEntries(CATEGORIAS_ICONOS.map((c) => [c.nombre, { modo: c.nombre === "Suplementos comerciales" ? "no" : "auto", elegido: [] }]))
@@ -2681,12 +2692,15 @@ export default function CanislabOnboarding() {
       <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
-          <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
-          {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
-              cuantos/personalizar, no había forma de volver
-              a tocar alergias o exclusiones -- solo se podía cambiar de
-              modo, nunca de perfil. */}
-          <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+          <div className="flex items-center justify-between mb-1">
+            <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
+            {/* ⚠️ AÑADIDO (5 agosto, noche): la barra de arriba desaparecía
+                en esta pantalla -- tenía que estar siempre accesible. */}
+            <button onClick={() => setMenuLigeroAbierto(true)} className="p-1 -mt-4">
+              <Menu size={20} style={{ color: "#FFFFFF" }} />
+            </button>
+          </div>
+          <button onClick={() => setFase("onboarding")} className="text-xs mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
             Editar perfil (alergias, exclusiones...)
           </button>
           <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal · automático</p>
@@ -2780,12 +2794,13 @@ export default function CanislabOnboarding() {
       <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
-          <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
-          {/* ⚠️ AÑADIDO (5 agosto, mañana): antes, una vez dentro de
-              cuantos/personalizar, no había forma de volver
-              a tocar alergias o exclusiones -- solo se podía cambiar de
-              modo, nunca de perfil. */}
-          <button onClick={() => setFase("onboarding")} className="text-xs mb-4 -mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+          <div className="flex items-center justify-between mb-1">
+            <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
+            <button onClick={() => setMenuLigeroAbierto(true)} className="p-1 -mt-4">
+              <Menu size={20} style={{ color: "#FFFFFF" }} />
+            </button>
+          </div>
+          <button onClick={() => setFase("onboarding")} className="text-xs mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
             Editar perfil (alergias, exclusiones...)
           </button>
           <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú 1 · personalizar</p>
@@ -2860,10 +2875,7 @@ export default function CanislabOnboarding() {
                             {Object.keys(categoriasDisponibles[cat.nombre] || {}).map((especie) => {
                               const items = categoriasDisponibles[cat.nombre][especie];
                               return (
-                                <button key={especie} onClick={() => {
-                                    if (items.length === 1) elegirAlimento(cat.nombre, items[0]);
-                                    else setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie });
-                                  }}
+                                <button key={especie} onClick={() => setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie })}
                                   className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
                                   <span>{especie}</span>
                                   {items.length > 1 && <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>{items.length} tipos</span>}
@@ -2983,12 +2995,7 @@ function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, 
   );
 
   const elegirEspecie = (categoria, especie) => {
-    const items = CATS[categoria][especie];
-    if (items.length === 1) {
-      onAnadir({ categoria, alimento: items[0] });
-    } else {
-      setEstadoAbierto({ grupo: idGrupo, categoria, especie });
-    }
+    setEstadoAbierto({ grupo: idGrupo, categoria, especie });
   };
 
   return (
