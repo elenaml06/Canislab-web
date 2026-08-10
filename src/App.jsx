@@ -599,6 +599,63 @@ function calcularEdad(dia, mesIdx, anio) {
 
 const PESO_ADULTO_POR_TAMANO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, Grande: 32, Gigante: 55 };
 
+// ⚠️ AÑADIDO (5 agosto, noche) — FALLO GRAVE ENCONTRADO: el peso adulto
+// esperado de un cachorro se calculaba SIEMPRE con la media fija de su
+// raza (perfil.raza?.pesoMedio), nunca con la curva de crecimiento real
+// del propio cachorro (edad + peso actual) -- aunque esa lógica YA
+// estaba implementada, correcta, en el servidor (der.py), nunca se
+// replicó aquí ni se llamaba al servidor para usarla. Caso real: Cairo
+// con 5 meses y 18kg apunta a 34kg de adulto según su propia curva, no
+// a los 26kg de la media de su raza -- 192 kcal/día de diferencia,
+// confirmado. Esto es la MISMA tabla y misma lógica que CURVA_CRECIMIENTO
+// y peso_adulto_desde_curva() en der.py, letra por letra.
+const CURVA_CRECIMIENTO = {
+  2: [0.35, 0.30, 0.25, 0.20, 0.15],
+  3: [0.50, 0.45, 0.40, 0.32, 0.25],
+  4: [0.65, 0.58, 0.52, 0.44, 0.35],
+  5: [0.75, 0.68, 0.60, 0.50, 0.40],
+  6: [0.80, 0.75, 0.65, 0.55, 0.45],
+  7: [0.85, 0.80, 0.72, 0.62, 0.52],
+  8: [0.90, 0.85, 0.78, 0.68, 0.58],
+  9: [0.94, 0.90, 0.84, 0.74, 0.64],
+  10: [0.97, 0.93, 0.88, 0.80, 0.70],
+  11: [0.99, 0.96, 0.92, 0.85, 0.75],
+  12: [1.00, 0.98, 0.95, 0.89, 0.80],
+  15: [1.00, 1.00, 0.99, 0.95, 0.88],
+  18: [1.00, 1.00, 1.00, 0.99, 0.94],
+  24: [1.00, 1.00, 1.00, 1.00, 1.00],
+};
+function columnaTamano(pesoAdultoEstimado) {
+  if (pesoAdultoEstimado < 5) return 0;
+  if (pesoAdultoEstimado < 10) return 1;
+  if (pesoAdultoEstimado < 25) return 2;
+  if (pesoAdultoEstimado < 45) return 3;
+  return 4;
+}
+function pesoAdultoDesdeCurva(pesoActualKg, meses, pesoMedioRaza, pesoMinRaza, pesoMaxRaza) {
+  if (!pesoActualKg || pesoActualKg <= 0 || !meses) return pesoMedioRaza;
+  if (meses >= 24) return pesoActualKg; // ya es adulto
+
+  const edades = Object.keys(CURVA_CRECIMIENTO).map(Number).sort((a, b) => a - b);
+  let estimado = pesoMedioRaza || pesoActualKg * 2;
+
+  for (let i = 0; i < 4; i++) {
+    const col = columnaTamano(estimado);
+    const antes = Math.max(...edades.filter((e) => e <= meses), edades[0]);
+    const despues = Math.min(...edades.filter((e) => e >= meses), edades[edades.length - 1]);
+    const p1 = CURVA_CRECIMIENTO[antes][col];
+    const p2 = CURVA_CRECIMIENTO[despues][col];
+    const pct = despues === antes ? p1 : p1 + (p2 - p1) * (meses - antes) / (despues - antes);
+    if (pct <= 0) return estimado;
+    const nuevo = pesoActualKg / pct;
+    if (Math.abs(nuevo - estimado) < 0.2) { estimado = nuevo; break; }
+    estimado = nuevo;
+  }
+  if (pesoMinRaza) estimado = Math.max(estimado, pesoMinRaza);
+  if (pesoMaxRaza) estimado = Math.min(estimado, pesoMaxRaza);
+  return Math.round(estimado * 10) / 10;
+}
+
 function interpolar(pesoKg, puntos) {
   if (pesoKg <= puntos[0][0]) return puntos[0][1];
   if (pesoKg >= puntos[puntos.length - 1][0]) return puntos[puntos.length - 1][1];
@@ -2071,7 +2128,16 @@ export default function CanislabOnboarding() {
     [especiesExcluidas]
   );
 
-  const pesoAdultoEsperado = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+  // ⚠️ CORREGIDO (5 agosto, noche): antes esto era directamente la media
+  // de la raza, sin ajustar nunca por la curva de crecimiento real del
+  // cachorro. Ahora, si hay edad y peso actual, se usa su propia
+  // trayectoria (igual que ya hacía der.py en el servidor) -- la media
+  // de la raza queda solo como último recurso, cuando faltan datos.
+  const pesoAdultoMedioRaza = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+  const pesoAdultoEsperado = pesoAdultoDesdeCurva(
+    Number(perfil.pesoActual), edad?.totalMeses, pesoAdultoMedioRaza,
+    perfil.raza?.pesoMin, perfil.raza?.pesoMax
+  ) || pesoAdultoMedioRaza;
   const etapaCalculada = useMemo(() => determinarEtapa(edad, pesoAdultoEsperado), [edad, pesoAdultoEsperado]);
   const ETAPA_LABEL = { cachorro_joven: "Cachorro muy joven", cachorro_crecimiento: "Cachorro en crecimiento", adulto: "Adulto", senior: "Senior" };
   const etapaLabel = ETAPA_LABEL[etapaCalculada] || "Adulto";
