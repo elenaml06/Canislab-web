@@ -1624,7 +1624,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
               <div className="flex-1 min-w-0">
                 <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 16 }}>Crear otro menú</p>
                 <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
-                  Automático, personalizado o con lo que tengas en casa
+                  Automático o personalizado
                 </p>
               </div>
               <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
@@ -1943,6 +1943,31 @@ export default function CanislabOnboarding() {
     Object.fromEntries(CATEGORIAS_ICONOS.map((c) => [c.nombre, { modo: c.nombre === "Suplementos comerciales" ? "no" : "auto", elegido: [] }]))
   );
   const [estadoAbiertoPersonalizar, setEstadoAbiertoPersonalizar] = useState(null);
+
+  // ⚠️ AÑADIDO (5 agosto, noche): panel ligero para las pantallas de
+  // antes de tener un menú generado (cuantos/personalizar/resultado) --
+  // solo "Editar perfil", que es lo único que tiene sentido ahí. El
+  // panel completo (con Evolución, Mis menús...) sigue viviendo dentro
+  // de VistaMenus, una vez ya hay un menú de verdad.
+  const drawerLigero = menuLigeroAbierto && (
+    <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLigeroAbierto(false)}>
+      <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+        <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
+          <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombreMostrar}</p>
+          <button onClick={() => setMenuLigeroAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
+        </div>
+        <div className="flex-1 px-3 pt-4">
+          <button onClick={() => { setMenuLigeroAbierto(false); setFase("onboarding"); }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
+            <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
+              <Dog size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
+            </div>
+            <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>Editar perfil de {nombreMostrar}</span>
+            <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   const irAModo = (m) => {
     setModo(m);
@@ -2607,7 +2632,10 @@ export default function CanislabOnboarding() {
       <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
-          <p className="text-[11px] tracking-[0.18em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
+          <div className="flex items-center justify-between mb-3">
+            <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
+            <button onClick={() => setMenuLigeroAbierto(true)}><Menu size={20} style={{ color: "#FFFFFF" }} /></button>
+          </div>
           <h1 className="text-3xl leading-tight mb-2" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
             ¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?
           </h1>
@@ -2683,6 +2711,7 @@ export default function CanislabOnboarding() {
           <div className="flex-1" />
           <Curvita />
         </div>
+        {drawerLigero}
       </div>
     );
   }
@@ -2727,6 +2756,7 @@ export default function CanislabOnboarding() {
           <Curvita />
           <BotonPrincipal activo={true} onClick={() => setPantalla("resultado")} texto={`Generar ${numMenus === 1 ? "el menú" : `los ${numMenus} menús`}`} />
         </div>
+        {drawerLigero}
       </div>
     );
   }
@@ -2734,8 +2764,11 @@ export default function CanislabOnboarding() {
   if (fase === "generador" && pantalla === "resultado") {
     if (menuCargando) {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
+        <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
           <Fuentes />
+          <button onClick={() => setMenuLigeroAbierto(true)} className="absolute top-10 right-6 p-1">
+            <Menu size={20} style={{ color: VIOLETA }} />
+          </button>
           <Dog size={36} strokeWidth={1.4} style={{ color: VIOLETA }} />
           <p className="mt-4" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
             {menuDespertando
@@ -2747,13 +2780,17 @@ export default function CanislabOnboarding() {
               ? "Puede tardar hasta un minuto la primera vez tras un rato sin uso — ya casi está."
               : "Un momento..."}
           </p>
+          {drawerLigero}
         </div>
       );
     }
     if (menuError) {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
+        <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
           <Fuentes />
+          <button onClick={() => setMenuLigeroAbierto(true)} className="absolute top-10 right-6 p-1">
+            <Menu size={20} style={{ color: VIOLETA }} />
+          </button>
           <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
           <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
             {necesitaVeterinario ? "Esto lo tiene que pautar tu veterinario" : "No se pudo calcular el menú"}
@@ -2766,6 +2803,7 @@ export default function CanislabOnboarding() {
           >
             Volver
           </button>
+          {drawerLigero}
         </div>
       );
     }
@@ -2917,6 +2955,7 @@ export default function CanislabOnboarding() {
           <Curvita />
           <BotonPrincipal activo={true} onClick={() => setPantalla("resultado")} texto="Generar este menú" />
         </div>
+        {drawerLigero}
       </div>
     );
   }
