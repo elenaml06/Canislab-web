@@ -3129,10 +3129,18 @@ export default function CanislabOnboarding() {
                         <div className="rounded-xl p-3" style={{ background: PAPEL }}>
                           <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{especieAbierta.toUpperCase()}</p>
                           <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
-                            <button onClick={() => elegirAlimento(cat.nombre, `Todo: ${especieAbierta}`)}
-                              className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}>
-                              Todo el/la {especieAbierta}
-                            </button>
+                            {/* ⚠️ CORREGIDO (5 agosto, madrugada): este botón salía
+                                siempre, aunque la especie solo tuviera 1 alimento --
+                                mostrando dos opciones que hacían exactamente lo
+                                mismo (elegir el único alimento, o "todo el/la X"),
+                                confuso de verdad. Ahora solo aparece cuando de
+                                verdad hay más de un alimento entre los que elegir. */}
+                            {categoriasDisponibles[cat.nombre][especieAbierta].length > 1 && (
+                              <button onClick={() => elegirAlimento(cat.nombre, `Todo: ${especieAbierta}`)}
+                                className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}>
+                                Todo el/la {especieAbierta}
+                              </button>
+                            )}
                             {categoriasDisponibles[cat.nombre][especieAbierta].map((alimento) => (
                               <button key={alimento} onClick={() => elegirAlimento(cat.nombre, alimento)}
                                 className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
@@ -3309,13 +3317,18 @@ function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, 
         <div className="rounded-xl p-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
           <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{abierto.especie.toUpperCase()}</p>
           <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
-            <button
-              onClick={() => onAnadir({ categoria: abierto.categoria, alimento: `Todo: ${abierto.especie}` })}
-              className="text-left px-3 py-2 rounded-lg text-sm"
-              style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}
-            >
-              Todo el/la {abierto.especie}
-            </button>
+            {/* ⚠️ CORREGIDO (5 agosto, madrugada): mismo ajuste que en
+                Personalizar -- este botón salía siempre, aunque solo
+                hubiera 1 alimento para la especie, duplicando la opción. */}
+            {CATS[abierto.categoria][abierto.especie].length > 1 && (
+              <button
+                onClick={() => onAnadir({ categoria: abierto.categoria, alimento: `Todo: ${abierto.especie}` })}
+                className="text-left px-3 py-2 rounded-lg text-sm"
+                style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}
+              >
+                Todo el/la {abierto.especie}
+              </button>
+            )}
             {CATS[abierto.categoria][abierto.especie].map((alimento) => (
               <button
                 key={alimento}
