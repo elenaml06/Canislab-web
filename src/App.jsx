@@ -2209,10 +2209,16 @@ export default function CanislabOnboarding() {
           peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
           patologias: perfil?.patologias || [],
           peso_adulto_esperado_kg: pesoAdultoEsperado || null,
-          // la vía rápida del catálogo solo tiene sentido en el PRIMER
-          // menú -- a partir del segundo hay especies excluidas para
-          // forzar variedad, así que igualmente cae a la búsqueda libre
-          tamano: especiesYaUsadas.length === 0 ? (perfil?.raza?.tamano || perfil?.tamanoManual || null) : null,
+          // ⚠️ CORREGIDO (5 agosto, madrugada): antes esto solo se mandaba
+          // en el primer menú, forzando que el 2º y 3º cayeran siempre a
+          // la búsqueda libre en caliente -- que en el servidor real
+          // podía tardar 19+ segundos, demasiado cerca del límite de
+          // 30s de Render (confirmado con el tiempo exacto). Ahora hay
+          // variantes pre-resueltas con proteína distinta para CUALQUIER
+          // menú de la sesión, no solo el primero, así que el tamaño se
+          // manda siempre -- el servidor decide solo si puede usar la
+          // vía rápida o no.
+          tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
         }),
       }).then(async (res) => {
         // ⚠️ AÑADIDO (5 agosto, noche): antes esto era solo
