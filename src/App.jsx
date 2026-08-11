@@ -2263,13 +2263,19 @@ export default function CanislabOnboarding() {
           if (data.factible) {
             resultados.push(data);
             registro.push({ intento: i + 1, resultado: "ok" });
-            // especie principal de este menú (la carne/pescado con más
-            // gramos) -- se excluye en el siguiente para forzar que rote
+            // ⚠️ AMPLIADO (5 agosto, madrugada): antes solo se rastreaba
+            // la especie de Carne muscular/Pescado -- si el menú caía al
+            // camino normal (no al atajo instantáneo), el hígado, hueso y
+            // vísceras seguían convergiendo siempre en lo mismo, porque
+            // nada les decía que rotaran. Ahora se evita la especie
+            // repetida en las 4 categorías, no solo la proteína.
             const gramosMenu = data.menu || data.gramos || {};
-            const principal = Object.entries(gramosMenu)
-              .filter(([n]) => ["Carne muscular", "Pescados y mariscos"].includes(categoriaDeAlimento(n)))
-              .sort((a, b) => b[1] - a[1])[0];
-            if (principal) especiesUsadas.push(especieDe(principal[0]));
+            for (const cat of ["Carne muscular", "Pescados y mariscos", "Hueso carnoso", "Vísceras", "Hígado"]) {
+              const principal = Object.entries(gramosMenu)
+                .filter(([n]) => categoriaDeAlimento(n) === cat)
+                .sort((a, b) => b[1] - a[1])[0];
+              if (principal) especiesUsadas.push(especieDe(principal[0]));
+            }
           } else {
             ultimoError = data;
             registro.push({ intento: i + 1, resultado: "no factible", motivo: data?.motivo || "(sin motivo)" });
