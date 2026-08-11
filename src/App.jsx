@@ -2192,7 +2192,19 @@ export default function CanislabOnboarding() {
           restringir_especie: restriccionesDeEspecie(modo, configPersonalizar),
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
-          especies_excluidas: [...Array.from(especiesExcluidas), ...especiesYaUsadas],
+          // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
+          // (para dar variedad entre varios menús automáticos) se
+          // mezclaba aquí, en especies_excluidas -- pensado para
+          // alergias REALES, una exclusión dura. Si la especie del
+          // menú anterior era la única forma razonable de cerrar los 30
+          // requisitos, esa exclusión dura podía volver el problema
+          // imposible, y el usuario veía el fallo sin haber pedido
+          // nada de eso -- la rotación es una decisión interna, nunca
+          // debería poder romper el menú. Ahora va aparte, como
+          // preferencia suave (evitar_especies): el motor la evita si
+          // puede, nunca falla por su causa.
+          especies_excluidas: Array.from(especiesExcluidas),
+          evitar_especies: especiesYaUsadas,
           nombres_excluidos: Array.from(alimentosEvitados),
           peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
           patologias: perfil?.patologias || [],
