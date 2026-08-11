@@ -276,13 +276,25 @@ const NIVELES = [
 
 const CATEGORIAS_ALIMENTO = {
   "Carne muscular": {
-    "Conejo": ["Conejo"],
-    "Cordero": ["Corazón de cordero"],
+    // ⚠️ CORREGIDO (5 agosto, madrugada) — segunda pasada: lengua y
+    // pulmón TAMPOCO segregan, así que también van con la carne
+    // muscular, no con las vísceras -- mismo motivo que la molleja y
+    // el corazón. Vísceras se queda solo con riñón: no hay datos de
+    // bazo ni páncreas para ampliarla.
+    // ⚠️ CORREGIDO (5 agosto, madrugada): "Molleja de pollo", "Molleja
+    // de pavo" y "Corazón de conejo" estaban en Vísceras -- corregido
+    // a Carne muscular, igual que ya estaba el resto de corazones. En
+    // alimentación cruda, lo que separa víscera de carne no es "es
+    // tejido muscular o es un órgano", es si SEGREGA algo o no: ni el
+    // corazón ni la molleja segregan, así que van con la carne.
+    "Conejo": ["Conejo", "Corazón de conejo"],
+    "Cordero": ["Corazón de cordero", "Lengua de cordero", "Pulmón de cordero"],
     "Gallina": ["Gallina (carne sin hueso)"],
     "Pato": ["Pato (carne sin hueso)"],
-    "Pavo": ["Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
-    "Pollo": ["Corazón de pollo", "Pollo ala con piel (sin hueso)", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo sin piel", "Pollo pechuga con piel", "Pollo pechuga sin piel"],
-    "Ternera": ["Lomo de ternera con grasa", "Ternera con grasa", "Ternera solomillo sin grasa"],
+    "Pavo": ["Molleja de pavo", "Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
+    "Pollo": ["Corazón de pollo", "Molleja de pollo", "Pollo ala con piel (sin hueso)", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo sin piel", "Pollo pechuga con piel", "Pollo pechuga sin piel"],
+    "Ternera": ["Lomo de ternera con grasa", "Pulmón de ternera", "Ternera con grasa", "Ternera solomillo sin grasa"],
+    "Buey": ["Lengua de buey"],
     "Vaca": ["Corazón de vaca"],
   },
   "Pescados y mariscos": {
@@ -329,11 +341,8 @@ const CATEGORIAS_ALIMENTO = {
     "Vaca": ["Laringe de vacuno"],
   },
   "Vísceras": {
-    "Buey": ["Lengua de buey"],
-    "Cordero": ["Lengua de cordero", "Pulmón de cordero", "Riñón de cordero"],
-    "Pavo": ["Molleja de pavo"],
-    "Pollo": ["Molleja de pollo"],
-    "Ternera": ["Lengua de ternera", "Pulmón de ternera", "Riñón de ternera"],
+    "Cordero": ["Riñón de cordero"],
+    "Ternera": ["Riñón de ternera"],
   },
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
