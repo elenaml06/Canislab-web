@@ -7,7 +7,7 @@ const API_BASE = "https://canislab-api.onrender.com";
 const POOL_CANDIDATOS = {
   "Carne muscular": ["Ternera con grasa", "Ternera solomillo sin grasa", "Lomo de ternera con grasa", "Conejo", "Corazón de vaca", "Corazón de cordero", "Pollo pechuga con piel", "Pollo muslo con piel", "Corazón de pollo", "Pavo pechuga sin piel", "Pavo muslo con piel", "Pato (carne sin hueso)"],
   "Hueso carnoso": ["Costillas de ternera", "Pecho de ternera con hueso", "Costillas de cordero", "Cuello de cordero", "Espinazo de cordero", "Rabo de toro", "Carcasa de conejo", "Patas de conejo", "Cuello de pollo", "Carcasa de pollo", "Ala de pollo", "Cuello de pavo", "Ala de pavo", "Carcasa de pavo", "Cuello de pato"],
-  "Vísceras": ["Riñón de ternera", "Pulmón de ternera", "Riñón de cordero", "Pulmón de cordero", "Lengua de ternera"],
+  "Vísceras": ["Riñón de ternera", "Pulmón de ternera", "Riñón de cordero", "Pulmón de cordero"],
   "Hígado": ["Hígado de vaca", "Hígado de conejo"],
   "Pescados y mariscos": ["Sardina", "Salmón", "Caballa", "Trucha", "Merluza", "Bacalao"],
   "Verduras y frutas": ["Calabaza", "Zanahoria", "Calabacín", "Judía verde", "Brócoli", "Espinaca", "Manzana", "Pera", "Plátano", "Arándano"],
@@ -288,12 +288,12 @@ const CATEGORIAS_ALIMENTO = {
     // tejido muscular o es un órgano", es si SEGREGA algo o no: ni el
     // corazón ni la molleja segregan, así que van con la carne.
     "Conejo": ["Conejo", "Corazón de conejo"],
-    "Cordero": ["Corazón de cordero", "Lengua de cordero", "Pulmón de cordero"],
+    "Cordero": ["Corazón de cordero", "Lengua de cordero"],
     "Gallina": ["Gallina (carne sin hueso)"],
     "Pato": ["Pato (carne sin hueso)"],
     "Pavo": ["Molleja de pavo", "Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
     "Pollo": ["Corazón de pollo", "Molleja de pollo", "Pollo ala con piel (sin hueso)", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo sin piel", "Pollo pechuga con piel", "Pollo pechuga sin piel"],
-    "Ternera": ["Lomo de ternera con grasa", "Pulmón de ternera", "Ternera con grasa", "Ternera solomillo sin grasa"],
+    "Ternera": ["Lomo de ternera con grasa", "Ternera con grasa", "Ternera solomillo sin grasa"],
     "Buey": ["Lengua de buey"],
     "Vaca": ["Corazón de vaca"],
   },
@@ -341,8 +341,12 @@ const CATEGORIAS_ALIMENTO = {
     "Vaca": ["Laringe de vacuno"],
   },
   "Vísceras": {
-    "Cordero": ["Riñón de cordero"],
-    "Ternera": ["Riñón de ternera"],
+    // ⚠️ CORREGIDO (5 agosto, madrugada): el pulmón vuelve aquí -- a
+    // diferencia de lengua/molleja/corazón (donde todas las fuentes
+    // coinciden), es un caso genuinamente debatido en alimentación
+    // cruda, se deja por prudencia.
+    "Cordero": ["Pulmón de cordero", "Riñón de cordero"],
+    "Ternera": ["Pulmón de ternera", "Riñón de ternera"],
   },
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
@@ -862,17 +866,98 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const [resultadoAnalisis, setResultadoAnalisis] = useState(null);
   const [analizando, setAnalizando] = useState(false);
   const [errorAnalisis, setErrorAnalisis] = useState(null);
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: algunas dietas
+  // comerciales dan el reparto en % ("70% pollo"), no en gramos. Con
+  // porcentaje, hace falta el total de gramos/día para poder convertir
+  // cada % a gramos reales -- el resto del análisis sigue funcionando
+  // en gramos por dentro, solo cambia cómo se introduce.
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: no siempre se
+  // analiza la dieta DEL perro configurado en la app -- puede ser la
+  // de otro perro (el de una prima, por ejemplo), sin querer crear un
+  // perfil nuevo permanente solo para eso. Con esto, "otroPerroDatos"
+  // guarda un perfil puntual (peso, etapa, edad si es cachorro) que
+  // solo vive mientras se hace este análisis -- nunca se guarda como
+  // mascota nueva. Si es null, se usa el perro normal de la app.
+  const [analizandoParaOtro, setAnalizandoParaOtro] = useState(false);
+  const [otroPerroDatos, setOtroPerroDatos] = useState({ peso: "", etapa: "adulto", meses: "", pesoAdulto: "" });
+  const [modoEntradaAnalizar, setModoEntradaAnalizar] = useState("gramos");
+  const [totalGramosDiaPorcentaje, setTotalGramosDiaPorcentaje] = useState("");
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: mostrar cuántas
+  // kcal aporta lo que se va metiendo, comparado con lo que el perro
+  // necesita, ANTES de pulsar "Analizar" -- no solo después. Para eso
+  // hace falta la energía por 100g de cada alimento; se trae del
+  // catálogo real (mismo dato que usa el servidor), no se inventa
+  // ninguna cifra de "gramos esperados al día" genérica, porque eso
+  // depende mucho de qué alimentos se elijan (el pato tiene el doble
+  // de kcal/100g que la pechuga de pollo, por ejemplo).
+  const [energiaAlimentos, setEnergiaAlimentos] = useState({});
+  useEffect(() => {
+    if (seccionActiva !== "analizar" || Object.keys(energiaAlimentos).length > 0) return;
+    fetch(`${API_BASE}/alimentos`)
+      .then((res) => res.json())
+      .then((data) => {
+        const mapa = {};
+        for (const lista of Object.values(data)) {
+          for (const a of lista) mapa[a.nombre] = a.kcal_100g;
+        }
+        setEnergiaAlimentos(mapa);
+      })
+      .catch(() => {}); // si falla, simplemente no se muestra la comparación de kcal
+  }, [seccionActiva]);
+
+  // ⚠️ AÑADIDO (5 agosto, madrugada): el DER que se usa para ESTE
+  // análisis -- el del perro de la app, o el calculado al vuelo para
+  // "otro perro" si se eligió esa opción. Se reutiliza calcularDER,
+  // la misma función que usa el resto de la app, con actividad
+  // "normal" por defecto (no se pregunta, para mantener el formulario
+  // rápido, tal como se pidió).
+  const derParaAnalisis = useMemo(() => {
+    if (!analizandoParaOtro) return derReal;
+    const peso = Number(otroPerroDatos.peso);
+    if (!peso || peso <= 0) return null;
+    const opciones = { pesoAdultoKg: Number(otroPerroDatos.pesoAdulto) || undefined };
+    return calcularDER(peso, otroPerroDatos.etapa, 1, false, opciones);
+  }, [analizandoParaOtro, otroPerroDatos, derReal]);
 
   const analizarDietaActual = async () => {
-    const conGramos = dietaAnalizar.filter((it) => Number(it.gramos) > 0);
-    if (conGramos.length === 0) {
-      setErrorAnalisis("Añade al menos un alimento y dinos cuántos gramos le das.");
+    // ⚠️ AÑADIDO (5 agosto, madrugada): si se está analizando para
+    // "otro perro" y aún no se ha calculado su DER (falta el peso),
+    // no tiene sentido seguir -- el servidor necesita ese número.
+    if (analizandoParaOtro && !derParaAnalisis) {
+      setErrorAnalisis("Dinos al menos el peso del perro para poder calcular lo que necesita.");
       return;
     }
+    const conValor = dietaAnalizar.filter((it) => Number(it.gramos) > 0);
+    if (conValor.length === 0) {
+      setErrorAnalisis(modoEntradaAnalizar === "porcentaje"
+        ? "Añade al menos un alimento y dinos qué porcentaje es."
+        : "Añade al menos un alimento y dinos cuántos gramos le das.");
+      return;
+    }
+    // ⚠️ AÑADIDO (5 agosto, madrugada): si el modo es porcentaje, hace
+    // falta el total de gramos/día para convertir cada % a gramos
+    // reales antes de mandar nada al servidor -- el servidor solo
+    // entiende gramos, el porcentaje es puramente de entrada.
+    if (modoEntradaAnalizar === "porcentaje") {
+      const total = Number(totalGramosDiaPorcentaje);
+      if (!total || total <= 0) {
+        setErrorAnalisis("Dinos cuántos gramos en total le das al día, para poder calcular los porcentajes.");
+        return;
+      }
+      const sumaPct = conValor.reduce((s, it) => s + Number(it.gramos), 0);
+      if (Math.round(sumaPct) !== 100) {
+        setErrorAnalisis(`Los porcentajes deberían sumar 100 (ahora mismo suman ${Math.round(sumaPct)}).`);
+        return;
+      }
+    }
     setAnalizando(true); setErrorAnalisis(null); setResultadoAnalisis(null);
+    const totalParaConvertir = Number(totalGramosDiaPorcentaje) || 0;
     const gramos_por_alimento = {};
-    conGramos.forEach((it) => {
-      gramos_por_alimento[it.alimento] = (gramos_por_alimento[it.alimento] || 0) + Number(it.gramos);
+    conValor.forEach((it) => {
+      const gramosReales = modoEntradaAnalizar === "porcentaje"
+        ? (Number(it.gramos) / 100) * totalParaConvertir
+        : Number(it.gramos);
+      gramos_por_alimento[it.alimento] = (gramos_por_alimento[it.alimento] || 0) + gramosReales;
     });
     try {
       const resp = await fetch(`${API_BASE}/analizar`, {
@@ -880,8 +965,8 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           gramos_por_alimento,
-          der_objetivo: derReal,
-          etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
+          der_objetivo: derParaAnalisis,
+          etapa_requisitos: ETAPA_A_SUFIJO_API[analizandoParaOtro ? otroPerroDatos.etapa : etapaCalculada] || "Adulto",
         }),
       });
       const data = await resp.json();
@@ -897,42 +982,52 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const [comoAbierto, setComoAbierto] = useState(null);
   const [mostrarAyuda, setMostrarAyuda] = useState(true);
   const [infoNutrientes, setInfoNutrientes] = useState(false);
-  const [suplementosPorMenu, setSuplementosPorMenu] = useState({});
   const [supAbierto, setSupAbierto] = useState(false);
   const [supTipoAbierto, setSupTipoAbierto] = useState(null);
   const [recienRecalculado, setRecienRecalculado] = useState(false);
-  const [sobreescritosPorMenu, setSobreescritosPorMenu] = useState({});
   const [editorAbierto, setEditorAbierto] = useState(null);
   const [recalculandoServidor, setRecalculandoServidor] = useState(false);
   const [gramosRealesPorMenu, setGramosRealesPorMenu] = useState({});
   const [errorRecalculo, setErrorRecalculo] = useState(null);
+  // ⚠️ AÑADIDO (5 agosto, madrugada): para el aviso de "tuvimos que
+  // cambiar también X" cuando editar un alimento no se pudo hacer
+  // manteniendo todo lo demás igual -- distinto de errorRecalculo
+  // (que es cuando el cambio pedido no fue posible en absoluto).
+  const [avisoRecalculo, setAvisoRecalculo] = useState(null);
   const [fichaPorMenu, setFichaPorMenu] = useState({});
 
   const menu = menus.find((m) => m.id === tabActiva);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
   const viendoBloqueado = necesitaTransicion && idxActiva > 0;
-  const suplementosMenu = suplementosPorMenu[tabActiva] || [];
-  const gramosSuplementos = suplementosMenu.reduce((s, it) => s + it.gramos, 0);
-  const totalBase = menu.items.reduce((s, it) => s + it.gramos, 0);
-  const factor = totalBase > 0 ? Math.max(0, (totalBase - gramosSuplementos) / totalBase) : 1;
-  const sobreescritos = sobreescritosPorMenu[tabActiva] || {};
   const gramosReales = gramosRealesPorMenu[tabActiva];
-  const itemsBase = menu.items.map((it, idx) => {
-    const alimentoActual = sobreescritos[idx] || it.alimento;
-    const gramosDeVerdad = gramosReales ? gramosReales[alimentoActual] : undefined;
-    const cambiado = alimentoActual !== it.alimento;
-    const categoriaActual = cambiado ? categoriaDeAlimento(alimentoActual) : it.categoria;
-    const IconoActual = cambiado
-      ? ((CATEGORIAS_ICONOS.find((x) => x.nombre === categoriaActual) || {}).Icono || Beef)
-      : it.Icono;
-    return {
-      ...it,
-      alimento: alimentoActual,
-      categoria: categoriaActual,
-      Icono: IconoActual,
-      gramos: gramosDeVerdad !== undefined ? gramosDeVerdad : Math.max(5, Math.round(it.gramos * factor)),
-    };
-  }).filter((it) => gramosReales ? gramosReales[it.alimento] !== undefined : true);
+  // ⚠️ CORREGIDO (5 agosto, madrugada) — FALLO GRAVE ENCONTRADO, caso
+  // real reportado: al editar un alimento en cualquier modo, el
+  // servidor recalcula el MENÚ ENTERO desde cero (no solo cambia el
+  // alimento tocado) -- así que casi nunca coincide con la lista
+  // visual original. Antes, esto recorría `menu.items` (la lista
+  // VIEJA, con sus índices fijos) y para cada uno buscaba sus gramos
+  // en `gramosReales` (el diccionario NUEVO) -- cualquier alimento
+  // viejo que ya no estuviera en el menú nuevo se quedaba sin gramos
+  // y el filtro final lo borraba de la pantalla. El resultado: se
+  // veía solo la INTERSECCIÓN entre lo viejo y lo nuevo (unos pocos
+  // alimentos por casualidad con el mismo nombre), nunca el menú
+  // nuevo real y completo que el servidor sí había calculado bien --
+  // de ahí los menús "rotos" de 4 alimentos y 60-400g que se
+  // reportaron, aunque el servidor respondía correctamente. Ahora, si
+  // hay un menú recalculado (gramosReales existe), la vista se
+  // construye DIRECTAMENTE desde él -- todos sus alimentos, sean los
+  // que sean -- en vez de intentar encajarlo en los huecos de la
+  // lista vieja.
+  const itemsBase = gramosReales
+    ? Object.entries(gramosReales).map(([alimento, gramos]) => {
+        const categoria = categoriaDeAlimento(alimento);
+        const Icono = (CATEGORIAS_ICONOS.find((x) => x.nombre === categoria) || {}).Icono || Beef;
+        return { alimento, categoria, Icono, gramos, porque: null };
+      })
+    : menu.items.map((it) => ({
+        ...it,
+        gramos: it.gramos,
+      }));
   const ETIQUETA_MODO = {
     automatico: "AUTOMÁTICO",
     personalizar: "PERSONALIZADO",
@@ -943,7 +1038,12 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
     "Suplementos comerciales", "Multivitamínico", "Yodo", "Calcio",
     "Omega-3", "Vitamina B", "Hierro", "Fibra",
   ];
-  const itemsMostrados = [...itemsBase, ...suplementosMenu].sort((a, b) => {
+  // ⚠️ CORREGIDO (5 agosto, madrugada): ya no hace falta concatenar
+  // suplementosMenu aparte -- itemsBase (desde gramosReales, cuando
+  // existe) ya incluye TODO lo que el servidor calculó, suplementos
+  // incluidos. Concatenar una lista separada de "suplementos añadidos
+  // a mano" los duplicaba en pantalla.
+  const itemsMostrados = itemsBase.slice().sort((a, b) => {
     const ia = ORDEN_CATEGORIAS.indexOf(a.categoria);
     const ib = ORDEN_CATEGORIAS.indexOf(b.categoria);
     if (ia !== ib) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
@@ -968,7 +1068,13 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   // que cada uno lo calculara (o no) por su cuenta.
   const ficha = fichaPorMenu[tabActiva] || menu.ficha;
 
-  const nombresActualesDelMenu = () => menu.items.map((it, idx) => sobreescritos[idx] || it.alimento);
+  // ⚠️ CORREGIDO (5 agosto, madrugada): mismo motivo que itemsBase --
+  // si ya hay un menú recalculado, hay que decirle al servidor lo que
+  // REALMENTE hay ahora (los alimentos nuevos que él mismo calculó),
+  // no la lista original con sobreescrituras por índice. Si no, una
+  // segunda edición seguida partía de datos ya desactualizados.
+  const nombresActualesDelMenu = () =>
+    gramosReales ? Object.keys(gramosReales) : menu.items.map((it) => it.alimento);
   const etapaSufijoApi = ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto";
 
   // ⚠️ CORREGIDO (5 agosto): antes esta función solo avisaba de un fallo
@@ -1002,6 +1108,11 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       if (data.factible) {
         setGramosRealesPorMenu((prev) => ({ ...prev, [tabActiva]: data.gramos }));
         setFichaPorMenu((prev) => ({ ...prev, [tabActiva]: data.ficha }));
+        // ⚠️ AÑADIDO (5 agosto, madrugada): si el servidor tuvo que
+        // cambiar otros alimentos además del pedido para que el cambio
+        // fuera viable, lo dice aquí -- se muestra como aviso, no como
+        // error (el cambio SÍ se aplicó).
+        setAvisoRecalculo(data.aviso || null);
         return true;
       } else {
         setErrorRecalculo(data.motivo || "No se pudo recalcular con esta combinación.");
@@ -1015,44 +1126,38 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
     }
   };
 
+  // ⚠️ CORREGIDO (5 agosto, madrugada): ya no hace falta guardar el
+  // suplemento añadido aparte -- llamarRecalculo ya actualiza
+  // gramosReales con el menú completo (el producto añadido incluido),
+  // así que guardarlo también en suplementosPorMenu lo duplicaba en
+  // pantalla.
   const anadirSuplemento = async (tipo, producto) => {
     setSupAbierto(false);
     setSupTipoAbierto(null);
     const ok = await llamarRecalculo("/menu/anadir", { menu_actual: nombresActualesDelMenu(), alimento: producto });
-    if (!ok) return;   // si no había combinación válida, no se añade nada a la vista
-    setSuplementosPorMenu((prev) => ({
-      ...prev,
-      [tabActiva]: [...(prev[tabActiva] || []), { categoria: "Suplementos comerciales", alimento: producto, gramos: 3, Icono: Pill }],
-    }));
-    setRecienRecalculado(true);
-    setTimeout(() => setRecienRecalculado(false), 2500);
-  };
-
-  const quitarSuplemento = async (idx) => {
-    const producto = suplementosMenu[idx]?.alimento;
-    if (!producto) return;
-    const ok = await llamarRecalculo("/menu/quitar", { menu_actual: [...nombresActualesDelMenu(), producto], alimento: producto });
     if (!ok) return;
-    setSuplementosPorMenu((prev) => ({
-      ...prev,
-      [tabActiva]: (prev[tabActiva] || []).filter((_, i) => i !== idx),
-    }));
     setRecienRecalculado(true);
     setTimeout(() => setRecienRecalculado(false), 2500);
   };
 
-  const cambiarAlimento = async (itemIdx, alimentoNuevo) => {
-    const alimentoViejo = menu.items[itemIdx].alimento;
+  // ⚠️ CORREGIDO (5 agosto, madrugada): recibe el NOMBRE del producto
+  // directamente, no un índice sobre una lista que ya no existe.
+  const quitarSuplemento = async (producto) => {
+    const ok = await llamarRecalculo("/menu/quitar", { menu_actual: nombresActualesDelMenu(), alimento: producto });
+    if (!ok) return;
+    setRecienRecalculado(true);
+    setTimeout(() => setRecienRecalculado(false), 2500);
+  };
+
+  // ⚠️ CORREGIDO (5 agosto, madrugada): recibe el NOMBRE del alimento
+  // viejo directamente (ya no un índice que había que buscar en una
+  // lista que podía no corresponder). "sobreescritosPorMenu" ya no
+  // hace falta: itemsBase se construye directamente desde gramosReales
+  // en cuanto existe, así que guardar overrides por índice aparte era
+  // redundante -- y era, además, la fuente del fallo de fondo.
+  const cambiarAlimento = async (alimentoViejo, alimentoNuevo) => {
     setEditorAbierto(null);
-    const ok = await llamarRecalculo("/menu/cambiar", { menu_actual: nombresActualesDelMenu(), alimento_viejo: alimentoViejo, alimento_nuevo: alimentoNuevo });
-    if (!ok) return;   // sin esto, antes el nombre cambiaba en pantalla igual
-                        // aunque no hubiera combinación válida, y los gramos
-                        // se quedaban congelados en los de antes -- parecía
-                        // que "no hacía nada" cuando en realidad había fallado
-    setSobreescritosPorMenu((prev) => ({
-      ...prev,
-      [tabActiva]: { ...(prev[tabActiva] || {}), [itemIdx]: alimentoNuevo },
-    }));
+    await llamarRecalculo("/menu/cambiar", { menu_actual: nombresActualesDelMenu(), alimento_viejo: alimentoViejo, alimento_nuevo: alimentoNuevo });
   };
 
   return (
@@ -1202,6 +1307,27 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
               </p>
               <button
                 onClick={() => setErrorRecalculo(null)}
+                className="px-6 py-2.5 rounded-xl text-sm w-full"
+                style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        )}
+        {avisoRecalculo && !recalculandoServidor && (
+          // ⚠️ AÑADIDO (5 agosto, madrugada): aviso de "también tuvimos
+          // que cambiar X" -- distinto del de error: el cambio SÍ se
+          // aplicó, esto es información, no un fallo.
+          <div className="fixed inset-0 z-[70] flex items-center justify-center px-6" style={{ background: "rgba(35,21,57,0.55)" }}>
+            <div className="flex flex-col items-center gap-2 px-6 py-6 rounded-2xl max-w-sm" style={{ background: "#FFFFFF" }}>
+              <Info size={28} style={{ color: VIOLETA, flexShrink: 0 }} />
+              <p className="text-sm text-center" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                Cambio aplicado, con un ajuste más
+              </p>
+              <p className="text-xs text-center mb-2" style={{ color: TINTA, fontFamily: fontBody }}>{avisoRecalculo}</p>
+              <button
+                onClick={() => setAvisoRecalculo(null)}
                 className="px-6 py-2.5 rounded-xl text-sm w-full"
                 style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
               >
@@ -1374,7 +1500,12 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                         <Info size={16} style={{ color: porqueAbierto === i ? ROSA : "#C9BEDD" }} />
                       </button>
                     )}
-                    {i < itemsBase.length && (
+                    {/* ⚠️ CORREGIDO (5 agosto, madrugada): esta condición
+                        distinguía "alimentos base" de "suplementos
+                        añadidos a mano" cuando itemsMostrados los
+                        concatenaba por separado -- ya no hace falta,
+                        itemsMostrados es solo itemsBase, todo editable. */}
+                    {(
                       <button onClick={() => {
                           // ⚠️ CORREGIDO (5 agosto): antes se abría ya con la
                           // categoría del alimento actual fijada, así que solo
@@ -1382,11 +1513,21 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                           // por pez, nunca pez por carne). Ahora se abre igual
                           // que "Añadir alimento": eligiendo categoría primero,
                           // libre entre las seis.
-                          setEditorAbierto(editorAbierto && editorAbierto.itemIdx === i ? null : { itemIdx: i, categoria: null, especie: null });
+                          //
+                          // ⚠️ CORREGIDO (5 agosto, madrugada) — FALLO GRAVE
+                          // ENCONTRADO: esto usaba el índice "i" de la lista
+                          // ORDENADA en pantalla (por categoría y gramos) para
+                          // buscar luego en la lista SIN ordenar del servidor
+                          // -- como el orden cambia constantemente, el índice
+                          // nunca correspondía de forma fiable al mismo
+                          // alimento. Ahora se identifica por su NOMBRE, que sí
+                          // es estable (no puede haber dos alimentos iguales a
+                          // la vez en el menú).
+                          setEditorAbierto(editorAbierto && editorAbierto.alimentoViejo === item.alimento ? null : { alimentoViejo: item.alimento, categoria: null, especie: null });
                           setPorqueAbierto(null);
                           setComoAbierto(null);
                         }}>
-                        <Pencil size={15} style={{ color: editorAbierto && editorAbierto.itemIdx === i ? ROSA : "#C9BEDD" }} />
+                        <Pencil size={15} style={{ color: editorAbierto && editorAbierto.alimentoViejo === item.alimento ? ROSA : "#C9BEDD" }} />
                       </button>
                     )}
                     {INSTRUCCIONES_POR_CATEGORIA[item.categoria] && (
@@ -1396,7 +1537,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                     )}
                   </div>
                 </div>
-                {editorAbierto && editorAbierto.itemIdx === i && !editorAbierto.categoria && (
+                {editorAbierto && editorAbierto.alimentoViejo === item.alimento && !editorAbierto.categoria && (
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>CAMBIAR A QUÉ CATEGORÍA</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
@@ -1409,15 +1550,23 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                     </div>
                   </div>
                 )}
-                {editorAbierto && editorAbierto.itemIdx === i && editorAbierto.categoria && !editorAbierto.especie && (
+                {editorAbierto && editorAbierto.alimentoViejo === item.alimento && editorAbierto.categoria && !editorAbierto.especie && (
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{editorAbierto.categoria.toUpperCase()}</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                      {Object.keys((categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]).map((especie) => {
+                      {/* ⚠️ CORREGIDO (5 agosto, madrugada): si la especie
+                          solo tiene 1 alimento dentro, pulsarla ya lo
+                          aplica directamente -- antes siempre navegaba a
+                          un submenú que, con 1 sola opción, era un clic
+                          de más sin ningún sentido (caso real: "Pimiento"
+                          → clic → solo "Pimiento rojo" dentro). */}
+                      {Object.entries((categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]).map(([especie, alimentos]) => {
+                        const unico = alimentos.length === 1;
                         return (
-                          <button key={especie} onClick={() => setEditorAbierto({ ...editorAbierto, especie })}
+                          <button key={especie}
+                            onClick={() => unico ? cambiarAlimento(editorAbierto.alimentoViejo, alimentos[0]) : setEditorAbierto({ ...editorAbierto, especie })}
                             className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
-                            {especie}
+                            {unico ? alimentos[0] : especie}
                           </button>
                         );
                       })}
@@ -1425,12 +1574,24 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                     <button onClick={() => setEditorAbierto({ ...editorAbierto, categoria: null })} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>← Otra categoría</button>
                   </div>
                 )}
-                {editorAbierto && editorAbierto.itemIdx === i && editorAbierto.especie && (
+                {editorAbierto && editorAbierto.alimentoViejo === item.alimento && editorAbierto.especie && (
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{editorAbierto.especie.toUpperCase()}</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
+                      {/* ⚠️ AÑADIDO (5 agosto, madrugada): "Todo el/la X"
+                          recuperado aquí -- se había quitado del todo antes,
+                          pero solo debía quitarse cuando la especie tiene 1
+                          única opción (ahí es redundante). Con más de una,
+                          hace falta para poder decir "cualquiera de estos
+                          cortes vale" en vez de fijar uno exacto. */}
+                      {(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][editorAbierto.especie].length > 1 && (
+                        <button onClick={() => cambiarAlimento(editorAbierto.alimentoViejo, `Todo: ${editorAbierto.especie}`)}
+                          className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}>
+                          Todo el/la {editorAbierto.especie}
+                        </button>
+                      )}
                       {(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][editorAbierto.especie].map((alimento) => (
-                        <button key={alimento} onClick={() => cambiarAlimento(i, alimento)}
+                        <button key={alimento} onClick={() => cambiarAlimento(editorAbierto.alimentoViejo, alimento)}
                           className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
                           {alimento}
                         </button>
@@ -1743,15 +1904,127 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           <button onClick={() => { setSeccionActiva(null); setResultadoAnalisis(null); setErrorAnalisis(null); }} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
           <p className="text-2xl mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>Analizar la dieta actual</p>
           <p className="text-sm leading-relaxed mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
-            Dinos qué le estás dando a {nombrePerro} ahora mismo y cuántos gramos de cada cosa.
+            Dinos qué le estás dando ahora mismo y cuántos gramos de cada cosa.
             Lo comparamos con lo que necesita y te decimos qué está bien y qué no.
           </p>
 
-          <div className="px-4 py-3 rounded-xl mb-5" style={{ background: "#F0ECF7" }}>
-            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
-              Usamos el perfil de {nombrePerro}: {etapaLabel}, {derReal} kcal al día.
-            </p>
+          {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: no
+              siempre se analiza la dieta del perro configurado en la
+              app -- puede ser la de otro perro, sin querer crear un
+              perfil nuevo permanente solo para este análisis puntual. */}
+          <div className="flex items-center gap-2 mb-3">
+            <button
+              onClick={() => setAnalizandoParaOtro(false)}
+              className="flex-1 py-2 rounded-lg text-sm"
+              style={{ background: !analizandoParaOtro ? VIOLETA : "#FFFFFF", color: !analizandoParaOtro ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600, border: "1.5px solid #E3DAF0" }}
+            >
+              {nombrePerro}
+            </button>
+            <button
+              onClick={() => setAnalizandoParaOtro(true)}
+              className="flex-1 py-2 rounded-lg text-sm"
+              style={{ background: analizandoParaOtro ? VIOLETA : "#FFFFFF", color: analizandoParaOtro ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600, border: "1.5px solid #E3DAF0" }}
+            >
+              Otro perro
+            </button>
           </div>
+
+          {!analizandoParaOtro && (
+            <div className="px-4 py-3 rounded-xl mb-5" style={{ background: "#F0ECF7" }}>
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                Usamos el perfil de {nombrePerro}: {etapaLabel}, {derParaAnalisis} kcal al día.
+              </p>
+            </div>
+          )}
+          {analizandoParaOtro && (
+            <div className="px-4 py-3 rounded-xl mb-5 flex flex-col gap-2.5" style={{ background: "#F0ECF7" }}>
+              <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                Solo para este análisis -- no se guarda como una mascota nueva.
+              </p>
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <p className="text-[11px] mb-1" style={{ color: MALVA, fontFamily: fontBody }}>Peso (kg)</p>
+                  <input
+                    type="number" inputMode="decimal" min="0" placeholder="18"
+                    value={otroPerroDatos.peso}
+                    onChange={(e) => setOtroPerroDatos((p) => ({ ...p, peso: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={{ border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontMono }}
+                  />
+                </div>
+                <div className="flex-1">
+                  <p className="text-[11px] mb-1" style={{ color: MALVA, fontFamily: fontBody }}>Etapa</p>
+                  <select
+                    value={otroPerroDatos.etapa}
+                    onChange={(e) => setOtroPerroDatos((p) => ({ ...p, etapa: e.target.value }))}
+                    className="w-full px-3 py-2 rounded-lg text-sm"
+                    style={{ border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }}
+                  >
+                    <option value="cachorro_joven">Cachorro (hasta 2 meses)</option>
+                    <option value="cachorro_crecimiento">Cachorro (en crecimiento)</option>
+                    <option value="adulto">Adulto</option>
+                    <option value="senior">Senior</option>
+                  </select>
+                </div>
+              </div>
+              {(otroPerroDatos.etapa === "cachorro_joven" || otroPerroDatos.etapa === "cachorro_crecimiento") && (
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <p className="text-[11px] mb-1" style={{ color: MALVA, fontFamily: fontBody }}>Peso adulto esperado (kg)</p>
+                    <input
+                      type="number" inputMode="decimal" min="0" placeholder="30"
+                      value={otroPerroDatos.pesoAdulto}
+                      onChange={(e) => setOtroPerroDatos((p) => ({ ...p, pesoAdulto: e.target.value }))}
+                      className="w-full px-3 py-2 rounded-lg text-sm"
+                      style={{ border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontMono }}
+                    />
+                  </div>
+                </div>
+              )}
+              {derParaAnalisis ? (
+                <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                  Necesita, aproximadamente, <b>{derParaAnalisis} kcal al día</b>.
+                </p>
+              ) : (
+                <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Dinos al menos el peso para poder calcular lo que necesita.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: algunas
+              dietas comerciales dan el reparto en % ("70% pollo"), no en
+              gramos exactos. Con este toggle se puede introducir de
+              cualquiera de las dos formas. */}
+          <div className="flex items-center gap-2 mb-4">
+            <button
+              onClick={() => setModoEntradaAnalizar("gramos")}
+              className="flex-1 py-2 rounded-lg text-sm"
+              style={{ background: modoEntradaAnalizar === "gramos" ? VIOLETA : "#FFFFFF", color: modoEntradaAnalizar === "gramos" ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600, border: "1.5px solid #E3DAF0" }}
+            >
+              En gramos
+            </button>
+            <button
+              onClick={() => setModoEntradaAnalizar("porcentaje")}
+              className="flex-1 py-2 rounded-lg text-sm"
+              style={{ background: modoEntradaAnalizar === "porcentaje" ? VIOLETA : "#FFFFFF", color: modoEntradaAnalizar === "porcentaje" ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600, border: "1.5px solid #E3DAF0" }}
+            >
+              En porcentaje
+            </button>
+          </div>
+          {modoEntradaAnalizar === "porcentaje" && (
+            <div className="mb-5">
+              <p className="text-xs mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>¿Cuántos gramos en total le das al día?</p>
+              <input
+                type="number" inputMode="numeric" min="0" placeholder="600"
+                value={totalGramosDiaPorcentaje}
+                onChange={(e) => setTotalGramosDiaPorcentaje(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg text-sm"
+                style={{ border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontMono }}
+              />
+            </div>
+          )}
 
           {/* ⚠️ REDISEÑADO (5 agosto, noche): antes era una sola lista
               plana -- añadir un alimento de cada categoría significaba
@@ -1787,7 +2060,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                           className="w-16 text-right text-sm px-2 py-1.5 rounded-lg"
                           style={{ border: "1.5px solid #E3DAF0", color: VIOLETA, fontFamily: fontMono }}
                         />
-                        <span className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>g</span>
+                        <span className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>{modoEntradaAnalizar === "porcentaje" ? "%" : "g"}</span>
                         <button onClick={() => setDietaAnalizar((prev) => prev.filter((_, i) => i !== it.idxReal))}>
                           <X size={14} style={{ color: ROSA }} />
                         </button>
@@ -1838,11 +2111,33 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             );
           })}
 
-          {dietaAnalizar.length > 0 && (
-            <p className="text-xs mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
-              Total: {dietaAnalizar.reduce((s, i) => s + (Number(i.gramos) || 0), 0)} g al día
-            </p>
-          )}
+          {dietaAnalizar.length > 0 && (() => {
+            const esPct = modoEntradaAnalizar === "porcentaje";
+            const totalPctMetido = dietaAnalizar.reduce((s, i) => s + (Number(i.gramos) || 0), 0);
+            const totalGramosDia = esPct ? Number(totalGramosDiaPorcentaje) || 0 : null;
+            const totalGramosMetidos = esPct
+              ? (totalPctMetido / 100) * totalGramosDia
+              : dietaAnalizar.reduce((s, i) => s + (Number(i.gramos) || 0), 0);
+            const kcalMetidas = dietaAnalizar.reduce((s, i) => {
+              const gramosReales = esPct ? (Number(i.gramos) || 0) / 100 * totalGramosDia : (Number(i.gramos) || 0);
+              return s + gramosReales * (energiaAlimentos[i.alimento] || 0) / 100;
+            }, 0);
+            const hayDatosEnergia = Object.keys(energiaAlimentos).length > 0;
+            return (
+              <div className="mb-5">
+                <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                  {esPct
+                    ? `Total: ${Math.round(totalPctMetido)}% ${totalGramosDia ? `(≈ ${Math.round(totalGramosMetidos)} g al día)` : ""}`
+                    : `Total: ${totalGramosMetidos} g al día`}
+                </p>
+                {hayDatosEnergia && derParaAnalisis && (!esPct || totalGramosDia > 0) && (
+                  <p className="text-xs mt-1" style={{ color: Math.abs(kcalMetidas - derParaAnalisis) / derParaAnalisis > 0.1 ? ROSA : "#5A9367", fontFamily: fontBody }}>
+                    Eso son {Math.round(kcalMetidas)} kcal · {analizandoParaOtro ? "este perro" : nombrePerro} necesita {derParaAnalisis} kcal al día
+                  </p>
+                )}
+              </div>
+            );
+          })()}
 
           <button
             onClick={analizarDietaActual}
@@ -3144,12 +3439,17 @@ export default function CanislabOnboarding() {
                         <div className="rounded-xl p-3" style={{ background: PAPEL }}>
                           <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>ESPECIE</p>
                           <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
-                            {Object.keys(categoriasDisponibles[cat.nombre] || {}).map((especie) => {
-                              const items = categoriasDisponibles[cat.nombre][especie];
+                            {/* ⚠️ CORREGIDO (5 agosto, madrugada): si la
+                                especie solo tiene 1 alimento, pulsarla ya
+                                lo elige directamente -- antes siempre
+                                navegaba a un submenú de un solo elemento. */}
+                            {Object.entries(categoriasDisponibles[cat.nombre] || {}).map(([especie, items]) => {
+                              const unico = items.length === 1;
                               return (
-                                <button key={especie} onClick={() => setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie })}
+                                <button key={especie}
+                                  onClick={() => unico ? elegirAlimento(cat.nombre, items[0]) : setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie })}
                                   className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
-                                  <span>{especie}</span>
+                                  <span>{unico ? items[0] : especie}</span>
                                   {items.length > 1 && <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>{items.length} tipos</span>}
                                 </button>
                               );
@@ -3327,17 +3627,23 @@ function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, 
         <div className="rounded-xl p-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
           <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{abierto.categoria.toUpperCase()}</p>
           <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
+            {/* ⚠️ CORREGIDO (5 agosto, madrugada): mismo ajuste que en
+                Personalizar y el editor -- si la especie solo tiene 1
+                alimento, pulsarla ya lo añade directamente. */}
             {Object.keys(CATS[abierto.categoria]).filter((especie) => !especiesYaExcluidas.has(especie)).map((especie) => {
-              const n = CATS[abierto.categoria][especie].length;
+              const items = CATS[abierto.categoria][especie];
+              const unico = items.length === 1;
               return (
                 <button
                   key={especie}
-                  onClick={() => elegirEspecie(abierto.categoria, especie)}
+                  onClick={() => unico
+                    ? onAnadir({ categoria: abierto.categoria, alimento: items[0] })
+                    : elegirEspecie(abierto.categoria, especie)}
                   className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between"
                   style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}
                 >
-                  <span>{especie}</span>
-                  {n > 1 && <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>{n} tipos</span>}
+                  <span>{unico ? items[0] : especie}</span>
+                  {items.length > 1 && <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>{items.length} tipos</span>}
                 </button>
               );
             })}
