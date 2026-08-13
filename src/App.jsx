@@ -1281,7 +1281,12 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
 
       <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
         {necesitaTransicion && (
-          <div className="rounded-xl p-3 mb-3" style={{ background: "#F0ECF7" }}>
+          // ⚠️ CORREGIDO (5 agosto, madrugada) — pedido expreso: en
+          // escritorio esto se estiraba de punta a punta de la
+          // pantalla, sin ningún límite de ancho. Ahora queda como un
+          // cuadradito compacto, centrado, igual en móvil que en
+          // pantallas grandes.
+          <div className="rounded-xl p-3 mb-3 max-w-sm mx-auto" style={{ background: "#F0ECF7" }}>
             <p className="text-sm mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
               Plan de transición ({dietaActual === "pienso" ? "pienso" : "comida cocinada"} → BARF)
             </p>
@@ -1513,7 +1518,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         })()}
 
         <div className="flex flex-col gap-2 mb-3">
-        {(patologias || []).length > 0 ? (
+        {(patologias || []).length > 0 && (
           <div className="rounded-xl p-3 mb-3 flex gap-2 items-start"
                style={{ background: "#FFF4F6", border: `1.5px solid ${ROSA}` }}>
             <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
@@ -1528,16 +1533,6 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                 Enséñale este menú antes de empezar y ve revisándolo con él.
               </p>
             </div>
-          </div>
-        ) : (
-          <div className="rounded-xl p-3 mb-3 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
-            <Info size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
-            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
-              Este menú es una propuesta calculada sobre los requisitos FEDIAF, no una
-              prescripción. Antes de cambiarle la alimentación a {nombrePerro},
-              enséñaselo a tu veterinario — y consúltale también si notas cualquier cambio
-              en su digestión, su peso o su ánimo.
-            </p>
           </div>
         )}
         {diasMinimoNecesario > 1 && diasSeleccionados === 1 && (
@@ -1557,7 +1552,6 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           <div className="flex gap-2">
             {[
               { dias: 1, label: "1 día" },
-              { dias: 2, label: "2 días" },
               { dias: 7, label: "1 semana" },
             ].map((op) => {
               const activo = diasSeleccionados === op.dias;
@@ -1785,6 +1779,20 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         )}
 
         <div className="flex-1" />
+        {/* ⚠️ MOVIDO (5 agosto, madrugada) — pedido expreso: este texto
+            estaba arriba del todo, compitiendo en importancia visual
+            con avisos de verdad relevantes (nutrientes, seguridad). Va
+            aquí abajo, en pequeño -- solo cuando no hay patología
+            diagnosticada, porque en ese caso el aviso rojo de arriba ya
+            cubre este mismo mensaje con más fuerza. */}
+        {!((patologias || []).length > 0) && (
+          <p className="text-[11px] text-center mb-3 px-2" style={{ color: MALVA, fontFamily: fontBody }}>
+            Este menú es una propuesta calculada sobre los requisitos FEDIAF, no una
+            prescripción. Antes de cambiarle la alimentación a {nombrePerro}, enséñaselo a tu
+            veterinario — y consúltale también si notas cualquier cambio en su digestión, su
+            peso o su ánimo.
+          </p>
+        )}
         <Curvita />
         <button
           onClick={() => setSemanaConfirmada(true)}
