@@ -1274,13 +1274,15 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       </div>
 
       <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
+        {/* ⚠️ REORGANIZADO (5 agosto, madrugada) — pedido expreso: en
+            pantallas anchas, el plan de transición y las tres tarjetas
+            (ración/kcal/semáforo) van lado a lado, aprovechando el
+            espacio -- en móvil siguen apiladas como antes, no hay sitio
+            para ponerlas al lado. Si no hay transición, las tres
+            tarjetas ocupan el ancho entero, como siempre hicieron. */}
+        <div className={necesitaTransicion ? "flex flex-col md:flex-row gap-3 mb-3 md:items-stretch" : ""}>
         {necesitaTransicion && (
-          // ⚠️ CORREGIDO (5 agosto, madrugada) — pedido expreso: en
-          // escritorio esto se estiraba de punta a punta de la
-          // pantalla, sin ningún límite de ancho. Ahora queda como un
-          // cuadradito compacto, centrado, igual en móvil que en
-          // pantallas grandes.
-          <div className="rounded-xl p-3 mb-3 max-w-sm mx-auto" style={{ background: "#F0ECF7" }}>
+          <div className="rounded-xl p-3 md:flex-1" style={{ background: "#F0ECF7" }}>
             <p className="text-sm mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
               Plan de transición ({dietaActual === "pienso" ? "pienso" : "comida cocinada"} → BARF)
             </p>
@@ -1304,6 +1306,38 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </p>
           </div>
         )}
+        <div className={necesitaTransicion ? "md:flex-1" : "flex-1"}>
+          <div className="flex gap-3 mb-3">
+            <div className="flex-1 rounded-2xl p-4 text-center" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+              <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 22 }}>{totalGramos}g</p>
+              <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>ración total</p>
+            </div>
+            <div className="flex-1 rounded-2xl p-4 text-center" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+              <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 22 }}>{menu.kcal}</p>
+              <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>kcal / día</p>
+            </div>
+            {(() => {
+              const COLORES = {
+                verde: { fondo: VERDE, texto: VERDE_TEXTO },
+                ambar: { fondo: "#FFF7E8", texto: "#B8860B" },
+                rojo: { fondo: "#FFE8EC", texto: ROSA },
+              };
+              const col = COLORES[ficha?.semaforo] || COLORES.verde;
+              return (
+                <div className="flex-1 rounded-2xl p-4 text-center flex flex-col items-center justify-center" style={{ background: col.fondo }}>
+                  <div className="flex items-center gap-1">
+                    <CheckCircle2 size={18} style={{ color: col.texto }} />
+                    <button onClick={() => setInfoNutrientes(!infoNutrientes)}><Info size={13} style={{ color: col.texto, opacity: 0.6 }} /></button>
+                  </div>
+                  <p className="text-[10px] tracking-[0.1em] uppercase mt-1" style={{ color: col.texto, fontFamily: "monospace" }}>
+                    {ficha ? `${ficha.correctos}/${ficha.total} OK` : "sin verificar"}
+                  </p>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+        </div>
         {necesitaTransicion && menus.length > 1 && (
           <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
             <Lock size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
@@ -1415,39 +1449,6 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </div>
           </div>
         )}
-        <div className="flex gap-3 mb-4">
-          <div className="flex-1 rounded-2xl p-4 text-center" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
-            <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 22 }}>{totalGramos}g</p>
-            <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>ración total</p>
-          </div>
-          <div className="flex-1 rounded-2xl p-4 text-center" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
-            <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 22 }}>{menu.kcal}</p>
-            <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>kcal / día</p>
-          </div>
-          {(() => {
-            // ⚠️ CORREGIDO (5 agosto): esto era texto fijo "27/27 OK", sin
-            // ningún dato real detrás -- salía igual aunque el menú
-            // estuviera roto. Ahora usa la ficha real (definida arriba,
-            // compartida con la nota informativa de más abajo).
-            const COLORES = {
-              verde: { fondo: VERDE, texto: VERDE_TEXTO },
-              ambar: { fondo: "#FFF7E8", texto: "#B8860B" },
-              rojo: { fondo: "#FFE8EC", texto: ROSA },
-            };
-            const col = COLORES[ficha?.semaforo] || COLORES.verde;
-            return (
-              <div className="flex-1 rounded-2xl p-4 text-center flex flex-col items-center justify-center" style={{ background: col.fondo }}>
-                <div className="flex items-center gap-1">
-                  <CheckCircle2 size={18} style={{ color: col.texto }} />
-                  <button onClick={() => setInfoNutrientes(!infoNutrientes)}><Info size={13} style={{ color: col.texto, opacity: 0.6 }} /></button>
-                </div>
-                <p className="text-[10px] tracking-[0.1em] uppercase mt-1" style={{ color: col.texto, fontFamily: "monospace" }}>
-                  {ficha ? `${ficha.correctos}/${ficha.total} OK` : "sin verificar"}
-                </p>
-              </div>
-            );
-          })()}
-        </div>
 
         {/* ⚠️ AÑADIDO (5 agosto, madrugada) — AUDITORÍA: avisos de
             seguridad reales (tiaminasa, clara de huevo sola, hígado en
