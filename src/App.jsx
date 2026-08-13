@@ -1027,6 +1027,13 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   // manteniendo todo lo demás igual -- distinto de errorRecalculo
   // (que es cuando el cambio pedido no fue posible en absoluto).
   const [avisoRecalculo, setAvisoRecalculo] = useState(null);
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: la usuaria sigue
+  // viendo alimentos cambiar al editar solo uno, sin ningún aviso, con
+  // el servidor ya confirmado al día. Para poder diagnosticar de
+  // verdad (en vez de seguir especulando), esto guarda EXACTAMENTE lo
+  // que se mandó al servidor y lo que se recibió en la ÚLTIMA edición
+  // -- para compararlo directamente, en vez de fiarse de la memoria.
+  const [ultimoDiagnosticoEdicion, setUltimoDiagnosticoEdicion] = useState(null);
   const [fichaPorMenu, setFichaPorMenu] = useState({});
   // ⚠️ AÑADIDO (5 agosto, madrugada) — AUDITORÍA: mismo patrón que
   // fichaPorMenu -- se actualiza tras cada edición, para que los avisos
@@ -1123,6 +1130,10 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const llamarRecalculo = async (endpoint, cuerpoExtra) => {
     setRecalculandoServidor(true);
     setErrorRecalculo(null);
+    // ⚠️ AÑADIDO (5 agosto, madrugada): lo que HABÍA antes de mandar
+    // esta petición, capturado ANTES de que nada cambie -- para poder
+    // comparar contra lo que venga después.
+    const antesDeVerdad = nombresActualesDelMenu();
     try {
       const res = await fetch(`${API_BASE}${endpoint}`, {
         method: "POST",
@@ -1142,6 +1153,21 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       });
       const data = await res.json();
       if (data.factible) {
+        // ⚠️ AÑADIDO (5 agosto, madrugada): comparación real,
+        // nombre por nombre, entre lo que había y lo que llegó --
+        // no gramos, solo si el ALIMENTO en sí sigue estando o no.
+        const despuesDeVerdad = Object.keys(data.gramos);
+        const desaparecidos = antesDeVerdad.filter((n) => !despuesDeVerdad.includes(n));
+        const nuevos = despuesDeVerdad.filter((n) => !antesDeVerdad.includes(n));
+        setUltimoDiagnosticoEdicion({
+          endpoint,
+          mandado: { menu_actual: cuerpoExtra?.menu_actual || antesDeVerdad, ...cuerpoExtra },
+          antes: antesDeVerdad,
+          despues: despuesDeVerdad,
+          desaparecidos,
+          nuevos,
+          avisoDelServidor: data.aviso || null,
+        });
         setGramosRealesPorMenu((prev) => ({ ...prev, [tabActiva]: data.gramos }));
         setFichaPorMenu((prev) => ({ ...prev, [tabActiva]: data.ficha }));
         // ⚠️ AÑADIDO (5 agosto, madrugada) — AUDITORÍA: al editar un
@@ -1422,6 +1448,46 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                 Entendido
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL SIN RESOLVER:
+            panel de diagnóstico de la ÚLTIMA edición -- muestra
+            exactamente qué se mandó al servidor y qué llegó de vuelta,
+            comparado alimento por alimento. Se queda visible (no se
+            cierra solo) para poder hacer una captura y compararlo.
+            Rojo si algo desapareció SIN que el servidor avisara --
+            eso sería el bug real que se está buscando. */}
+        {ultimoDiagnosticoEdicion && (
+          <div className="rounded-xl p-3 mb-4" style={{
+            background: ultimoDiagnosticoEdicion.desaparecidos.length > 0 && !ultimoDiagnosticoEdicion.avisoDelServidor ? "#FFE8EC" : "#F0ECF7",
+            border: ultimoDiagnosticoEdicion.desaparecidos.length > 0 && !ultimoDiagnosticoEdicion.avisoDelServidor ? `1.5px solid ${ROSA}` : "1px solid #E3DAF0",
+          }}>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                Diagnóstico: última edición ({ultimoDiagnosticoEdicion.endpoint})
+              </p>
+              <button onClick={() => setUltimoDiagnosticoEdicion(null)} className="text-xs" style={{ color: MALVA }}>✕</button>
+            </div>
+            <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+              <b>Había antes ({ultimoDiagnosticoEdicion.antes.length}):</b> {ultimoDiagnosticoEdicion.antes.join(", ")}
+            </p>
+            <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+              <b>Llegó después ({ultimoDiagnosticoEdicion.despues.length}):</b> {ultimoDiagnosticoEdicion.despues.join(", ")}
+            </p>
+            {ultimoDiagnosticoEdicion.desaparecidos.length > 0 && (
+              <p className="text-xs mb-1" style={{ color: ROSA, fontFamily: fontBody, fontWeight: 700 }}>
+                Desaparecieron: {ultimoDiagnosticoEdicion.desaparecidos.join(", ")}
+              </p>
+            )}
+            {ultimoDiagnosticoEdicion.nuevos.length > 0 && (
+              <p className="text-xs mb-1" style={{ color: "#B8860B", fontFamily: fontBody, fontWeight: 700 }}>
+                Aparecieron nuevos: {ultimoDiagnosticoEdicion.nuevos.join(", ")}
+              </p>
+            )}
+            <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+              Aviso del servidor: {ultimoDiagnosticoEdicion.avisoDelServidor || "(ninguno)"}
+            </p>
           </div>
         )}
         {avisoNoForzadoVisible && (
