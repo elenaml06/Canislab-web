@@ -2,31 +2,20 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>CANISLAB</title>
-
-    <!-- ⚠️ AÑADIDO: convierte la web en app instalable (PWA) -- icono en
-         la pantalla de inicio, se abre a pantalla completa sin la barra
-         del navegador, y funciona algo incluso sin buena conexión. -->
-    <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#5A4088" />
-    <link rel="icon" type="image/png" href="/icon-192.png" />
-
-    <!-- Safari/iOS no sigue el estándar manifest.json del todo -- estas
-         etiquetas son las que de verdad usa para "Añadir a inicio". -->
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="CANISLAB" />
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
     <script>
-      // ⚠️ AÑADIDO: registra el service worker (public/sw.js) para el
-      // cacheo del cascarón de la app. Si falla (navegador viejo, modo
-      // privado...) la app sigue funcionando igual, solo que sin esa
-      // mejora -- por eso va en un try/catch silencioso.
+      // ⚠️ Se decidió no seguir con la app como PWA -- esto YA NO
+      // instala nada ni cachea nada. Solo sigue aquí de forma
+      // TEMPORAL para que cualquier móvil que llegó a instalar la
+      // versión anterior reciba la limpieza automática (public/sw.js
+      // ahora se desregistra solo y borra su caché vieja). Pasado un
+      // tiempo prudencial, este script y public/sw.js se pueden
+      // borrar del todo sin ningún problema.
       if ("serviceWorker" in navigator) {
         window.addEventListener("load", () => {
           navigator.serviceWorker.register("/sw.js").catch(() => {});
