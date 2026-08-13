@@ -1086,16 +1086,10 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
     if (ia !== ib) return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
     return b.gramos - a.gramos;
   });
-  const menorGramo = itemsBase.length
-    ? Math.min(...itemsBase.filter((it) => it.gramos > 0).map((it) => it.gramos))
-    : 99;
-  // ⚠️ CAMBIADO (5 agosto): antes solo se ofrecía preparar por lotes
-  // cuando el perro era tan pequeño que hacía falta a la fuerza (menos de
-  // 10 g del alimento más pequeño). Ahora el selector está SIEMPRE
-  // disponible -- cualquiera puede querer preparar la semana de golpe,
-  // no solo quien no tiene más remedio. Se sigue sugiriendo el lote
-  // mínimo necesario cuando aplica, pero 1/2/7 días están siempre ahí.
-  const diasMinimoNecesario = menorGramo >= 10 ? 1 : Math.min(7, Math.ceil(10 / Math.max(menorGramo, 0.5)));
+  // ⚠️ QUITADO (5 agosto, madrugada) — pedido expreso: "menorGramo" y
+  // "diasMinimoNecesario" solo se usaban para el aviso de "Algunos
+  // alimentos salen a pocos gramos..." que se ha quitado -- se
+  // quitan también, ya no los usa nada.
   const [diasSeleccionados, setDiasSeleccionados] = useState(1);
   const multiplicador = diasSeleccionados;
 
@@ -1478,15 +1472,6 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           </div>
         )}
 
-        {mostrarAyuda && (
-          <div className="rounded-xl p-3 mb-4" style={{ background: PAPEL, border: "1px solid #EDE6F5" }}>
-            <div className="flex items-center gap-3 text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
-              <span className="flex items-center gap-1"><Pencil size={13} style={{ color: "#B6ABC9" }} /> cambiar un alimento</span>
-              <span className="flex items-center gap-1"><UtensilsCrossed size={13} style={{ color: "#B6ABC9" }} /> cómo darlo</span>
-            </div>
-          </div>
-        )}
-
         {infoNutrientes && (() => {
           // ⚠️ CORREGIDO (5 agosto): antes decía "FEDIAF exige revisar 27
           // nutrientes" y "los cumple todos" SIEMPRE, aunque el menú
@@ -1535,16 +1520,6 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </div>
           </div>
         )}
-        {diasMinimoNecesario > 1 && diasSeleccionados === 1 && (
-          <div className="rounded-xl p-3 mb-3 flex gap-2 items-start" style={{ background: "#FFF7E8" }}>
-            <Info size={14} style={{ color: "#B8860B", flexShrink: 0, marginTop: 2 }} />
-            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
-              Algunos alimentos de {nombrePerro} salen a pocos gramos al día, que cuesta
-              pesar bien. Te recomendamos preparar para {diasMinimoNecesario} días — puedes
-              elegirlo aquí abajo.
-            </p>
-          </div>
-        )}
         <div className="rounded-xl p-3 mb-3" style={{ background: "#F0ECF7" }}>
           <p className="text-sm mb-2.5" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
             Preparar de golpe para
@@ -1577,6 +1552,19 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </p>
           )}
         </div>
+
+        {/* ⚠️ MOVIDO (5 agosto, madrugada) — pedido expreso: estaba
+            arriba del todo, lejos del listado al que se refiere. Ahora
+            va justo encima de los alimentos, debajo de "Preparar de
+            golpe para". */}
+        {mostrarAyuda && (
+          <div className="rounded-xl p-3 mb-4" style={{ background: PAPEL, border: "1px solid #EDE6F5" }}>
+            <div className="flex items-center gap-3 text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+              <span className="flex items-center gap-1"><Pencil size={13} style={{ color: "#B6ABC9" }} /> cambiar un alimento</span>
+              <span className="flex items-center gap-1"><UtensilsCrossed size={13} style={{ color: "#B6ABC9" }} /> cómo darlo</span>
+            </div>
+          </div>
+        )}
 
         {itemsMostrados.map((item, i) => {
             const Icono = item.Icono;
