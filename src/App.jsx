@@ -878,7 +878,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado }) {
+function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO (5 agosto, madrugada): estado LOCAL para poder cerrar
   // este aviso -- se inicializa a partir de la prop, pero una vez
@@ -1490,6 +1490,37 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </p>
           </div>
         )}
+
+        {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: mismo
+            diagnóstico que arriba, pero para Personalizar -- compara
+            lo que se eligió a mano contra lo que salió de verdad en el
+            menú final. Solo aparece si este menú vino de Personalizar
+            (en automático no hay nada elegido a mano con qué comparar). */}
+        {modo === "personalizar" && diagnosticoPersonalizar && (
+          <div className="rounded-xl p-3 mb-4" style={{
+            background: diagnosticoPersonalizar.noSalieron.length > 0 ? "#FFE8EC" : "#F0ECF7",
+            border: diagnosticoPersonalizar.noSalieron.length > 0 ? `1.5px solid ${ROSA}` : "1px solid #E3DAF0",
+          }}>
+            <p className="text-[11px] tracking-[0.1em] uppercase mb-1.5" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+              Diagnóstico: lo elegido a mano en Personalizar
+            </p>
+            <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+              <b>Elegiste ({diagnosticoPersonalizar.elegido.length}):</b> {diagnosticoPersonalizar.elegido.join(", ") || "(nada a mano)"}
+            </p>
+            <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+              <b>Salió en el menú ({diagnosticoPersonalizar.salio.length}):</b> {diagnosticoPersonalizar.salio.join(", ")}
+            </p>
+            {diagnosticoPersonalizar.noSalieron.length > 0 ? (
+              <p className="text-xs" style={{ color: ROSA, fontFamily: fontBody, fontWeight: 700 }}>
+                No salieron: {diagnosticoPersonalizar.noSalieron.join(", ")}
+              </p>
+            ) : (
+              <p className="text-xs" style={{ color: "#5A9367", fontFamily: fontBody }}>
+                Todo lo que elegiste a mano está en el menú final.
+              </p>
+            )}
+          </div>
+        )}
         {avisoNoForzadoVisible && (
           // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: cuando en
           // Personalizar no fue viable un menú con TODO lo elegido a
@@ -1888,6 +1919,15 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                 );
               })}
             </div>
+            {/* ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL SIN RESOLVER,
+                MISMO PATRÓN QUE YA PASÓ CON EL BACKEND: si esto en
+                pantalla no dice esta fecha exacta, es que Vercel sigue
+                sirviendo una versión vieja de la app -- fuérzalo con
+                "Redeploy" desde el panel de Vercel, o revisa que el
+                último commit sea el que está en producción. */}
+            <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
+              build 2026-08-13 17:16 UTC
+            </p>
           </div>
         </div>
       )}
@@ -2532,6 +2572,14 @@ function CanislabOnboardingInterna() {
   // ese dato, así que nunca se veía ningún aviso, aunque el servidor sí
   // lo estaba mandando.
   const [avisoNoForzado, setAvisoNoForzado] = useState(false);
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: en Personalizar
+  // también se elige a mano, así que merece el mismo tipo de
+  // diagnóstico que ya existe al editar un menú ya generado --
+  // comparar exactamente qué se eligió a mano contra qué salió de
+  // verdad en el menú final (extras, suplementos o alimentos añadidos
+  // por el motor para cerrar los requisitos no cuentan como "perdido",
+  // solo lo que se ELIGIÓ y luego no apareció).
+  const [diagnosticoPersonalizar, setDiagnosticoPersonalizar] = useState(null);
   // ⚠️ AÑADIDO (5 agosto, noche): la usuaria lleva varias rondas viendo
   // que pedir varios menús automáticos solo le da 1 -- revisado el
   // código a fondo y en mis pruebas SÍ funciona bien, así que sospecho
@@ -2787,6 +2835,21 @@ function CanislabOnboardingInterna() {
           if (resultados.length > 0) {
             setMenuReal(resultados);
             setAvisoNoForzado(resultados.some((r) => r.no_se_pudo_forzar));
+            // ⚠️ AÑADIDO (5 agosto, madrugada): comparación real, solo
+            // tiene sentido en Personalizar -- en automático no hay
+            // nada "elegido a mano" con lo que comparar.
+            if (modo === "personalizar") {
+              const elegidoAMano = eleccionesDelUsuario(modo, configPersonalizar);
+              const salioDeVerdad = Object.keys(resultados[0].menu || resultados[0].gramos || {});
+              const noSalieron = elegidoAMano.filter((n) => !salioDeVerdad.includes(n));
+              setDiagnosticoPersonalizar({
+                elegido: elegidoAMano,
+                salio: salioDeVerdad,
+                noSalieron,
+              });
+            } else {
+              setDiagnosticoPersonalizar(null);
+            }
           } else if (ultimoError?.requiere_veterinario) {
             setMenuError(ultimoError.motivo);
             setNecesitaVeterinario(true);
@@ -3524,7 +3587,7 @@ function CanislabOnboardingInterna() {
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} />
+        <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} />
       </>
     );
   }
