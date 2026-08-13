@@ -353,7 +353,11 @@ const CATEGORIAS_ALIMENTO = {
     // coinciden), es un caso genuinamente debatido en alimentación
     // cruda, se deja por prudencia.
     "Cordero": ["Pulmón de cordero", "Riñón de cordero"],
-    "Ternera": ["Pulmón de ternera", "Riñón de ternera"],
+    // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: bazo y
+    // páncreas, con datos nutricionales reales encontrados y cruzados
+    // entre varias fuentes -- amplían de verdad la categoría, no solo
+    // repiten cordero/ternera.
+    "Ternera": ["Pulmón de ternera", "Riñón de ternera", "Bazo de ternera", "Páncreas de ternera"],
   },
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
@@ -425,7 +429,7 @@ const CATEGORIAS_ALIMENTO = {
     "Fibra": ["NaturGreen Psyllium Bio"],
     "Hierro": ["AniForte Beef Blood Powder"],
     "Multivitamínico": ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)", "napfcheck Novomineral proLEBER", "astoral MultiVital BARF", "V-INTEGRA Perro Adulto", "V-INTEGRA Cachorro", "V-INTEGRA Senior", "V-INTEGRA Epato", "V-INTEGRA Renal", "Nutratop Vitamínico-Mineral 7:1"],
-    "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Brit Care Aceite de Salmón", "Oleum Canis Aceite de Salmón"],
+    "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Brit Care Aceite de Salmón", "Oleum Canis Aceite de Salmón", "Pets Purest Aceite de Salmón"],
     "Levadura de cerveza": ["GRAU Levadura de cerveza", "PAWS & PATCH Levadura de cerveza"],
     "Algas (Kelp)": ["AniForte Seaweed Meal", "Sonrisa de Diez Kelp"],
     "Yodo": ["Yoduro potásico (comprimidos 200 µg)"],
