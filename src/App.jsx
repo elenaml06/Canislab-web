@@ -439,7 +439,6 @@ const CATEGORIAS_ALIMENTO = {
     "Dorada": ["Dorada"],
     "Gamba": ["Gamba roja"],
     "Langostino": ["Langostino"],
-    "Langostinos": ["Langostinos"],
     "Lenguado": ["Lenguado"],
     "Lubina": ["Lubina"],
     "Merluza": ["Merluza"],
@@ -563,13 +562,13 @@ const CATEGORIAS_ALIMENTO = {
 };
 
 const INSTRUCCIONES_POR_CATEGORIA = {
-  "Carne muscular": "Cruda. En trozos, no picada — la carne picada tarda más en congelarse del todo y eso aumenta el riesgo bacteriano.",
-  "Vísceras": "Crudas, en trozos pequeños.",
-  "Hígado": "Crudo, en trozos pequeños — se da en poca cantidad, no hace falta trocear más de la cuenta.",
+  "Carne muscular": "Cruda. En trozos, no picada — la carne picada tarda más en congelarse del todo y eso aumenta el riesgo bacteriano. Si la preparas con antelación, congélala al menos 1 semana a -18/-20°C antes de darla — es lo que recomienda ESCCAP (la referencia europea en parásitos de mascotas) para reducir el riesgo parasitario de verdad.",
+  "Vísceras": "Crudas, en trozos pequeños. Igual que con la carne, si la preparas con antelación, al menos 1 semana congelada a -18/-20°C antes de darla.",
+  "Hígado": "Crudo, en trozos pequeños — se da en poca cantidad, no hace falta trocear más de la cuenta. Al menos 1 semana congelado antes de darlo, si lo preparas con antelación.",
   "Verduras y frutas": "Trituradas o muy cocidas — el perro no digiere bien la fibra vegetal cruda entera. Si hay manzana: quitar siempre las semillas y el corazón (contienen una pequeña cantidad de cianuro).",
   "Extras": "Los aceites y las semillas se añaden crudos al final, por encima de la comida. Cada alimento de esta categoría tiene además su propia indicación aquí abajo.",
-  "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño: el perro tiene que roerlo, no tragarlo. Que coma tranquilo y supervisado, sobre todo las primeras veces. Espera a las 14 semanas para los huesos más duros, y ve variando el tipo entre menús.",
-  "Pescados y mariscos": "Puede darse crudo si se ha congelado antes (previene el anisakis). Los mariscos, SIEMPRE cocinados. Solo si se convierte en la proteína principal DE FORMA REPETIDA: el pescado crudo lleva una enzima que va destruyendo la Vitamina B1 poco a poco — con un uso normal, variando entre proteínas, no supone ningún problema. Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que la sardina, la caballa o el boquerón.",
+  "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño: el perro tiene que roerlo, no tragarlo. Que coma tranquilo y supervisado, sobre todo las primeras veces. Espera a las 14 semanas para los huesos más duros, y ve variando el tipo entre menús. Si lo preparas con antelación, al menos 1 semana congelado a -18/-20°C.",
+  "Pescados y mariscos": "Puede darse crudo si se ha congelado antes (previene el anisakis) — el pescado necesita más tiempo que la carne: al menos 2 semanas congelado a -18/-20°C. Los mariscos, SIEMPRE cocinados. Solo si se convierte en la proteína principal DE FORMA REPETIDA: el pescado crudo lleva una enzima que va destruyendo la Vitamina B1 poco a poco — con un uso normal, variando entre proteínas, no supone ningún problema. Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que la sardina, la caballa o el boquerón.",
   "Suplementos comerciales": "Sigue la dosis del fabricante en el envase — no calcules a ojo.",
 };
 
@@ -1193,6 +1192,19 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   // manteniendo todo lo demás igual -- distinto de errorRecalculo
   // (que es cuando el cambio pedido no fue posible en absoluto).
   const [avisoRecalculo, setAvisoRecalculo] = useState(null);
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: todos los avisos
+  // que se quedan siempre visibles en pantalla deben poder cerrarse con
+  // una X, para quien le moleste tenerlos ahí. Se reinician a visibles
+  // cuando cambian los propios datos del aviso (por ejemplo, al
+  // cambiar de pestaña de menú) -- si no, un aviso distinto y nuevo se
+  // quedaría oculto para siempre solo porque el usuario cerró OTRO
+  // aviso anterior.
+  const [problemasSeguridadVisible, setProblemasSeguridadVisible] = useState(true);
+  const [avisosSemanaVisible, setAvisosSemanaVisible] = useState(true);
+  const [avisoPatologiaVisible, setAvisoPatologiaVisible] = useState(true);
+  const [diagnosticoPersonalizarVisible, setDiagnosticoPersonalizarVisible] = useState(true);
+  useEffect(() => { setDiagnosticoPersonalizarVisible(true); }, [JSON.stringify(diagnosticoPersonalizar)]);
+  useEffect(() => { setAvisosSemanaVisible(true); }, [JSON.stringify(avisosSemana)]);
   // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: la usuaria sigue
   // viendo alimentos cambiar al editar solo uno, sin ningún aviso, con
   // el servidor ya confirmado al día. Para poder diagnosticar de
@@ -1276,6 +1288,8 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   // exceso, límites por patología...) en cada respuesta, y nunca se
   // mostraban en ningún sitio -- se perdían en silencio.
   const problemasSeguridad = problemasSeguridadPorMenu[tabActiva] || menu.problemasSeguridad || [];
+  useEffect(() => { setProblemasSeguridadVisible(true); }, [JSON.stringify(problemasSeguridad)]);
+  useEffect(() => { setAvisoPatologiaVisible(true); }, [JSON.stringify(patologias)]);
 
   // ⚠️ CORREGIDO (5 agosto, madrugada): mismo motivo que itemsBase --
   // si ya hay un menú recalculado, hay que decirle al servidor lo que
@@ -1394,7 +1408,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   };
 
   return (
-    <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+    <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
       <Fuentes />
       <div style={{ background: VIOLETA }} className="w-full px-6 pt-8 pb-6">
         {/* ⚠️ CORREGIDO (5 agosto, madrugada) — pedido expreso: esta era
@@ -1669,14 +1683,19 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             lo que se eligió a mano contra lo que salió de verdad en el
             menú final. Solo aparece si este menú vino de Personalizar
             (en automático no hay nada elegido a mano con qué comparar). */}
-        {modo === "personalizar" && diagnosticoPersonalizar && (
+        {modo === "personalizar" && diagnosticoPersonalizar && diagnosticoPersonalizarVisible && (
           <div className="rounded-xl p-3 mb-4" style={{
             background: diagnosticoPersonalizar.noSalieron.length > 0 ? "#FFE8EC" : "#F0ECF7",
             border: diagnosticoPersonalizar.noSalieron.length > 0 ? `1.5px solid ${ROSA}` : "1px solid #E3DAF0",
           }}>
-            <p className="text-[11px] tracking-[0.1em] uppercase mb-1.5" style={{ color: VIOLETA, fontFamily: "monospace" }}>
-              Diagnóstico: lo elegido a mano en Personalizar
-            </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                Diagnóstico: lo elegido a mano en Personalizar
+              </p>
+              <button onClick={() => setDiagnosticoPersonalizarVisible(false)} aria-label="Cerrar">
+                <X size={14} style={{ color: VIOLETA }} />
+              </button>
+            </div>
             <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
               <b>Elegiste ({diagnosticoPersonalizar.elegido.length}):</b> {diagnosticoPersonalizar.elegido.join(", ") || "(nada a mano)"}
             </p>
@@ -1750,13 +1769,18 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             sitio. A diferencia del semáforo (que dice si faltan
             nutrientes), esto avisa de si HAY DEMASIADO de algo
             concreto -- son cosas distintas, y las dos importan. */}
-        {problemasSeguridad.length > 0 && (
+        {problemasSeguridad.length > 0 && problemasSeguridadVisible && (
           <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <AlertCircle size={14} style={{ color: "#B8860B" }} />
-              <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: "#B8860B", fontFamily: "monospace" }}>
-                {problemasSeguridad.length === 1 ? "Un aviso de seguridad" : `${problemasSeguridad.length} avisos de seguridad`}
-              </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle size={14} style={{ color: "#B8860B" }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: "#B8860B", fontFamily: "monospace" }}>
+                  {problemasSeguridad.length === 1 ? "Un aviso de seguridad" : `${problemasSeguridad.length} avisos de seguridad`}
+                </p>
+              </div>
+              <button onClick={() => setProblemasSeguridadVisible(false)} aria-label="Cerrar">
+                <X size={14} style={{ color: "#B8860B" }} />
+              </button>
             </div>
             <div className="flex flex-col gap-1.5">
               {problemasSeguridad.map((p, i) => (
@@ -1774,13 +1798,18 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             revisar_seguridad_semanal en el backend) pondera por los
             días de rotación de cada menú, no por el menú que esté
             activo en pantalla en este momento. */}
-        {avisosSemana.length > 0 && (
+        {avisosSemana.length > 0 && avisosSemanaVisible && (
           <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <AlertCircle size={14} style={{ color: "#B8860B" }} />
-              <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: "#B8860B", fontFamily: "monospace" }}>
-                {avisosSemana.length === 1 ? "Un aviso sobre la semana entera" : `${avisosSemana.length} avisos sobre la semana entera`}
-              </p>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle size={14} style={{ color: "#B8860B" }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: "#B8860B", fontFamily: "monospace" }}>
+                  {avisosSemana.length === 1 ? "Un aviso sobre la semana entera" : `${avisosSemana.length} avisos sobre la semana entera`}
+                </p>
+              </div>
+              <button onClick={() => setAvisosSemanaVisible(false)} aria-label="Cerrar">
+                <X size={14} style={{ color: "#B8860B" }} />
+              </button>
             </div>
             <div className="flex flex-col gap-1.5">
               {avisosSemana.map((a, i) => (
@@ -1821,14 +1850,19 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         })()}
 
         <div className="flex flex-col gap-2 mb-3">
-        {(patologias || []).length > 0 && (
+        {(patologias || []).length > 0 && avisoPatologiaVisible && (
           <div className="rounded-xl p-3 mb-3 flex gap-2 items-start"
                style={{ background: "#FFF4F6", border: `1.5px solid ${ROSA}` }}>
             <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
-            <div>
-              <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
-                Este menú TIENE que aprobarlo tu veterinario
-              </p>
+            <div className="flex-1">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                  Este menú TIENE que aprobarlo tu veterinario
+                </p>
+                <button onClick={() => setAvisoPatologiaVisible(false)} aria-label="Cerrar" className="shrink-0">
+                  <X size={14} style={{ color: ROSA }} />
+                </button>
+              </div>
               <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
                 {nombrePerro} tiene una condición diagnosticada. Hemos ajustado el menú en
                 esa dirección, pero son ajustes orientativos: la cantidad exacta depende del
@@ -1968,8 +2002,20 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                         return (
                           <button key={especie}
                             onClick={() => unico ? cambiarAlimento(editorAbierto.alimentoViejo, alimentos[0]) : setEditorAbierto({ ...editorAbierto, especie })}
-                            className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
-                            {unico ? alimentos[0] : especie}
+                            className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
+                            <span>{unico ? alimentos[0] : especie}</span>
+                            {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL: este era
+                                el peor de los tres sitios con este problema -- aquí no
+                                había NINGUNA diferencia visual entre "esto selecciona
+                                directo" y "esto abre un paso más", los dos botones se
+                                veían exactamente igual. Mismo indicador que en los
+                                otros dos sitios. */}
+                            {!unico && (
+                              <span className="flex items-center gap-1 shrink-0" style={{ color: VIOLETA }}>
+                                <span className="text-[11px] font-semibold" style={{ fontFamily: "monospace" }}>{alimentos.length} tipos</span>
+                                <ChevronRight size={14} />
+                              </span>
+                            )}
                           </button>
                         );
                       })}
@@ -3221,7 +3267,7 @@ function CanislabOnboardingInterna() {
   if (paso === 1) {
     const puedeContinuar = perfil.nombre.trim().length > 0 && perfil.sexo !== null;
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={1} titulo={<>Empecemos por<br />lo esencial.</>} />
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -3266,7 +3312,7 @@ function CanislabOnboardingInterna() {
   if (paso === 2) {
     const puedeContinuar = (perfil.modoRaza === "raza" && perfil.raza) || (perfil.modoRaza === "sin_raza" && perfil.tamanoManual);
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={2} titulo="¿De qué raza es?" />
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -3366,7 +3412,7 @@ function CanislabOnboardingInterna() {
     const anioActual = new Date().getFullYear();
     const anios = Array.from({ length: 25 }, (_, i) => anioActual - i);
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={3} titulo="¿Cuándo nació?" />
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -3403,7 +3449,7 @@ function CanislabOnboardingInterna() {
     const actual = CONDICIONES[perfil.condicionIdx];
     const tuck = perfil.condicionIdx / 4;
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={4} titulo={<>¿Cómo está<br />{nombreMostrar} ahora?</>} />
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -3451,7 +3497,7 @@ function CanislabOnboardingInterna() {
     const actual = NIVELES[perfil.actividadIdx];
     const Icono = actual.Icono;
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={5} titulo={<>{nombreMostrar}, en su<br />día a día</>} />
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -3517,7 +3563,7 @@ function CanislabOnboardingInterna() {
     };
 
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={6} titulo={<>Última cosa<br />sobre {nombreMostrar}</>} />
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -3680,7 +3726,7 @@ function CanislabOnboardingInterna() {
   ];
 
   return (
-    <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+    <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
       <Fuentes />
       <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8 text-center">
         <Dog size={36} strokeWidth={1.4} style={{ color: ROSA, margin: "0 auto" }} />
@@ -3761,7 +3807,7 @@ function CanislabOnboardingInterna() {
 
   if (fase === "generador" && pantalla === "elegir") {
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
           <div className="flex items-center justify-between mb-3">
@@ -3849,7 +3895,7 @@ function CanislabOnboardingInterna() {
 
   if (fase === "generador" && pantalla === "cuantos") {
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <div className="flex items-center justify-between mb-1">
@@ -3894,7 +3940,7 @@ function CanislabOnboardingInterna() {
   if (fase === "generador" && pantalla === "resultado") {
     if (menuCargando) {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
+        <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
           <Fuentes />
           <button onClick={() => setMenuLigeroAbierto(true)} className="absolute top-10 left-6 p-1">
             <Menu size={20} style={{ color: VIOLETA }} />
@@ -3916,7 +3962,7 @@ function CanislabOnboardingInterna() {
     }
     if (menuError) {
       return (
-        <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
+        <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
           <Fuentes />
           <button onClick={() => setMenuLigeroAbierto(true)} className="absolute top-10 left-6 p-1">
             <Menu size={20} style={{ color: VIOLETA }} />
@@ -3980,7 +4026,7 @@ function CanislabOnboardingInterna() {
     const numManual = Object.values(configPersonalizar).filter((c) => c.modo === "manual" && c.elegido.length > 0).length;
 
     return (
-      <div className="min-h-screen w-full flex flex-col" style={{ background: PAPEL }}>
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <div className="flex items-center justify-between mb-1">
@@ -4072,7 +4118,20 @@ function CanislabOnboardingInterna() {
                                   onClick={() => unico ? elegirAlimento(cat.nombre, items[0]) : setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie })}
                                   className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
                                   <span>{unico ? items[0] : especie}</span>
-                                  {items.length > 1 && <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>{items.length} tipos</span>}
+                                  {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL: "2 tipos"
+                                      en texto pequeño y gris era muy fácil de no ver, y este
+                                      botón se veía casi idéntico al de una especie con un solo
+                                      alimento (que SÍ selecciona directamente al pulsar) --
+                                      alguien podía pensar que ya había elegido cuando en
+                                      realidad este botón solo abre un paso más. Ahora se ve
+                                      claramente como "esto navega a otro sitio", con flecha y
+                                      color destacado, no como una selección ya hecha. */}
+                                  {!unico && (
+                                    <span className="flex items-center gap-1 shrink-0" style={{ color: VIOLETA }}>
+                                      <span className="text-[11px] font-semibold" style={{ fontFamily: "monospace" }}>{items.length} tipos</span>
+                                      <ChevronRight size={14} />
+                                    </span>
+                                  )}
                                 </button>
                               );
                             })}
@@ -4148,6 +4207,22 @@ function Fuentes() {
       }
       .cnl-pantalla-scroll {
         touch-action: pan-y;
+      }
+      /* ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: "el botón
+         Continuar queda más abajo de lo necesario en móvil, aunque
+         haya hueco visible, obligando a deslizar sin hacer falta". La
+         causa es conocida: cnl-pantalla-completa de Tailwind usa 100vh, y en
+         navegadores móviles 100vh NO tiene en cuenta la barra de
+         direcciones dinámica (que aparece/desaparece al hacer scroll)
+         -- calcula una altura MAYOR que la realmente visible en cada
+         momento, dejando un hueco "fantasma" que empuja el contenido
+         (y el botón) fuera de la pantalla real. 100dvh (dynamic
+         viewport height) sí se ajusta en tiempo real a la altura
+         visible de verdad -- con 100vh como respaldo para navegadores
+         que aún no lo soporten. */
+      .cnl-pantalla-completa {
+        min-height: 100vh;
+        min-height: 100dvh;
       }
       input[type=range].cnl-slider {
         -webkit-appearance: none; width: 100%; height: 4px;
@@ -4283,7 +4358,15 @@ function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, 
                   style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}
                 >
                   <span>{unico ? items[0] : especie}</span>
-                  {items.length > 1 && <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>{items.length} tipos</span>}
+                  {/* ⚠️ CORREGIDO (5 agosto, madrugada) — mismo arreglo que en
+                      Personalizar: indicador claro de navegación, no un texto
+                      pequeño fácil de pasar por alto. */}
+                  {!unico && (
+                    <span className="flex items-center gap-1 shrink-0" style={{ color: VIOLETA }}>
+                      <span className="text-[11px] font-semibold" style={{ fontFamily: "monospace" }}>{items.length} tipos</span>
+                      <ChevronRight size={14} />
+                    </span>
+                  )}
                 </button>
               );
             })}
