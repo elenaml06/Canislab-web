@@ -107,11 +107,25 @@ function restriccionesDeEspecie(modo, configPersonalizar) {
   return restricciones;
 }
 
+// ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL MUY GRAVE ENCONTRADO,
+// pedido expreso ("hay que comparar según lo que necesita ese perro en
+// esa etapa"): "senior" se convertía SIEMPRE en "Adulto" antes de
+// mandarlo al servidor, en TODO el sistema (generación de menús Y
+// analizador). El backend YA tenía lógica correcta y lista para
+// "Senior" en los dos sitios que importan -- el multivitamínico
+// específico "V-INTEGRA Senior" en vez del de adulto normal, y la
+// proteína mínima más alta que FEDIAF recomienda para perros mayores
+// (45 g/1000kcal en vez de 40) -- pero NUNCA se activaba, porque el
+// valor "Senior" nunca llegaba de verdad: se perdía aquí mismo, en
+// esta conversión. Ningún perro senior de la app había recibido el
+// multivitamínico correcto hasta ahora. Ahora se manda "Senior" tal
+// cual, dejando que el backend decida -- que es justo para lo que ya
+// estaba preparado.
 const ETAPA_A_SUFIJO_API = {
   cachorro_joven: "CachorroJoven",
   cachorro_crecimiento: "CachorroCrecimiento",
   adulto: "Adulto",
-  senior: "Adulto",
+  senior: "Senior",
 };
 
 const VIOLETA = "#5A4088";
@@ -987,11 +1001,7 @@ function Cabecera({ paso, titulo, onAbrirMenu }) {
             va SIEMPRE a la izquierda ahora, sin excepción en ninguna
             pantalla -- antes estaba a la derecha aquí. */}
         <div className="flex items-center gap-3">
-          {onAbrirMenu && (
-            <button onClick={onAbrirMenu} className="p-0.5">
-              <Menu size={18} style={{ color: "#FFFFFF" }} />
-            </button>
-          )}
+          {onAbrirMenu && <BotonMenu onClick={onAbrirMenu} color="#FFFFFF" className="p-0.5" />}
           <span className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
             Perfil nuevo
           </span>
@@ -1419,9 +1429,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             quita de aquí la burbuja de mascota, que no hace nada
             funcional todavía (era solo una maqueta). */}
         <div className="flex items-center justify-between mb-4">
-          <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
-            <Menu size={22} style={{ color: "#FFFFFF" }} />
-          </button>
+          <BotonMenu onClick={() => setMenuLateralAbierto(true)} color="#FFFFFF" className="p-1" />
           <p className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>CANISLAB</p>
         </div>
         {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: una vez
@@ -2158,9 +2166,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       {seccionActiva === "perfil" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
-            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
-              <Menu size={20} style={{ color: VIOLETA }} />
-            </button>
+            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
           </div>
           <div className="flex items-center gap-3 mb-6">
@@ -2205,9 +2211,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       {seccionActiva === "evolucion" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
-            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
-              <Menu size={20} style={{ color: VIOLETA }} />
-            </button>
+            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
           </div>
           <p className="text-2xl mb-1" style={{ color: TINTA, fontFamily: fontDisplay }}>Evolución de {nombrePerro}</p>
@@ -2250,9 +2254,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       {seccionActiva === "menus" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
-            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
-              <Menu size={20} style={{ color: VIOLETA }} />
-            </button>
+            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
           </div>
           <p className="text-2xl mb-4" style={{ color: TINTA, fontFamily: fontDisplay }}>Mis menús</p>
@@ -2295,9 +2297,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       {seccionActiva === "porque" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
-            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
-              <Menu size={20} style={{ color: VIOLETA }} />
-            </button>
+            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
           </div>
           <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué CANISLAB</p>
@@ -2325,7 +2325,14 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
 
       {seccionActiva === "analizar" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
-          <button onClick={() => { setSeccionActiva(null); setResultadoAnalisis(null); setErrorAnalisis(null); }} className="text-sm mb-6 text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL: esta era la
+              ÚNICA pantalla de todo el menú lateral sin ningún botón de
+              menú -- solo tenía "← Volver", perdiendo el acceso directo
+              al resto de secciones que sí tienen las demás pantallas. */}
+          <div className="flex items-center justify-between mb-6">
+            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            <button onClick={() => { setSeccionActiva(null); setResultadoAnalisis(null); setErrorAnalisis(null); }} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
+          </div>
           <p className="text-2xl mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>Analizar la dieta actual</p>
           <p className="text-sm leading-relaxed mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
             Dinos qué le estás dando ahora mismo y cuántos gramos de cada cosa.
@@ -2672,9 +2679,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
               queda accesible directamente desde aquí, a la izquierda,
               en vez de tener que pasar por un botón de "volver". */}
           <div className="flex items-center gap-3 mb-6">
-            <button onClick={() => setMenuLateralAbierto(true)} className="p-1">
-              <Menu size={20} style={{ color: VIOLETA }} />
-            </button>
+            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
             <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
               Guardado
             </p>
@@ -3811,7 +3816,7 @@ function CanislabOnboardingInterna() {
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
           <div className="flex items-center justify-between mb-3">
-            <button onClick={() => setMenuLigeroAbierto(true)}><Menu size={20} style={{ color: "#FFFFFF" }} /></button>
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
             <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
           </div>
           <h1 className="text-3xl leading-tight mb-2" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
@@ -3899,9 +3904,7 @@ function CanislabOnboardingInterna() {
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <div className="flex items-center justify-between mb-1">
-            <button onClick={() => setMenuLigeroAbierto(true)} className="p-1 -mt-4">
-              <Menu size={20} style={{ color: "#FFFFFF" }} />
-            </button>
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" className="p-1 -mt-4" />
             {/* ⚠️ AÑADIDO (5 agosto, noche): la barra de arriba desaparecía
                 en esta pantalla -- tenía que estar siempre accesible. */}
             <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
@@ -3942,9 +3945,7 @@ function CanislabOnboardingInterna() {
       return (
         <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
           <Fuentes />
-          <button onClick={() => setMenuLigeroAbierto(true)} className="absolute top-10 left-6 p-1">
-            <Menu size={20} style={{ color: VIOLETA }} />
-          </button>
+          <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color={VIOLETA} className="absolute top-10 left-6 p-1" />
           <Dog size={36} strokeWidth={1.4} style={{ color: VIOLETA }} />
           <p className="mt-4" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
             {menuDespertando
@@ -3964,9 +3965,7 @@ function CanislabOnboardingInterna() {
       return (
         <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
           <Fuentes />
-          <button onClick={() => setMenuLigeroAbierto(true)} className="absolute top-10 left-6 p-1">
-            <Menu size={20} style={{ color: VIOLETA }} />
-          </button>
+          <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color={VIOLETA} className="absolute top-10 left-6 p-1" />
           <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
           <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
             {necesitaVeterinario ? "Esto lo tiene que pautar tu veterinario" : "No se pudo calcular el menú"}
@@ -4030,9 +4029,7 @@ function CanislabOnboardingInterna() {
         <Fuentes />
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
           <div className="flex items-center justify-between mb-1">
-            <button onClick={() => setMenuLigeroAbierto(true)} className="p-1 -mt-4">
-              <Menu size={20} style={{ color: "#FFFFFF" }} />
-            </button>
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" className="p-1 -mt-4" />
             <BotonAtras onClick={volverAElegir} texto="Cambiar modo" />
           </div>
           <button onClick={() => setFase("onboarding")} className="text-xs mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -4237,6 +4234,26 @@ function Fuentes() {
         background: ${ROSA}; border: 3px solid #FFFFFF; box-shadow: 0 2px 6px rgba(90,64,136,0.35); cursor: pointer;
       }
     `}</style>
+  );
+}
+
+// ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: "la gente a la que le
+// paso la app nunca abre el menú desplegable". Causa real encontrada:
+// en TODA la app, el botón era solo un icono de tres líneas sin
+// ninguna palabra al lado -- pequeño, de bajo contraste, sin ningún
+// indicio visual de que fuera interactivo. Un icono "hamburguesa" sin
+// etiqueta es un problema de descubribilidad muy conocido: quien no
+// sabe de antemano que ahí hay un menú, no tiene forma de adivinarlo.
+// Componente único y reutilizable para los 12 sitios de la app donde
+// aparecía este botón, con la palabra "Menú" siempre visible junto al
+// icono -- así deja de ser un icono ambiguo y pasa a ser un botón
+// claro, con el mismo aspecto en todos sitios.
+function BotonMenu({ onClick, color = VIOLETA, className = "" }) {
+  return (
+    <button onClick={onClick} className={`flex items-center gap-1.5 ${className}`}>
+      <Menu size={20} style={{ color }} />
+      <span className="text-xs font-semibold" style={{ color, fontFamily: fontBody }}>Menú</span>
+    </button>
   );
 }
 
