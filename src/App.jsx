@@ -352,12 +352,19 @@ const CATEGORIAS_ALIMENTO = {
     // diferencia de lengua/molleja/corazón (donde todas las fuentes
     // coinciden), es un caso genuinamente debatido en alimentación
     // cruda, se deja por prudencia.
-    "Cordero": ["Pulmón de cordero", "Riñón de cordero"],
-    // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: bazo y
-    // páncreas, con datos nutricionales reales encontrados y cruzados
-    // entre varias fuentes -- amplían de verdad la categoría, no solo
-    // repiten cordero/ternera.
-    "Ternera": ["Pulmón de ternera", "Riñón de ternera", "Bazo de ternera", "Páncreas de ternera"],
+    // ⚠️ AMPLIADO (5 agosto, madrugada) — investigación con múltiples
+    // fuentes cruzadas (USDA principalmente): "Bazo de ternera" y
+    // "Páncreas de ternera" pasaron a "de vaca" -- sus datos
+    // originales eran de animal adulto, no de ternera lechal (el
+    // hierro los delataba: 44.5mg es propio de vaca, no de ternera
+    // joven). Se añadió una entrada NUEVA y genuina de ternera joven
+    // aparte. Confirmado que NO hay datos fiables de bazo/páncreas de
+    // pollo, pavo ni conejo -- no se han inventado esas especies.
+    // Timo y cerebro dan variedad adicional con datos USDA reales.
+    "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero", "Testículos de cordero"],
+    "Ternera": ["Pulmón de ternera", "Riñón de ternera", "Timo de ternera", "Cerebro de ternera"],
+    "Vaca": ["Bazo de vaca", "Páncreas de vaca"],
+    "Cerdo": ["Bazo de cerdo", "Páncreas de cerdo"],
   },
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
@@ -1893,48 +1900,6 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         </button>
       </div>
 
-      {menuLateralAbierto && (
-        <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
-          <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
-              <div>
-                <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombrePerro}</p>
-                <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>{etapaLabel}</p>
-              </div>
-              <button onClick={() => setMenuLateralAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
-            </div>
-            <div className="flex-1 px-3 pt-4">
-              {[
-                { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}` },
-                { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento" },
-                { key: "menus", Icono: ClipboardList, label: "Mis menús" },
-                { key: "analizar", Icono: Search, label: "Analizar la dieta actual" },
-                { key: "porque", Icono: Heart, label: "Por qué CANISLAB" },
-              ].map((op) => {
-                const Icono = op.Icono;
-                return (
-                  <button key={op.key} onClick={() => { setSeccionActiva(op.key); setMenuLateralAbierto(false); }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                      <Icono size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
-                    </div>
-                    <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{op.label}</span>
-                    <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-                  </button>
-                );
-              })}
-            </div>
-            {/* ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL SIN RESOLVER,
-                MISMO PATRÓN QUE YA PASÓ CON EL BACKEND: si esto en
-                pantalla no dice esta fecha exacta, es que Vercel sigue
-                sirviendo una versión vieja de la app -- fuérzalo con
-                "Redeploy" desde el panel de Vercel, o revisa que el
-                último commit sea el que está en producción. */}
-            <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-13 17:16 UTC
-            </p>
-          </div>
-        </div>
-      )}
 
       {seccionActiva === "perfil" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
@@ -2520,6 +2485,48 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
               <path d="M0 30 C 30 28, 45 16, 70 13 S 120 5, 180 2" stroke={ROSA} strokeWidth="2" strokeLinecap="round" fill="none" />
               <circle cx="180" cy="2" r="3" fill={ROSA} />
             </svg>
+          </div>
+        </div>
+      )}
+      {menuLateralAbierto && (
+        <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
+          <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+            <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
+              <div>
+                <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombrePerro}</p>
+                <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>{etapaLabel}</p>
+              </div>
+              <button onClick={() => setMenuLateralAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
+            </div>
+            <div className="flex-1 px-3 pt-4">
+              {[
+                { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}` },
+                { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento" },
+                { key: "menus", Icono: ClipboardList, label: "Mis menús" },
+                { key: "analizar", Icono: Search, label: "Analizar la dieta actual" },
+                { key: "porque", Icono: Heart, label: "Por qué CANISLAB" },
+              ].map((op) => {
+                const Icono = op.Icono;
+                return (
+                  <button key={op.key} onClick={() => { setSeccionActiva(op.key); setMenuLateralAbierto(false); }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
+                      <Icono size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
+                    </div>
+                    <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{op.label}</span>
+                    <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+                  </button>
+                );
+              })}
+            </div>
+            {/* ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL SIN RESOLVER,
+                MISMO PATRÓN QUE YA PASÓ CON EL BACKEND: si esto en
+                pantalla no dice esta fecha exacta, es que Vercel sigue
+                sirviendo una versión vieja de la app -- fuérzalo con
+                "Redeploy" desde el panel de Vercel, o revisa que el
+                último commit sea el que está en producción. */}
+            <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
+              build 2026-08-13 17:16 UTC
+            </p>
           </div>
         </div>
       )}
