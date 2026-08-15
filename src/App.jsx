@@ -496,7 +496,14 @@ const CATEGORIAS_ALIMENTO = {
     "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero", "Testículos de cordero"],
     "Ternera": ["Pulmón de ternera", "Riñón de ternera", "Timo de ternera", "Cerebro de ternera"],
     "Vaca": ["Bazo de vaca", "Páncreas de vaca"],
-    "Cerdo": ["Bazo de cerdo", "Páncreas de cerdo"],
+    // ⚠️ ELIMINADO (5 agosto, madrugada) — CASO REAL GRAVE, pedido
+    // expreso: "Cerdo": ["Bazo de cerdo", "Páncreas de cerdo"] quitado
+    // por completo -- riesgo real de enfermedad de Aujeszky
+    // (pseudorrabia), prácticamente siempre mortal en perros y sin
+    // cura. Sobrevive a la congelación, así que congelar no protege;
+    // solo cocinar por encima de 60-71°C destruye el virus, y esta
+    // app trabaja con comida cruda. Ver motor/accesibles.py para el
+    // razonamiento completo.
   },
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
