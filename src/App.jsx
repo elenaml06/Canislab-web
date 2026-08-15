@@ -3130,8 +3130,67 @@ function CanislabOnboardingInterna() {
       const cuantos = modo === "automatico" ? numMenus : 1;
       const resultados = [];
       let ultimoError = null;
-      const especiesUsadas = [];
       const registro = [];
+
+      // ⚠️ AÑADIDO (5 agosto, madrugada) — CAMBIO DE ARQUITECTURA PEDIDO
+      // EXPRESAMENTE: los límites de seguridad crónica (tiaminasa,
+      // mercurio, vitamina D, yodo, selenio) tienen sentido SEMANAL, y
+      // antes cada menú se pedía en una llamada aparte, sin que el
+      // servidor supiera nada de los menús anteriores de la misma
+      // semana -- así que un límite semanal no podía protegerse de
+      // verdad, solo avisar después. Ahora, cuando hay más de un menú
+      // en la rotación automática (el único caso donde el límite
+      // semanal importa de verdad), se pide TODA la semana de una vez
+      // al nuevo endpoint /menu/semana, que reparte y endurece el
+      // presupuesto de seguridad entre los menús él mismo -- así es
+      // matemáticamente imposible que la semana entera se pase, sin
+      // depender de ningún aviso que el usuario pueda ignorar.
+      if (modo === "automatico" && cuantos > 1) {
+        try {
+          const cuerpoBase = {
+            modo: "automatico",
+            nombres_alimentos: [],
+            forzar_presencia: [],
+            restringir_especie: null,
+            der_objetivo: derReal,
+            etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
+            especies_excluidas: Array.from(especiesExcluidas),
+            evitar_especies: [],
+            nombres_excluidos: Array.from(alimentosEvitados),
+            peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
+            patologias: perfil?.patologias || [],
+            categorias_excluidas: perfil?.categoriasExcluidas || [],
+            peso_adulto_esperado_kg: pesoAdultoEsperado || null,
+            tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
+          };
+          const res = await fetch(`${API_BASE}/menu/semana?numero_de_menus=${cuantos}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(cuerpoBase),
+          });
+          let cuerpo;
+          try {
+            cuerpo = await res.json();
+          } catch (e) {
+            cuerpo = { factible: false, motivo: `Respuesta no válida del servidor (HTTP ${res.status}).` };
+          }
+          if (cuerpo.factible && Array.isArray(cuerpo.menus)) {
+            for (const m of cuerpo.menus) resultados.push(m);
+            registro.push({ intento: 1, resultado: "ok", motivo: cuerpo.aviso || null });
+            if (cuerpo.aviso) ultimoError = { motivo: cuerpo.aviso };
+          } else {
+            ultimoError = cuerpo;
+            registro.push({ intento: 1, resultado: "no factible", motivo: cuerpo?.motivo || "(sin motivo)" });
+          }
+        } catch (err) {
+          ultimoError = { motivo: "La semana no se pudo calcular por un problema de conexión." };
+          registro.push({ intento: 1, resultado: "error de red", motivo: String(err?.message || err) });
+        }
+        setDiagnosticoMenus({ pedidos: cuantos, conseguidos: resultados.length, registro });
+        return { resultados, ultimoError };
+      }
+
+      const especiesUsadas = [];
       for (let i = 0; i < cuantos; i++) {
         // ⚠️ CORREGIDO (5 agosto, noche) — FALLO GRAVE ENCONTRADO: pedir
         // varios menús hace las llamadas una detrás de otra (pueden
