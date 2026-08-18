@@ -608,7 +608,7 @@ const COMO_DAR_ALIMENTO = {
   "Semilla de sésamo": { pieza: "una cucharadita son unos 4 g", como: "Molido, si no pasa entero sin digerir." },
   "Yogur griego": { pieza: "una cucharada son unos 20 g", como: "Natural y sin azúcar ni edulcorantes. Empieza con poca cantidad: no todos los perros digieren bien la lactosa." },
   "Cuello de pollo": { pieza: "un cuello entero pesa unos 35-50 g", como: "Entero, sin trocear. Es de los más blandos: buen hueso para empezar. En perros muy tragones, dáselo semicongelado para que tenga que roerlo en vez de tragárselo de golpe." },
-  "Carcasa de pollo": { pieza: "media carcasa son unos 150-200 g", como: "Partida por la mitad o en cuartos según el tamaño del perro. Lleva poca carne, así que suele ir acompañada de carne aparte." },
+  "Carcasa de pollo": { pieza: "incluye el espinazo — en España se compran como la misma pieza, no se venden por separado. Media carcasa son unos 150-200 g", como: "Partida por la mitad o en cuartos según el tamaño del perro. Lleva poca carne, así que suele ir acompañada de carne aparte." },
   "Ala de pollo": { pieza: "un ala entera pesa unos 90-100 g", como: "Entera, con la punta. Es el hueso más graso de los de pollo, ojo si el perro tiende a engordar." },
   "Cuello de pavo": { pieza: "un cuello entero pesa 300-500 g", como: "Casi siempre hay que partirlo: un tercio o medio cuello por toma según el perro. Es duro, mejor a partir de los 6 meses." },
   "Ala de pavo": { pieza: "un ala entera pesa 200-300 g", como: "Suele darse partida por la articulación. Bastante dura, no es un hueso para principiantes." },
