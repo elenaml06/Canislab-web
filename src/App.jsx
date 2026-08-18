@@ -583,14 +583,14 @@ const CATEGORIAS_ALIMENTO = {
 };
 
 const INSTRUCCIONES_POR_CATEGORIA = {
-  "Carne muscular": "Cruda. En trozos, no picada — la carne picada tarda más en congelarse del todo y eso aumenta el riesgo bacteriano. Si la preparas con antelación, congélala al menos 1 semana a -18/-20°C antes de darla — es lo que recomienda ESCCAP (la referencia europea en parásitos de mascotas) para reducir el riesgo parasitario de verdad.",
-  "Vísceras": "Crudas, en trozos pequeños. Igual que con la carne, si la preparas con antelación, al menos 1 semana congelada a -18/-20°C antes de darla.",
-  "Hígado": "Crudo, en trozos pequeños — se da en poca cantidad, no hace falta trocear más de la cuenta. Al menos 1 semana congelado antes de darlo, si lo preparas con antelación.",
-  "Verduras y frutas": "Trituradas o muy cocidas — el perro no digiere bien la fibra vegetal cruda entera. Si hay manzana: quitar siempre las semillas y el corazón (contienen una pequeña cantidad de cianuro).",
-  "Extras": "Los aceites y las semillas se añaden crudos al final, por encima de la comida. Cada alimento de esta categoría tiene además su propia indicación aquí abajo.",
-  "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño: el perro tiene que roerlo, no tragarlo. Que coma tranquilo y supervisado, sobre todo las primeras veces. Espera a las 14 semanas para los huesos más duros, y ve variando el tipo entre menús. Si lo preparas con antelación, al menos 1 semana congelado a -18/-20°C.",
-  "Pescados y mariscos": "Puede darse crudo si se ha congelado antes (previene el anisakis) — el pescado necesita más tiempo que la carne: al menos 2 semanas congelado a -18/-20°C. Los mariscos, SIEMPRE cocinados. Solo si se convierte en la proteína principal DE FORMA REPETIDA: el pescado crudo lleva una enzima que va destruyendo la Vitamina B1 poco a poco — con un uso normal, variando entre proteínas, no supone ningún problema. Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que la sardina, la caballa o el boquerón.",
-  "Suplementos comerciales": "Sigue la dosis del fabricante en el envase — no calcules a ojo.",
+  "Carne muscular": "Cruda. En trozos, no picada — la carne picada tarda más en congelarse del todo y eso aumenta el riesgo bacteriano. Si la preparas con antelación, congélala al menos 1 semana a -18/-20°C antes de darla — es lo que recomienda ESCCAP (la referencia europea en parásitos de mascotas) para reducir el riesgo parasitario de verdad. Una vez descongelada, consúmela dentro de 3 días guardada en la nevera — pasado ese tiempo, mejor no dársela.",
+  "Vísceras": "Crudas, en trozos pequeños. Igual que con la carne, si la preparas con antelación, al menos 1 semana congelada a -18/-20°C antes de darla. Una vez descongelada, dentro de 3 días.",
+  "Hígado": "Crudo, en trozos pequeños — se da en poca cantidad, no hace falta trocear más de la cuenta. Al menos 1 semana congelado antes de darlo, si lo preparas con antelación. Una vez descongelado, dentro de 3 días.",
+  "Verduras y frutas": "Cada una necesita algo distinto (triturar, cocer, quitar semillas...) — mira la indicación de este alimento en concreto, más abajo.",
+  "Extras": "Aceites, semillas y huevo se añaden CRUDOS al final, por encima de la comida ya descongelada — nunca se congelan junto con el resto ni se cocinan (algunos, como el aceite de girasol o de linaza, pierden sus propiedades con el calor). Cada alimento de esta categoría tiene además su propia indicación aquí abajo.",
+  "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño: el perro tiene que roerlo, no tragarlo. Que coma tranquilo y supervisado, sobre todo las primeras veces. Espera a las 14 semanas para los huesos más duros, y ve variando el tipo entre menús. Si lo preparas con antelación, al menos 1 semana congelado a -18/-20°C. Una vez descongelado, dentro de 3 días.",
+  "Pescados y mariscos": "Puede darse crudo si se ha congelado antes (previene el anisakis) — el pescado necesita más tiempo que la carne: al menos 2 semanas congelado a -18/-20°C. Una vez descongelado, dentro de 3 días — el pescado se estropea más rápido que la carne, así que si notas mal olor, descártalo antes. Los mariscos, SIEMPRE cocinados. Solo si se convierte en la proteína principal DE FORMA REPETIDA: el pescado crudo lleva una enzima que va destruyendo la Vitamina B1 poco a poco — con un uso normal, variando entre proteínas, no supone ningún problema. Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que la sardina, la caballa o el boquerón.",
+  "Suplementos comerciales": "Los gramos que te damos aquí YA están calculados respetando el límite máximo seguro del fabricante para el peso de tu perro — no hace falta que sigas la dosis del envase por tu cuenta, dale la cantidad que te mostramos. Se añaden al final, junto con los extras, sobre la comida ya descongelada.",
 };
 
 const COMO_DAR_ALIMENTO = {
@@ -624,7 +624,62 @@ const COMO_DAR_ALIMENTO = {
   "Costillas de ternera": { pieza: "una costilla pesa 200-400 g", como: "De una en una. Son huesos grandes y duros: para perros con experiencia, y siempre supervisado. Si el perro es de morder fuerte, retíralo cuando quede solo el hueso pelado." },
   "Pecho de ternera con hueso": { pieza: "un trozo pesa 300-600 g", como: "En trozos grandes, que el perro tenga que trabajarlo. Es de los más ricos en calcio, por eso suele salir en cantidades pequeñas." },
   "Rabo de toro": { pieza: "una pieza de rabo pesa 150-250 g", como: "Por vértebras, tal como viene cortado. Duro pero muy carnoso, gusta mucho." },
+
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido expreso: antes
+  // TODA la categoría "Verduras y frutas" mostraba el mismo texto
+  // genérico ("trituradas o muy cocidas... si hay manzana quitar
+  // semillas"), aunque solo la manzana tenga semillas, y no todas
+  // necesitan lo mismo. Cada una de las 46 verduras/frutas reales del
+  // catálogo tiene aquí su propio aviso, solo con lo que a ESE
+  // alimento en concreto le aplica de verdad.
+  "Acelga": { como: "Muy troceada o cocida al vapor, nunca cruda entera — el perro no digiere bien la fibra vegetal cruda." },
+  "Albahaca": { como: "Picada fina, en poca cantidad — se usa más como aromática que como verdura de base." },
+  "Albaricoque": { pieza: "quita SIEMPRE el hueso entero", como: "Solo la pulpe madura, troceada. El hueso contiene amigdalina (libera cianuro) y además es un riesgo real de atragantamiento — nunca se lo des con el hueso." },
+  "Alcachofa": { como: "Cocida, solo el corazón (la parte tierna) — las hojas duras no se digieren." },
+  "Apio": { como: "Muy troceado o cocido — las fibras largas del tallo pueden costarle de tragar y digerir enteras." },
+  "Arándano": { como: "Enteros o chafados, crudos — son pequeños y blandos, no hace falta cocerlos." },
+  "Berenjena": { como: "SIEMPRE cocida, nunca cruda — cruda puede irritar el estómago por la solanina de la piel." },
+  "Boniato": { como: "Cocido y en puré o troceado — crudo es duro y casi no se digiere. Pélalo si lo das cocido en trozos grandes." },
+  "Borraja": { como: "No se recomienda dar en ninguna cantidad ni forma — contiene alcaloides tóxicos para el hígado (ver aviso de seguridad)." },
+  "Brócoli": { como: "Cocido al vapor o muy troceado — crudo puede costarle de digerir y dar gases en cantidad." },
+  "Calabacín": { como: "Cocido o muy rallado, con piel — es blando y se digiere bien así." },
+  "Calabaza": { como: "Cocida y en puré — cruda es dura y casi no se digiere." },
+  "Canónigos": { como: "Muy picados o triturados — son hojas finas, pero igualmente crudas cuesta digerirlas enteras." },
+  "Cardo": { como: "Cocido — crudo es fibroso y duro de digerir." },
+  "Champiñón": { como: "SOLO champiñón de cultivo comercial (nunca silvestre, por riesgo real de intoxicación). Cocido, troceado." },
+  "Coco fresco": { pieza: "solo la pulpe blanca, nunca la cáscara ni el agua en exceso", como: "Pulpe fresca rallada o en trozos pequeños, cruda — en poca cantidad, es muy grasa." },
+  "Col lombarda": { como: "Cocida o muy troceada — cruda en cantidad puede dar gases." },
+  "Col rizada": { como: "Cocida o muy troceada — cruda en cantidad puede dar gases." },
+  "Coles de Bruselas": { como: "Cocidas — crudas y en cantidad son de las que más gases dan." },
+  "Coliflor": { como: "Cocida — cruda en cantidad puede dar gases." },
+  "Dátil": { pieza: "quita SIEMPRE el hueso entero", como: "Solo la pulpe, troceada, en poca cantidad (es muy azucarado). El hueso es duro y alargado — riesgo real de atragantamiento u obstrucción." },
+  "Endibia": { como: "Troceada, cruda — es una hoja tierna, se digiere razonablemente bien así." },
+  "Espinaca": { como: "Cocida al vapor o muy troceada — cruda en cantidad puede interferir con la absorción de algunos minerales." },
+  "Espárrago verde": { como: "Cocido y troceado — crudo es fibroso." },
+  "Frambuesa": { como: "Enteras o chafadas, crudas — son pequeñas y blandas." },
+  "Fresa": { como: "Troceada, cruda — quita el rabito verde." },
+  "Grelo": { como: "Cocido — crudo en cantidad puede dar gases, y en hipotiroidismo hay que vigilar la cantidad (ver aviso de seguridad)." },
+  "Judía verde": { como: "Cocida — cruda es dura y fibrosa." },
+  "Lechuga": { como: "Troceada, cruda — aporta poco, pero no hay problema en darla así." },
+  "Mandarina": { pieza: "quita las pepitas si tiene", como: "Solo la pulpe, sin piel ni pepitas — en trozos pequeños, cruda." },
+  "Mango": { pieza: "quita SIEMPRE el hueso entero", como: "Solo la pulpe madura, sin piel, troceada. El hueso es grande y duro — riesgo real de atragantamiento u obstrucción." },
+  "Manzana": { pieza: "quita SIEMPRE las semillas y el corazón", como: "Troceada, cruda, sin piel si el perro tiene el estómago sensible. Las semillas y el corazón contienen una pequeña cantidad de cianuro." },
+  "Melón": { pieza: "sin piel ni pepitas", como: "Pulpe troceada, cruda — la piel es dura y no se digiere." },
+  "Nabo pelado": { como: "Cocido y troceado — crudo es duro, y en hipotiroidismo hay que vigilar la cantidad (ver aviso de seguridad)." },
+  "Naranja": { pieza: "quita las pepitas si tiene", como: "Solo la pulpe, sin piel ni pepitas — en trozos pequeños, cruda." },
+  "Pepino": { como: "Troceado, crudo, con piel — se digiere bien así, no hace falta cocerlo." },
+  "Pera": { pieza: "quita SIEMPRE las semillas y el corazón", como: "Troceada, cruda. Las semillas y el corazón contienen una pequeña cantidad de cianuro, igual que en la manzana." },
+  "Pimiento rojo": { pieza: "quita siempre las semillas y el tallo", como: "Solo maduro (rojo, nunca verde), sin semillas, cocido o muy troceado." },
+  "Piña": { pieza: "sin piel ni corazón duro", como: "Pulpe troceada, cruda, en poca cantidad — la piel es dura y no se digiere." },
+  "Plátano": { como: "Troceado o chafado, crudo, sin piel — en poca cantidad, es azucarado." },
+  "Repollo": { como: "Cocido o muy troceado — crudo en cantidad puede dar gases." },
+  "Rucula": { como: "Troceada, cruda — es una hoja tierna, se digiere razonablemente bien así." },
+  "Rábano": { como: "Troceado o rallado, crudo, en poca cantidad — tiene sabor fuerte, no a todos los perros les gusta." },
+  "Sandía": { pieza: "sin pepitas ni piel", como: "Pulpe troceada, cruda — quita la piel dura y las pepitas grandes si las tiene." },
+  "Tomate (puré)": { como: "SOLO maduro (nunca verde ni la planta) — el tomate verde contiene solanina, tóxica. Ya viene en puré, se añade directamente." },
+  "Zanahoria": { como: "Rallada o muy troceada, cruda — con piel, bien lavada." },
 };
+
 
 const PATOLOGIAS = [
   { key: "renal", label: "Insuficiencia renal crónica", segura: true },
@@ -1217,6 +1272,12 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   // quedaría oculto para siempre solo porque el usuario cerró OTRO
   // aviso anterior.
   const [problemasSeguridadVisible, setProblemasSeguridadVisible] = useState(true);
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: recordatorio
+  // general de congelación/descongelación, visible arriba del todo en
+  // la pantalla de menús, no solo enterrado dentro del texto de "cómo
+  // dar" de cada categoría (donde antes solo se veía si se pulsaba a
+  // ver el detalle del hueso carnoso en concreto).
+  const [avisoCongelacionVisible, setAvisoCongelacionVisible] = useState(true);
   const [avisosSemanaVisible, setAvisosSemanaVisible] = useState(true);
   const [avisoPatologiaVisible, setAvisoPatologiaVisible] = useState(true);
   const [diagnosticoPersonalizarVisible, setDiagnosticoPersonalizarVisible] = useState(true);
@@ -1784,6 +1845,27 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             sitio. A diferencia del semáforo (que dice si faltan
             nutrientes), esto avisa de si HAY DEMASIADO de algo
             concreto -- son cosas distintas, y las dos importan. */}
+        {avisoCongelacionVisible && (
+          <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
+            <div className="flex items-center justify-between mb-1">
+              <div className="flex items-center gap-1.5">
+                <AlertCircle size={14} style={{ color: VIOLETA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  Congelación
+                </p>
+              </div>
+              <button onClick={() => setAvisoCongelacionVisible(false)} aria-label="Cerrar">
+                <X size={14} style={{ color: VIOLETA }} />
+              </button>
+            </div>
+            <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+              Si preparas este menú con antelación: carne, vísceras e hígado <b>al menos 1 semana</b> congelados
+              a -18/-20°C antes de dar; pescado, <b>al menos 2 semanas</b> (más riesgo de parásitos). Los
+              suplementos, aceites, huevo y semillas se añaden CRUDOS al final, sobre la comida ya
+              descongelada — nunca se congelan junto con el resto.
+            </p>
+          </div>
+        )}
         {problemasSeguridad.length > 0 && problemasSeguridadVisible && (
           <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
             <div className="flex items-center justify-between mb-1.5">
@@ -3315,8 +3397,27 @@ function CanislabOnboardingInterna() {
   // reutiliza el mismo reparto de días que usa la pantalla de
   // resultado, para que el aviso hable de la semana real que va a
   // vivir el perro, no de una suposición aparte.
+  //
+  // ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL ENCONTRADO, pedido
+  // expreso: este aviso seguía apareciendo con UN SOLO menú en
+  // Personalizar, aunque el menú fuera perfectamente seguro. Motivo:
+  // este chequeo se diseñó para detectar un patrón que solo aparece
+  // ENTRE VARIOS menús distintos en rotación (ninguno se pasa del
+  // límite por separado, pero repetirse en todos sí es un problema) --
+  // pero con UN SOLO menú para toda la semana, el motor YA aplica por
+  // defecto un límite diario más estricto pensado justo para ese caso
+  // (ver _presupuesto_semanal_inicial en main.py), así que el menú que
+  // llega aquí ya es seguro para los 7 días de por sí. Repetir el
+  // mismo chequeo (con un umbral más flojo, pensado para detectar
+  // patrones ENTRE menús) sobre un único menú ya protegido solo genera
+  // ruido: dice "esto se repite en 7 de 7 días" sobre algo que, siendo
+  // un solo menú, se iba a repetir por definición, y que el sistema ya
+  // resolvió en el momento de generarlo. Se salta esta llamada cuando
+  // solo hay 1 menú -- el aviso solo tiene sentido real con 2 o más.
   useEffect(() => {
     if (!menuReal || !derReal) { setAvisosSemana([]); return; }
+    const listaTamano = Array.isArray(menuReal) ? menuReal.length : 1;
+    if (listaTamano < 2) { setAvisosSemana([]); return; }
     let cancelado = false;
     const lista = Array.isArray(menuReal) ? menuReal : [menuReal];
     const dias = repartirDiasSemana(lista.length);
