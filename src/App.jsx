@@ -685,7 +685,14 @@ const PATOLOGIAS = [
   { key: "renal", label: "Insuficiencia renal crónica", segura: true },
   { key: "pancreatitis", label: "Pancreatitis", segura: true },
   { key: "oxalato", label: "Cálculos de oxalato cálcico", segura: true },
-  { key: "estruvita", label: "Cálculos de estruvita / cistina / urato", segura: false },
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: el aviso de "esto
+  // lo tiene que ver un veterinario" tenía que saltar al elegir la
+  // patología y pulsar continuar, no después de navegar hasta la
+  // generación del menú. Se guarda aquí el mismo texto que ya usa el
+  // backend, para poder mostrarlo de inmediato sin ni siquiera llamar
+  // al servidor -- ya se sabe en el cliente que no va a funcionar.
+  { key: "estruvita", label: "Cálculos de estruvita / cistina / urato", segura: false,
+    aviso: "Estos cálculos dependen del pH de la orina y de analíticas que la app no puede ver. Una dieta mal ajustada aquí puede empeorarlos, así que no generamos menú automático: necesitas una dieta pautada por tu veterinario." },
   { key: "hepatopatia", label: "Hepatopatía (enfermedad hepática)", segura: true },
   { key: "cardiopatia", label: "Cardiopatía", segura: true },
   { key: "diabetes", label: "Diabetes mellitus", segura: true },
@@ -700,7 +707,8 @@ const PATOLOGIAS = [
   // eso, dispara el mismo aviso de "esto lo tiene que valorar tu
   // veterinario", para que el caso se estudie de verdad, en vez de
   // dar una falsa sensación de que ya está cubierto.
-  { key: "otra", label: "Otra patología / no está en esta lista", segura: false },
+  { key: "otra", label: "Otra patología / no está en esta lista", segura: false,
+    aviso: "Esta condición no está entre las que este sistema sabe ajustar automáticamente todavía, así que no generamos un menú que podría no estar realmente adaptado a lo que necesita: mejor que un veterinario valore su caso en concreto y paute la dieta." },
 ];
 
 function especiesExcluidasDePerfil(perfil) {
@@ -3936,7 +3944,25 @@ function CanislabOnboardingInterna() {
           </div>
 
           <div className="flex-1" />
-            <BotonContinuar activo={puedeContinuar} onClick={siguiente} texto="Terminar" />
+            <BotonContinuar activo={puedeContinuar} onClick={() => {
+              // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: si
+              // hay alguna patología que bloquea la dieta automática,
+              // salta el aviso de veterinario AQUÍ MISMO, sin dejar
+              // avanzar hasta elegir modo/cuántos menús/generar -- no
+              // tiene sentido llevar hasta ahí sabiendo ya que no va
+              // a funcionar.
+              const bloqueantes = perfil.patologias
+                .map((k) => PATOLOGIAS.find((p) => p.key === k))
+                .filter((p) => p && !p.segura);
+              if (bloqueantes.length > 0) {
+                setMenuError(bloqueantes.map((p) => p.aviso).join(" "));
+                setNecesitaVeterinario(true);
+                setFase("generador");
+                setPantalla("veterinario_requerido");
+              } else {
+                siguiente();
+              }
+            }} texto="Terminar" />
         </div>
         {drawerLigero}
       </div>
@@ -4205,6 +4231,37 @@ function CanislabOnboardingInterna() {
               ? (numMenus === 1 ? "Elegir los ingredientes" : `Personalizar los ${numMenus} menús`)
               : `Generar ${numMenus === 1 ? "el menú" : `los ${numMenus} menús`}`} />
         </div>
+        {drawerLigero}
+      </div>
+    );
+  }
+
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido expreso: el
+  // aviso de "esto lo tiene que ver un veterinario" saltaba solo
+  // DESPUÉS de navegar por todo el flujo (elegir modo, cuántos menús,
+  // esperar a que generara) y que el backend respondiera que no podía.
+  // No tenía sentido dejar avanzar tanto sabiendo ya, desde el propio
+  // Paso 6, que no iba a funcionar. Esta pantalla es una parada
+  // dedicada, sin ningún useEffect que dispare una llamada real al
+  // servidor -- a diferencia de "resultado", que si se reutilizara
+  // para esto arrancaría una generación de verdad innecesaria.
+  if (fase === "generador" && pantalla === "veterinario_requerido") {
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
+        <Fuentes />
+        <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color={VIOLETA} className="absolute top-10 left-6 p-1" />
+        <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
+        <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
+          Esto lo tiene que pautar tu veterinario
+        </p>
+        <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>{menuError}</p>
+        <button
+          onClick={() => { setFase("onboarding"); setPaso(6); }}
+          className="px-5 py-3 rounded-xl text-sm"
+          style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+        >
+          Volver a revisar las patologías
+        </button>
         {drawerLigero}
       </div>
     );
