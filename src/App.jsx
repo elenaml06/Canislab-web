@@ -1174,7 +1174,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, avisosSemana }) {
+function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO (5 agosto, madrugada): estado LOCAL para poder cerrar
   // este aviso -- se inicializa a partir de la prop, pero una vez
@@ -1340,11 +1340,9 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   // dar" de cada categoría (donde antes solo se veía si se pulsaba a
   // ver el detalle del hueso carnoso en concreto).
   const [avisoCongelacionVisible, setAvisoCongelacionVisible] = useState(true);
-  const [avisosSemanaVisible, setAvisosSemanaVisible] = useState(true);
   const [avisoPatologiaVisible, setAvisoPatologiaVisible] = useState(true);
   const [diagnosticoPersonalizarVisible, setDiagnosticoPersonalizarVisible] = useState(true);
   useEffect(() => { setDiagnosticoPersonalizarVisible(true); }, [JSON.stringify(diagnosticoPersonalizar)]);
-  useEffect(() => { setAvisosSemanaVisible(true); }, [JSON.stringify(avisosSemana)]);
   // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: la usuaria sigue
   // viendo alimentos cambiar al editar solo uno, sin ningún aviso, con
   // el servidor ya confirmado al día. Para poder diagnosticar de
@@ -1969,34 +1967,13 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           </div>
         )}
 
-        {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: a
-            diferencia del panel de arriba (que es del menú ACTIVO en
-            cada pestaña), esto es sobre el CONJUNTO de los menús de la
-            semana -- se muestra siempre igual, sin importar qué
-            pestaña esté seleccionada, porque el cálculo real (ver
-            revisar_seguridad_semanal en el backend) pondera por los
-            días de rotación de cada menú, no por el menú que esté
-            activo en pantalla en este momento. */}
-        {avisosSemana.length > 0 && avisosSemanaVisible && (
-          <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-1.5">
-                <AlertCircle size={14} style={{ color: "#B8860B" }} />
-                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: "#B8860B", fontFamily: "monospace" }}>
-                  {avisosSemana.length === 1 ? "Un aviso sobre la semana entera" : `${avisosSemana.length} avisos sobre la semana entera`}
-                </p>
-              </div>
-              <button onClick={() => setAvisosSemanaVisible(false)} aria-label="Cerrar">
-                <X size={14} style={{ color: "#B8860B" }} />
-              </button>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {avisosSemana.map((a, i) => (
-                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{a}</p>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* ⚠️ QUITADO (5 agosto, madrugada) — pedido expreso: el panel
+            de avisos a nivel de toda la semana (frecuencia de
+            tiaminasa/mercurio/vitD/yodo/selenio) se elimina -- el
+            límite duro (restricción matemática en el motor) ya impide
+            que se supere de verdad, así que el usuario no necesita ver
+            este aviso informativo aparte. El límite en sí no se toca,
+            sigue aplicándose siempre, se genere como se genere el menú. */}
 
         {infoNutrientes && (() => {
           // ⚠️ CORREGIDO (5 agosto): antes decía "FEDIAF exige revisar 27
@@ -3055,11 +3032,6 @@ function CanislabOnboardingInterna() {
   // por el motor para cerrar los requisitos no cuentan como "perdido",
   // solo lo que se ELIGIÓ y luego no apareció).
   const [diagnosticoPersonalizar, setDiagnosticoPersonalizar] = useState(null);
-  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: aviso a nivel de
-  // TODA la semana de rotación (ver revisar_seguridad_semanal en el
-  // backend) -- distinto de los avisos por menú individual, que ya se
-  // muestran dentro de cada uno.
-  const [avisosSemana, setAvisosSemana] = useState([]);
   // ⚠️ AÑADIDO (5 agosto, noche): la usuaria lleva varias rondas viendo
   // que pedir varios menús automáticos solo le da 1 -- revisado el
   // código a fondo y en mis pruebas SÍ funciona bien, así que sospecho
@@ -3587,28 +3559,6 @@ function CanislabOnboardingInterna() {
   // un solo menú, se iba a repetir por definición, y que el sistema ya
   // resolvió en el momento de generarlo. Se salta esta llamada cuando
   // solo hay 1 menú -- el aviso solo tiene sentido real con 2 o más.
-  useEffect(() => {
-    if (!menuReal || !derReal) { setAvisosSemana([]); return; }
-    const listaTamano = Array.isArray(menuReal) ? menuReal.length : 1;
-    if (listaTamano < 2) { setAvisosSemana([]); return; }
-    let cancelado = false;
-    const lista = Array.isArray(menuReal) ? menuReal : [menuReal];
-    const dias = repartirDiasSemana(lista.length);
-    const menusPayload = lista.map((data, i) => ({
-      gramos: data.menu || data.gramos || {},
-      dias: dias[i],
-    }));
-    fetch(`${API_BASE}/menu/verificar_semana`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ menus: menusPayload, der_objetivo: derReal, peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null }),
-    })
-      .then((res) => res.json())
-      .then((data) => { if (!cancelado) setAvisosSemana(data.avisos_semana || []); })
-      .catch(() => { if (!cancelado) setAvisosSemana([]); }); // si falla, simplemente no se muestra -- no bloquea nada
-    return () => { cancelado = true; };
-  }, [menuReal, derReal]);
-
   if (paso === 1) {
     const puedeContinuar = perfil.nombre.trim().length > 0 && perfil.sexo !== null;
     return (
@@ -4419,7 +4369,7 @@ function CanislabOnboardingInterna() {
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} avisosSemana={avisosSemana} />
+        <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} />
       </>
     );
   }
