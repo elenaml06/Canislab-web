@@ -1419,6 +1419,16 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         const nuevos = despuesDeVerdad.filter((n) => !antesDeVerdad.includes(n));
         setUltimoDiagnosticoEdicion({
           endpoint,
+          // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido
+          // expreso: este diagnóstico es una variable de estado
+          // ÚNICA compartida por toda la vista, sin ninguna
+          // información de a qué menú pertenece -- así que al editar
+          // el Menú 2 y luego cambiar a la pestaña del Menú 1, el
+          // mismo aviso seguía apareciendo ahí también, aunque no
+          // tuviera nada que ver con ese menú. Se guarda de qué
+          // pestaña viene, y más abajo solo se muestra si coincide
+          // con la pestaña que se está viendo ahora mismo.
+          deTab: tabActiva,
           mandado: { menu_actual: cuerpoExtra?.menu_actual || antesDeVerdad, ...cuerpoExtra },
           antes: antesDeVerdad,
           despues: despuesDeVerdad,
@@ -1437,14 +1447,24 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         // cambiar otros alimentos además del pedido para que el cambio
         // fuera viable, lo dice aquí -- se muestra como aviso, no como
         // error (el cambio SÍ se aplicó).
-        setAvisoRecalculo(data.aviso || null);
+        //
+        // ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL, pedido
+        // expreso: mismo problema que ultimoDiagnosticoEdicion, este
+        // aviso era una variable global sin saber de qué menú venía,
+        // así que seguía apareciendo al cambiar de pestaña. Se guarda
+        // junto con la pestaña de origen, para poder filtrar al
+        // mostrarlo.
+        setAvisoRecalculo(data.aviso ? { texto: data.aviso, deTab: tabActiva } : null);
         return true;
       } else {
-        setErrorRecalculo(data.motivo || "No se pudo recalcular con esta combinación.");
+        // ⚠️ CORREGIDO (5 agosto, madrugada) — mismo problema que
+        // avisoRecalculo/ultimoDiagnosticoEdicion: se guarda de qué
+        // pestaña viene, para no seguir mostrándolo al cambiar de menú.
+        setErrorRecalculo({ texto: data.motivo || "No se pudo recalcular con esta combinación.", deTab: tabActiva });
         return false;
       }
     } catch (err) {
-      setErrorRecalculo("No se ha podido conectar con el servidor para recalcular.");
+      setErrorRecalculo({ texto: "No se ha podido conectar con el servidor para recalcular.", deTab: tabActiva });
       return false;
     } finally {
       setRecalculandoServidor(false);
@@ -1664,7 +1684,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </div>
           </div>
         )}
-        {errorRecalculo && !recalculandoServidor && (
+        {errorRecalculo && errorRecalculo.deTab === tabActiva && !recalculandoServidor && (
           // ⚠️ CORREGIDO (5 agosto, noche): antes esto era un banner fijo en
           // el flujo de la página, arriba del todo -- si estabas editando
           // un alimento más abajo en la lista, quedaba fuera de la vista y
@@ -1678,7 +1698,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
               <p className="text-sm text-center" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
                 No se ha podido hacer ese cambio
               </p>
-              <p className="text-xs text-center" style={{ color: TINTA, fontFamily: fontBody }}>{errorRecalculo}</p>
+              <p className="text-xs text-center" style={{ color: TINTA, fontFamily: fontBody }}>{errorRecalculo?.texto}</p>
               <p className="text-xs text-center mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
                 El menú sigue tal como estaba — no se ha aplicado nada.
               </p>
@@ -1692,7 +1712,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             </div>
           </div>
         )}
-        {avisoRecalculo && !recalculandoServidor && (
+        {avisoRecalculo && avisoRecalculo.deTab === tabActiva && !recalculandoServidor && (
           // ⚠️ AÑADIDO (5 agosto, madrugada): aviso de "también tuvimos
           // que cambiar X" -- distinto del de error: el cambio SÍ se
           // aplicó, esto es información, no un fallo.
@@ -1702,7 +1722,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
               <p className="text-sm text-center" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
                 Cambio aplicado, con un ajuste más
               </p>
-              <p className="text-xs text-center mb-2" style={{ color: TINTA, fontFamily: fontBody }}>{avisoRecalculo}</p>
+              <p className="text-xs text-center mb-2" style={{ color: TINTA, fontFamily: fontBody }}>{avisoRecalculo?.texto}</p>
               <button
                 onClick={() => setAvisoRecalculo(null)}
                 className="px-6 py-2.5 rounded-xl text-sm w-full"
@@ -1721,7 +1741,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             cierra solo) para poder hacer una captura y compararlo.
             Rojo si algo desapareció SIN que el servidor avisara --
             eso sería el bug real que se está buscando. */}
-        {ultimoDiagnosticoEdicion && (
+        {ultimoDiagnosticoEdicion && ultimoDiagnosticoEdicion.deTab === tabActiva && (
           <div className="rounded-xl p-3 mb-4" style={{
             background: ultimoDiagnosticoEdicion.desaparecidos.length > 0 && !ultimoDiagnosticoEdicion.avisoDelServidor ? "#FFE8EC" : "#F0ECF7",
             border: ultimoDiagnosticoEdicion.desaparecidos.length > 0 && !ultimoDiagnosticoEdicion.avisoDelServidor ? `1.5px solid ${ROSA}` : "1px solid #E3DAF0",
