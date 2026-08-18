@@ -95,6 +95,30 @@ function formatearGramos(gramos) {
   return `${redondeado}g`;
 }
 
+// ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido expreso: para un
+// suplemento vendido en comprimidos, mostrar "0,1g" o "< 0,1 g" no
+// sirve para nada -- nadie puede pesar eso en casa. Convierte los
+// gramos reales a una fracción de comprimido PRACTICABLE (entero,
+// medio, cuarto...) -- partir en trozos más pequeños que un cuarto no
+// es realista, así que se redondea a la fracción practicable más
+// cercana. Es el único alimento del catálogo vendido así (confirmado
+// revisando el catálogo entero), de ahí que sea una función dedicada
+// en vez de un sistema genérico de "peso por unidad" para todo el
+// catálogo -- estaría sobredimensionado para un único caso real.
+function formatearComprimidos(gramos, pesoComprimido) {
+  const unidades = gramos / pesoComprimido;
+  const fracciones = [0.25, 0.5, 0.75, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 8];
+  let mejor = fracciones[0];
+  let menorDiferencia = Math.abs(unidades - mejor);
+  for (const f of fracciones) {
+    const diferencia = Math.abs(unidades - f);
+    if (diferencia < menorDiferencia) { mejor = f; menorDiferencia = diferencia; }
+  }
+  if (unidades > 8) return `${Math.round(unidades)} comprimidos`;
+  const NOMBRES = { 0.25: "1/4 comprimido", 0.5: "medio comprimido", 0.75: "3/4 comprimido", 1: "1 comprimido" };
+  return NOMBRES[mejor] || `${mejor} comprimidos`;
+}
+
 function eleccionesDelUsuario(modo, configPersonalizar) {
   if (modo === "personalizar") {
     const e = [];
@@ -613,6 +637,13 @@ const INSTRUCCIONES_POR_CATEGORIA = {
 };
 
 const COMO_DAR_ALIMENTO = {
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido expreso: se
+  // vende en comprimidos, no a granel -- pesoComprimido (0.25 g, según
+  // la ficha del fabricante) permite convertir los gramos reales del
+  // menú a "cuántos comprimidos" en vez de un peso que nadie puede
+  // pesar en casa. esComprimido activa esa conversión especial en el
+  // punto donde se muestra (ver formatearComprimidos).
+  "Yoduro potásico (comprimidos 200 µg)": { pieza: "un comprimido pesa unos 0,25 g", como: "Se puede partir o disolver en agua para dosis más pequeñas.", esComprimido: true, pesoComprimido: 0.25 },
   "Aceite de girasol": { pieza: "una cucharadita rasa son unos 5 g", como: "Crudo, añadido por encima justo antes de servir. Nunca lo calientes: pierde la vitamina E, que es justo para lo que está. Guárdalo cerrado y lejos de la luz." },
   "Aceite de oliva": { pieza: "una cucharadita rasa son unos 5 g", como: "Crudo, por encima al servir. No lo calientes." },
   "Aceite de oliva virgen extra": { pieza: "una cucharadita rasa son unos 5 g", como: "Crudo, por encima al servir. No lo calientes." },
@@ -2087,7 +2118,11 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                     <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{item.alimento}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>{formatearGramos(item.gramos * multiplicador)}</span>
+                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>
+                      {COMO_DAR_ALIMENTO[item.alimento]?.esComprimido
+                        ? formatearComprimidos(item.gramos * multiplicador, COMO_DAR_ALIMENTO[item.alimento].pesoComprimido)
+                        : formatearGramos(item.gramos * multiplicador)}
+                    </span>
                     {item.porque && (
                       <button onClick={() => { setPorqueAbierto(porqueAbierto === i ? null : i); setEditorAbierto(null); setComoAbierto(null); }}>
                         <Info size={16} style={{ color: porqueAbierto === i ? ROSA : "#C9BEDD" }} />
@@ -2226,7 +2261,9 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                           {COMO_DAR_ALIMENTO[item.alimento].como}
                         </p>
                         <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
-                          Como referencia, {COMO_DAR_ALIMENTO[item.alimento].pieza} — con los {formatearGramos(item.gramos)} de hoy te haces una idea de cuánto es.
+                          {COMO_DAR_ALIMENTO[item.alimento].esComprimido
+                            ? `${COMO_DAR_ALIMENTO[item.alimento].pieza} — se puede partir para dosis más pequeñas.`
+                            : `Como referencia, ${COMO_DAR_ALIMENTO[item.alimento].pieza} — con los ${formatearGramos(item.gramos)} de hoy te haces una idea de cuánto es.`}
                         </p>
                       </div>
                     )}
