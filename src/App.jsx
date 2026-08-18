@@ -3008,7 +3008,47 @@ function CanislabOnboardingInterna() {
   const [configPersonalizar, setConfigPersonalizar] = useState(
     Object.fromEntries(CATEGORIAS_ICONOS.map((c) => [c.nombre, { modo: c.nombre === "Suplementos comerciales" ? "no" : "auto", elegido: [] }]))
   );
+  // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido expreso: "que
+  // se pueda personalizar cada menú individualmente, no que pongas los
+  // ingredientes y los reparta entre todos los menús que quieres
+  // hacer". Antes, Personalizar SIEMPRE generaba un único menú -- ni
+  // siquiera existía la opción de pedir varios (esa pantalla decía
+  // literalmente "Menú semanal · automático" en su cabecera). Ahora,
+  // en Personalizar con más de un menú, cada uno tiene su PROPIA
+  // configuración -- para no reescribir toda la lógica que ya usa
+  // `configPersonalizar` (elegir/quitar alimento, la pantalla de
+  // categorías...), ese estado sigue representando "el menú que se
+  // está editando ahora mismo"; este array nuevo guarda los configs de
+  // TODOS los menús, y al cambiar de pestaña se intercambia cuál de
+  // ellos es el activo. Se inicializa con la copia del config recién
+  // declarado arriba, repetida tantas veces como el máximo de menús
+  // permitido (8) -- solo se usan los primeros `numMenus` de verdad.
+  const configPersonalizarBase = () =>
+    Object.fromEntries(CATEGORIAS_ICONOS.map((c) => [c.nombre, { modo: c.nombre === "Suplementos comerciales" ? "no" : "auto", elegido: [] }]));
+  const [configsPorMenu, setConfigsPorMenu] = useState(
+    Array.from({ length: 8 }, () => configPersonalizarBase())
+  );
+  const [menuPersonalizandoIdx, setMenuPersonalizandoIdx] = useState(0);
   const [estadoAbiertoPersonalizar, setEstadoAbiertoPersonalizar] = useState(null);
+
+  // sincroniza automáticamente: cualquier cambio en configPersonalizar
+  // (elegir/quitar un alimento, cambiar de modo auto/manual...) se
+  // guarda en el hueco del menú que se está editando ahora mismo.
+  useEffect(() => {
+    setConfigsPorMenu((prev) => {
+      const copia = [...prev];
+      copia[menuPersonalizandoIdx] = configPersonalizar;
+      return copia;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [configPersonalizar]);
+
+  // cambiar de menú a personalizar: carga el config guardado de ese
+  // menú (o uno vacío si es la primera vez que se visita).
+  const cambiarMenuPersonalizando = (nuevoIdx) => {
+    setMenuPersonalizandoIdx(nuevoIdx);
+    setConfigPersonalizar(configsPorMenu[nuevoIdx] || configPersonalizarBase());
+  };
 
   // ⚠️ AÑADIDO (5 agosto, noche): panel ligero para las pantallas de
   // antes de tener un menú generado (cuantos/personalizar/resultado) --
@@ -3093,8 +3133,11 @@ function CanislabOnboardingInterna() {
 
   const irAModo = (m) => {
     setModo(m);
-    if (m === "automatico") setPantalla("cuantos");
-    if (m === "personalizar") setPantalla("personalizar");
+    // ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso: antes solo
+    // "automático" pasaba por la pantalla de "¿cuántos menús?" --
+    // Personalizar iba directo a elegir categorías, siempre con 1
+    // solo menú. Ahora ambos pasan por ahí primero.
+    if (m === "automatico" || m === "personalizar") setPantalla("cuantos");
   };
 
   const volverAElegir = () => {
@@ -3168,17 +3211,23 @@ function CanislabOnboardingInterna() {
     // salir siempre el mismo. Antes se llamaba 3 veces con los MISMOS
     // datos, así que con la vía rápida del catálogo (que es determinista:
     // mismos datos, mismo resultado siempre) los 3 menús salían idénticos.
-    const pedirMenu = (especiesYaUsadas = []) =>
+    // ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso: acepta el
+    // config del menú concreto que se está pidiendo (para que, en
+    // Personalizar con varios menús, cada uno mande SUS PROPIAS
+    // elecciones, en vez de repetir siempre las del último editado).
+    // Por defecto usa configPersonalizar (el activo ahora mismo), así
+    // que las llamadas que ya existían sin este parámetro no cambian.
+    const pedirMenu = (especiesYaUsadas = [], configDeEsteMenu = configPersonalizar) =>
       fetch(`${API_BASE}/menu/v2`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           modo: modo || "automatico",
           nombres_alimentos:
-            modo === "personalizar" ? eleccionesDelUsuario(modo, configPersonalizar) :
+            modo === "personalizar" ? eleccionesDelUsuario(modo, configDeEsteMenu) :
             [],
-          forzar_presencia: eleccionesDelUsuario(modo, configPersonalizar),
-          restringir_especie: restriccionesDeEspecie(modo, configPersonalizar),
+          forzar_presencia: eleccionesDelUsuario(modo, configDeEsteMenu),
+          restringir_especie: restriccionesDeEspecie(modo, configDeEsteMenu),
           der_objetivo: derReal,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
@@ -3236,7 +3285,9 @@ function CanislabOnboardingInterna() {
       });
 
     const pedirTodos = async () => {
-      const cuantos = modo === "automatico" ? numMenus : 1;
+      // ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso: Personalizar
+      // ahora también puede pedir varios menús (antes siempre era 1).
+      const cuantos = (modo === "automatico" || modo === "personalizar") ? numMenus : 1;
       const resultados = [];
       let ultimoError = null;
       const registro = [];
@@ -3312,7 +3363,13 @@ function CanislabOnboardingInterna() {
         // las siguientes no llegaban nunca. Ahora un fallo en una
         // llamada no tira las demás: se sigue intentando el resto.
         try {
-          const data = await pedirMenu(especiesUsadas);
+          // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: en
+          // Personalizar con varios menús, cada iteración manda SU
+          // PROPIO config (configsPorMenu[i]), no siempre el mismo --
+          // así cada menú lleva de verdad lo que se eligió para él, en
+          // vez de repartir las mismas elecciones entre todos.
+          const configDeEsteMenu = modo === "personalizar" ? (configsPorMenu[i] || configPersonalizar) : configPersonalizar;
+          const data = await pedirMenu(especiesUsadas, configDeEsteMenu);
           if (data.factible) {
             resultados.push(data);
             registro.push({ intento: i + 1, resultado: "ok" });
@@ -3369,10 +3426,26 @@ function CanislabOnboardingInterna() {
             // ⚠️ AÑADIDO (5 agosto, madrugada): comparación real, solo
             // tiene sentido en Personalizar -- en automático no hay
             // nada "elegido a mano" con lo que comparar.
+            //
+            // ⚠️ CORREGIDO en el mismo momento -- CASO REAL, pedido
+            // expreso: con varios menús en Personalizar, esto solo
+            // miraba resultados[0] contra configPersonalizar (el
+            // config del ÚLTIMO menú editado, no el de cada uno) --
+            // así que el diagnóstico salía mal en cuanto había más de
+            // un menú. Ahora compara CADA resultado con SU PROPIO
+            // config, y junta lo elegido/salido/no-salido de todos.
             if (modo === "personalizar") {
-              const elegidoAMano = eleccionesDelUsuario(modo, configPersonalizar);
-              const salioDeVerdad = Object.keys(resultados[0].menu || resultados[0].gramos || {});
-              const noSalieron = elegidoAMano.filter((n) => !salioDeVerdad.includes(n));
+              const elegidoAMano = [];
+              const salioDeVerdad = [];
+              const noSalieron = [];
+              resultados.forEach((r, i) => {
+                const configDeEseMenu = configsPorMenu[i] || configPersonalizar;
+                const elegidoDeEseMenu = eleccionesDelUsuario(modo, configDeEseMenu);
+                const salioDeEseMenu = Object.keys(r.menu || r.gramos || {});
+                elegidoAMano.push(...elegidoDeEseMenu);
+                salioDeVerdad.push(...salioDeEseMenu);
+                noSalieron.push(...elegidoDeEseMenu.filter((n) => !salioDeEseMenu.includes(n)));
+              });
               setDiagnosticoPersonalizar({
                 elegido: elegidoAMano,
                 salio: salioDeVerdad,
@@ -4099,7 +4172,7 @@ function CanislabOnboardingInterna() {
           <button onClick={() => setFase("onboarding")} className="text-xs mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
             Editar perfil (alergias, exclusiones...)
           </button>
-          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal · automático</p>
+          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal · {modo === "personalizar" ? "personalizado" : "automático"}</p>
           <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>¿Cuántos menús<br />distintos quieres?</h1>
         </div>
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -4120,7 +4193,17 @@ function CanislabOnboardingInterna() {
             El sistema decide también qué día toca cada menú, según lo que lleve cada uno.
           </p>
           <div className="flex-1" />
-            <BotonPrincipal activo={true} onClick={() => setPantalla("resultado")} texto={`Generar ${numMenus === 1 ? "el menú" : `los ${numMenus} menús`}`} />
+            <BotonPrincipal activo={true} onClick={() => {
+              if (modo === "personalizar") {
+                setMenuPersonalizandoIdx(0);
+                setConfigPersonalizar(configsPorMenu[0] || configPersonalizarBase());
+                setPantalla("personalizar");
+              } else {
+                setPantalla("resultado");
+              }
+            }} texto={modo === "personalizar"
+              ? (numMenus === 1 ? "Elegir los ingredientes" : `Personalizar los ${numMenus} menús`)
+              : `Generar ${numMenus === 1 ? "el menú" : `los ${numMenus} menús`}`} />
         </div>
         {drawerLigero}
       </div>
@@ -4222,10 +4305,34 @@ function CanislabOnboardingInterna() {
           <button onClick={() => setFase("onboarding")} className="text-xs mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
             Editar perfil (alergias, exclusiones...)
           </button>
-          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú 1 · personalizar</p>
+          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú {menuPersonalizandoIdx + 1} · personalizar</p>
           <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>A tu gusto,<br />categoría a categoría</h1>
         </div>
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
+          {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: navegación
+              entre menús cuando se piden varios en Personalizar -- cada
+              pestaña guarda su propia elección de ingredientes por
+              separado, no se reparten los mismos entre todos. */}
+          {numMenus > 1 && (
+            <div className="flex gap-2 mb-6 overflow-x-auto">
+              {Array.from({ length: numMenus }, (_, i) => i).map((i) => {
+                const tieneAlgo = Object.values(configsPorMenu[i] || {}).some((c) => c.modo === "manual" && c.elegido.length > 0);
+                return (
+                  <button key={i} onClick={() => cambiarMenuPersonalizando(i)}
+                    className="shrink-0 px-4 py-2 rounded-xl text-sm flex items-center gap-1.5"
+                    style={{
+                      background: i === menuPersonalizandoIdx ? VIOLETA : "#FFFFFF",
+                      border: `1.5px solid ${i === menuPersonalizandoIdx ? VIOLETA : "#E3DAF0"}`,
+                      color: i === menuPersonalizandoIdx ? "#FFFFFF" : TINTA,
+                      fontFamily: fontDisplay,
+                    }}>
+                    Menú {i + 1}
+                    {tieneAlgo && <span style={{ color: i === menuPersonalizandoIdx ? "#FFFFFF" : ROSA }}>●</span>}
+                  </button>
+                );
+              })}
+            </div>
+          )}
           <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>
             Lo que dejes en Automático, lo elige el sistema. Lo que pongas en Manual, tú eliges el alimento
             — la cantidad la calculamos nosotros para que cuadren los nutrientes de {nombreMostrar}.
@@ -4359,7 +4466,15 @@ function CanislabOnboardingInterna() {
           <p className="text-xs text-center mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
             {numManual === 0 ? "Todo en automático por ahora" : `${numManual} ${numManual === 1 ? "categoría personalizada" : "categorías personalizadas"}`}
           </p>
-            <BotonPrincipal activo={true} onClick={() => setPantalla("resultado")} texto="Generar este menú" />
+            <BotonPrincipal activo={true} onClick={() => {
+              if (menuPersonalizandoIdx < numMenus - 1) {
+                cambiarMenuPersonalizando(menuPersonalizandoIdx + 1);
+              } else {
+                setPantalla("resultado");
+              }
+            }} texto={menuPersonalizandoIdx < numMenus - 1
+              ? `Siguiente: Menú ${menuPersonalizandoIdx + 2}`
+              : (numMenus === 1 ? "Generar este menú" : "Generar los menús")} />
         </div>
         {drawerLigero}
       </div>
