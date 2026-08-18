@@ -2004,7 +2004,19 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           <div className="flex gap-2">
             {[
               { dias: 1, label: "1 día" },
-              { dias: 7, label: "1 semana" },
+              // ⚠️ CAMBIADO (5 agosto, madrugada) — CASO REAL, pedido
+              // expreso: esto siempre decía "1 semana" (7 días fijos),
+              // aunque este menú concreto solo cubra 2-6 días de la
+              // rotación real -- preparar de golpe para 7 días cuando
+              // el menú solo se va a dar 3 no tiene sentido. Ahora usa
+              // los días reales de ESTE menú (menu.dias, ya calculado
+              // correctamente más arriba con el reparto de la semana).
+              // Si este menú solo cubre 1 día de la semana, la segunda
+              // opción sería idéntica a la primera -- se omite, para no
+              // mostrar dos botones redundantes.
+              ...(menu.dias > 1
+                ? [{ dias: menu.dias, label: menu.dias === 7 ? "1 semana" : `Toda la semana (${menu.dias} días)` }]
+                : []),
             ].map((op) => {
               const activo = diasSeleccionados === op.dias;
               return (
