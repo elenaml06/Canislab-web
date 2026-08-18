@@ -443,11 +443,15 @@ const RAZAS = [
 const TAMANOS = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
 const CONDICIONES = [
-  { label: "Muy delgado", detalle: "Costillas muy marcadas, sin nada de grasa" },
-  { label: "Delgado", detalle: "Costillas se notan fácil al tacto" },
+  // ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso, tras varias
+  // rondas descartando alternativas (rellenito de amor, entrado en
+  // carnes): nombres cariñosos, simétricos con el patrón "muy X / X"
+  // que ya usan los dos primeros niveles.
+  { label: "Muy flaquito", detalle: "Costillas muy marcadas, sin nada de grasa" },
+  { label: "Flaquito", detalle: "Costillas se notan fácil al tacto" },
   { label: "Ideal", detalle: "Costillas se palpan, cintura visible desde arriba" },
-  { label: "Sobrepeso", detalle: "Cuesta notar las costillas, poca cintura" },
-  { label: "Obeso", detalle: "No se notan las costillas, sin cintura" },
+  { label: "Rellenito", detalle: "Cuesta notar las costillas, poca cintura" },
+  { label: "Muy gordete", detalle: "No se notan las costillas, sin cintura" },
 ];
 const NIVELES = [
   { label: "Sedentario", detalle: "Paseos cortos, se mueve poco", Icono: Moon },
@@ -4153,7 +4157,25 @@ function CanislabOnboardingInterna() {
 
         <div className="flex-1" />
         <button
-          onClick={() => setFase("generador")}
+          onClick={() => {
+            // ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL GRAVE
+            // ENCONTRADO, pedido expreso: "marco una patología que
+            // bloquea, luego la desmarco y pongo que no, pero sigue sin
+            // dejarme generar menús". Causa real: este botón solo hacía
+            // setFase("generador") sin tocar "pantalla" -- así que si
+            // antes se había caído en la pantalla de aviso veterinario
+            // (bloqueada), pantalla se quedaba en "veterinario_requerido"
+            // de forma persistente, y aterrizaba ahí otra vez, con el
+            // MISMO mensaje de error viejo -- sin importar que la
+            // patología ya se hubiera corregido. Ahora se navega
+            // explícitamente a "elegir" (el punto de entrada real del
+            // generador) y se limpia cualquier aviso de veterinario
+            // que hubiera quedado de un intento anterior.
+            setMenuError(null);
+            setNecesitaVeterinario(false);
+            setPantalla("elegir");
+            setFase("generador");
+          }}
           className="w-full py-4 rounded-2xl text-base"
           style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
         >
@@ -4324,7 +4346,7 @@ function CanislabOnboardingInterna() {
         </p>
         <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>{menuError}</p>
         <button
-          onClick={() => { setFase("onboarding"); setPaso(6); }}
+          onClick={() => { setMenuError(null); setNecesitaVeterinario(false); setFase("onboarding"); setPaso(6); }}
           className="px-5 py-3 rounded-xl text-sm"
           style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
         >
