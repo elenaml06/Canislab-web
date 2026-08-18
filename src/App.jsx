@@ -76,6 +76,25 @@ function especieDe(nombre) {
 // necesita ningún respaldo, CATEGORIAS_ALIMENTO cubre el catálogo
 // real completo, verificado alimento por alimento contra el backend.
 
+// ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido expreso: "me ha
+// añadido Yoduro potásico a 0 gramos... ¿cómo puede añadir algo a 0
+// gramos?" -- el backend permite valores muy pequeños a propósito (un
+// suplemento como el yoduro potásico puede necesitarse en fracciones
+// de gramo para cerrar el yodo exacto), pero al redondear a 1 decimal
+// aquí, un valor real como 0.03g se mostraba literalmente como "0g" --
+// visualmente parece que no se añade nada, cuando SÍ se está añadiendo
+// una cantidad real, solo que diminuta. Bajar el redondeo del backend
+// reintroduciría el problema que motivó bajarlo en su momento (perder
+// del todo aportes reales y necesarios de suplementos concentrados) --
+// la solución correcta es aquí: para cantidades tan pequeñas que
+// redondearían a "0", mostrar "< 0,1 g" en vez de "0g", para dejar
+// claro que sí hay algo, aunque sea una traza.
+function formatearGramos(gramos) {
+  const redondeado = Math.round(gramos * 10) / 10;
+  if (redondeado === 0 && gramos > 0) return "< 0,1 g";
+  return `${redondeado}g`;
+}
+
 function eleccionesDelUsuario(modo, configPersonalizar) {
   if (modo === "personalizar") {
     const e = [];
@@ -2068,7 +2087,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                     <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{item.alimento}</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>{Math.round(item.gramos * multiplicador * 10) / 10}g</span>
+                    <span style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 17 }}>{formatearGramos(item.gramos * multiplicador)}</span>
                     {item.porque && (
                       <button onClick={() => { setPorqueAbierto(porqueAbierto === i ? null : i); setEditorAbierto(null); setComoAbierto(null); }}>
                         <Info size={16} style={{ color: porqueAbierto === i ? ROSA : "#C9BEDD" }} />
@@ -2207,7 +2226,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                           {COMO_DAR_ALIMENTO[item.alimento].como}
                         </p>
                         <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
-                          Como referencia, {COMO_DAR_ALIMENTO[item.alimento].pieza} — con los {Math.round(item.gramos * 10) / 10} g de hoy te haces una idea de cuánto es.
+                          Como referencia, {COMO_DAR_ALIMENTO[item.alimento].pieza} — con los {formatearGramos(item.gramos)} de hoy te haces una idea de cuánto es.
                         </p>
                       </div>
                     )}
