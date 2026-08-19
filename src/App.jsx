@@ -25,7 +25,7 @@ class ErrorBoundary extends Component {
   componentDidCatch(error, info) {
     // queda en la consola del navegador (F12 → Console) para poder
     // copiar el mensaje exacto si hace falta investigarlo más a fondo
-    console.error("CANISLAB — error atrapado:", error, info);
+    console.error("RAWKU — error atrapado:", error, info);
   }
   render() {
     if (this.state.error) {
@@ -1578,7 +1578,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             funcional todavía (era solo una maqueta). */}
         <div className="flex items-center justify-between mb-4">
           <BotonMenu onClick={() => setMenuLateralAbierto(true)} color="#FFFFFF" className="p-1" />
-          <p className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>CANISLAB</p>
+          <p className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>Rawku</p>
         </div>
         {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: una vez
             entrado en "tus menús" no había forma de volver a la
@@ -2478,7 +2478,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
           </div>
-          <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué CANISLAB</p>
+          <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué Rawku</p>
           <p className="text-sm leading-relaxed mb-4" style={{ color: TINTA, fontFamily: fontBody }}>
             Cuando decidí alimentar a mi perro con BARF, mi mayor preocupación era hacerlo bien. Quería ofrecerle
             una alimentación natural, pero también tener la seguridad de que estaba recibiendo todos los nutrientes
@@ -2490,7 +2490,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
             aporte energético diferente, ¿por qué todos iban a necesitar la misma cantidad?
           </p>
           <p className="text-sm leading-relaxed" style={{ color: TINTA, fontFamily: fontBody }}>
-            Así nació CANISLAB: una herramienta creada para calcular la ración de forma más precisa, teniendo en
+            Así nació Rawku: una herramienta creada para calcular la ración de forma más precisa, teniendo en
             cuenta las necesidades reales de cada perro y la composición de cada menú. Porque alimentar de forma
             natural también debería ser alimentar con conocimiento.
           </p>
@@ -2935,7 +2935,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                 { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento" },
                 { key: "menus", Icono: ClipboardList, label: "Mis menús" },
                 { key: "analizar", Icono: Search, label: "Analizar la dieta actual" },
-                { key: "porque", Icono: Heart, label: "Por qué CANISLAB" },
+                { key: "porque", Icono: Heart, label: "Por qué Rawku" },
               ].map((op) => {
                 const Icono = op.Icono;
                 return (
@@ -2978,7 +2978,7 @@ function BotonPrincipal({ activo, onClick, texto }) {
   );
 }
 
-function CanislabOnboardingInterna() {
+function RawkuOnboardingInterna() {
   const [paso, setPaso] = useState(1);
   const [perfil, setPerfil] = useState({
     nombre: "",
@@ -4970,10 +4970,10 @@ function Rueda({ valores, valor, onChange, ancho = 72 }) {
   );
 }
 
-export default function CanislabOnboarding() {
+export default function RawkuOnboarding() {
   return (
     <ErrorBoundary>
-      <CanislabOnboardingInterna />
+      <RawkuOnboardingInterna />
     </ErrorBoundary>
   );
 }
