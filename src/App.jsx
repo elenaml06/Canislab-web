@@ -2020,10 +2020,22 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
                 </button>
               </div>
               <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
-                {nombrePerro} tiene una condición diagnosticada. Hemos ajustado el menú en
-                esa dirección, pero son ajustes orientativos: la cantidad exacta depende del
-                estadio y de sus analíticas, y eso solo puede pautarlo un veterinario.
-                Enséñale este menú antes de empezar y ve revisándolo con él.
+                {/* ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso: el texto
+                    anterior decía "la cantidad exacta depende del estadio y de sus
+                    analíticas" -- "estadio" es jerga clínica que el usuario normal
+                    no entiende, y el texto era idéntico para cualquier patología.
+                    Ahora usa el nombre real de lo que tiene el perro y habla claro. */}
+                {(() => {
+                  const labels = patologias
+                    .map((k) => PATOLOGIAS.find((p) => p.key === k)?.label)
+                    .filter(Boolean);
+                  const condicion = labels.length === 1
+                    ? labels[0]
+                    : labels.length === 2
+                      ? `${labels[0]} y ${labels[1]}`
+                      : `${labels.slice(0, -1).join(", ")} y ${labels[labels.length - 1]}`;
+                  return `El menú de ${nombrePerro} está ajustado teniendo en cuenta ${condicion}. Son ajustes orientativos en la buena dirección, pero su veterinario es quien mejor puede valorar si encaja con su caso concreto — enséñale este menú antes de empezar.`;
+                })()}
               </p>
             </div>
           </div>
