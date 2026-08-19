@@ -4319,11 +4319,19 @@ function CanislabOnboardingInterna() {
               ? "Despertando el servidor..."
               : `Calculando ${(modo === "automatico" ? numMenus : 1) === 1 ? "el menú" : `los ${modo === "automatico" ? numMenus : 1} menús`} de ${nombreMostrar}...`}
           </p>
-          <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+          <p className="text-sm mt-3 mb-1" style={{ color: MALVA, fontFamily: fontBody }}>
             {menuDespertando
               ? "Puede tardar hasta un minuto la primera vez tras un rato sin uso — ya casi está."
-              : "Un momento..."}
+              : `Esto puede tardar un momento, estamos calculando un menú totalmente adaptado para ${nombreMostrar} — sus medidas, su etapa y sus necesidades concretas.`}
           </p>
+          {!menuDespertando && (
+            <div className="flex items-center gap-2 mt-4 px-4 py-3 rounded-xl" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
+              <span style={{ fontSize: 16 }}>☝️</span>
+              <p className="text-xs text-left" style={{ color: "#7A5C00", fontFamily: fontBody }}>
+                No cierres esta pantalla ni salgas de la app — si lo haces, habrá que empezar de cero.
+              </p>
+            </div>
+          )}
           {drawerLigero}
         </div>
       );
