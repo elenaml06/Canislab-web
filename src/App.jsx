@@ -5,6 +5,12 @@ import Auth from "./auth";
 import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros, getMenus } from "./supabase";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
+import { API_BASE, fetchConTimeout } from "./api.js";
+
+// ⚠️ AÑADIDO — el muro de pago se enciende y se apaga desde aquí.
+// Apagado (por defecto): la app entera está abierta y no se ofrece ninguna
+// suscripción. Encendido: VITE_PAYWALL=on en Vercel.
+const PAYWALL_ACTIVO = import.meta.env.VITE_PAYWALL === "on";
 import { capturarError, migaDePan, identificarUsuarioEnSentry } from "./sentry.js";
 
 // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: "pantalla en blanco al
@@ -65,45 +71,7 @@ class ErrorBoundary extends Component {
 // Igual que con Supabase: se puede apuntar a otro sitio por variable de
 // entorno (los tests levantan una API de mentira en local). Sin variable,
 // se usa la de producción de siempre.
-const API_BASE = import.meta.env.VITE_API_BASE || "https://canislab-api.onrender.com";
 
-// ⚠️ AÑADIDO — CASO REAL: "se queda infinito en Calculando el menú de
-// Cairo..., nunca termina ni da error". Causa: NINGUNA petición a la API
-// tenía límite de tiempo. El servidor de canislab-api (plan gratuito de
-// Render) se duerme tras un rato sin uso, y al despertar puede tardar un
-// minuto largo -- o no contestar. Un `fetch` sin timeout, ante un
-// servidor que no responde, se queda esperando indefinidamente: ni
-// resuelve ni lanza error.
-//
-// Y el reintento que ya existía ("Despertando el servidor...") sólo salta
-// cuando el fetch LANZA un error. Si el servidor simplemente no contesta,
-// no lanza nada, así que no saltaba nunca: la pantalla se quedaba muerta
-// en "Calculando..." para siempre. Reproducido: 2 minutos sin un solo
-// cambio en pantalla.
-//
-// Con esto, una petición que se pasa de tiempo se aborta y lanza error,
-// que es justo lo que el reintento necesitaba para funcionar.
-// 45 s es holgado a propósito: un arranque en frío de Render tarda cerca
-// de un minuto, y no queremos abortar una petición que iba a llegar. Los
-// tests lo bajan por variable de entorno para no tardar un minuto cada uno.
-const TIEMPO_MAXIMO_PETICION_MS = Number(import.meta.env.VITE_TIMEOUT_API_MS) || 45000;
-
-async function fetchConTimeout(url, opciones = {}, ms = TIEMPO_MAXIMO_PETICION_MS) {
-  const control = new AbortController();
-  const alarma = setTimeout(() => control.abort(), ms);
-  try {
-    return await fetch(url, { ...opciones, signal: control.signal });
-  } catch (err) {
-    if (err?.name === "AbortError") {
-      const e = new Error(`El servidor no respondió en ${Math.round(ms / 1000)} segundos.`);
-      e.esTimeout = true;
-      throw e;
-    }
-    throw err;
-  } finally {
-    clearTimeout(alarma);
-  }
-}
 
 function especieDe(nombre) {
   if (nombre.includes(" de ")) {
@@ -3108,17 +3076,29 @@ function BotonPrincipal({ activo, onClick, texto }) {
 
 function RawkuOnboardingInterna({ usuario, perroInicial }) {
   // ─── AUTH — recibido como prop desde AuthGate ─────────────
-  const [premium, setPremium] = useState(false);
+  // ⚠️ AÑADIDO — interruptor único del muro de pago.
+  //
+  // Ahora mismo está APAGADO a propósito: no hay nada bloqueado y no se
+  // ofrece ninguna suscripción. Con el paywall apagado, `premium` vale
+  // siempre true, así que todo lo que dependía de él (PremiumGate, las
+  // secciones del menú, el límite de menús en rotación) queda abierto, y
+  // el botón de "Hazte Premium" desaparece solo, porque sólo se pintaba
+  // cuando `!premium`.
+  //
+  // Para volver a activarlo NO hace falta tocar código: basta con poner
+  // VITE_PAYWALL=on en las variables de entorno de Vercel y redesplegar.
+  const [premiumReal, setPremiumReal] = useState(false);
+  const premium = PAYWALL_ACTIVO ? premiumReal : true;
   const [mostrarSuscripcion, setMostrarSuscripcion] = useState(false);
   const [cargandoPerfil] = useState(false); // ya no necesario, carga en AuthGate
 
   useEffect(() => {
     if (usuario) {
-      esPremium(usuario.id).then(setPremium).catch(() => setPremium(false));
+      if (PAYWALL_ACTIVO) esPremium(usuario.id).then(setPremiumReal).catch(() => setPremiumReal(false));
     }
     const params = new URLSearchParams(window.location.search);
     if (params.get('pago') === 'ok') {
-      setPremium(true);
+      setPremiumReal(true);
       window.history.replaceState({}, '', '/');
     }
   }, [usuario]);

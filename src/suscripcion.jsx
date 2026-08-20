@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { API_BASE, fetchConTimeout } from './api.js'
 
 const VIOLETA = '#5A4088'
 const ROSA = '#FF6F91'
@@ -7,8 +8,6 @@ const TINTA = '#231539'
 const MALVA = '#9A8CB8'
 const fontDisplay = '"Georgia", serif'
 const fontBody = '"DM Sans", sans-serif'
-
-const API_BASE = 'https://canislab-api.onrender.com'
 
 export default function Suscripcion({ usuario, onVolver }) {
   const [planSeleccionado, setPlanSeleccionado] = useState('mensual')
@@ -19,7 +18,12 @@ export default function Suscripcion({ usuario, onVolver }) {
     setCargando(true)
     setError(null)
     try {
-      const res = await fetch(`${API_BASE}/stripe/checkout`, {
+      // ⚠️ CORREGIDO — CASO REAL: "le doy a prueba gratuita y se queda
+      // pillado". Este fetch no tenía límite de tiempo, así que si la API
+      // no contestaba (el plan gratuito de Render se duerme), el botón se
+      // quedaba en "Un momento..." para siempre, sin error ni forma de
+      // salir. Mismo fallo que en la generación de menús.
+      const res = await fetchConTimeout(`${API_BASE}/stripe/checkout`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -35,7 +39,9 @@ export default function Suscripcion({ usuario, onVolver }) {
         setError('No se pudo iniciar el pago. Inténtalo de nuevo.')
       }
     } catch (e) {
-      setError('Error de conexión. Inténtalo de nuevo.')
+      setError(e?.esTimeout
+        ? 'El servidor está tardando demasiado en responder. Vuelve a intentarlo en un momento.'
+        : 'Error de conexión. Inténtalo de nuevo.')
     } finally {
       setCargando(false)
     }

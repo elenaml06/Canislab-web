@@ -86,6 +86,30 @@ de las veces, en vez de depender de la suerte.
 
 ---
 
+## Muro de pago: apagado
+
+Ahora mismo **no hay nada bloqueado** y no se ofrece ninguna suscripción.
+El interruptor es una sola línea en `src/App.jsx`:
+
+```js
+const PAYWALL_ACTIVO = import.meta.env.VITE_PAYWALL === "on";
+```
+
+Con el muro apagado, `premium` vale siempre `true`, así que todo lo que
+dependía de él queda abierto de una vez: el `PremiumGate`, las secciones del
+menú lateral, y el límite de menús en rotación. El botón *"Hazte Premium"*
+desaparece solo, porque sólo se pintaba cuando `!premium`.
+
+**Para volver a encenderlo no hace falta tocar código:** poner
+`VITE_PAYWALL=on` en las variables de entorno de Vercel y redesplegar.
+
+> Antes de encenderlo, comprobar que `/stripe/checkout` funciona de verdad
+> en `canislab-api`. El botón de prueba gratuita se quedaba colgado en
+> *"Un momento..."* porque su `fetch` tampoco tenía timeout (ya arreglado),
+> pero eso sólo hace visible el fallo — no arregla el endpoint.
+
+---
+
 ## Tres bugs de producción arreglados
 
 **"Calculando el menú de Cairo..." infinito.** Ninguna petición a la API
