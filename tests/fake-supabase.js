@@ -129,6 +129,10 @@ export function crearFakeSupabase(opciones = {}) {
     // el test lo notaría (la lista saldría vacía) en vez de pasar por
     // casualidad.
     menus: [],
+    // Si es true, /menu/v2 y /menu/semana NO responden nunca: simula la
+    // API dormida en Render, que es lo que dejaba el "Calculando..."
+    // colgado para siempre.
+    colgarGenerador: false,
     // Último POST /rest/v1/menus recibido, para poder afirmar sobre él.
     ultimoMenuGuardado: null,
   };
@@ -174,6 +178,11 @@ export function crearFakeSupabase(opciones = {}) {
         estado.perros = cfg.sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }];
       }
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
+      if (typeof cfg.colgarGenerador === "boolean") estado.colgarGenerador = cfg.colgarGenerador;
+      // Permite sembrar un perro con campos concretos: por ejemplo con la
+      // raza guardada "a la antigua" (el objeto entero), para comprobar
+      // que esas filas viejas se siguen leyendo bien.
+      if (cfg.perro) estado.perros = [{ ...PERRO_DE_PRUEBA, ...cfg.perro }];
       if (cfg.olvidarUltimoMenu) estado.ultimoMenuGuardado = null;
       return responder(200, {
         retrasoPerrosMs: estado.retrasoPerrosMs,
@@ -223,6 +232,12 @@ export function crearFakeSupabase(opciones = {}) {
       },
     };
 
+    if (estado.colgarGenerador && (ruta === "/menu/v2" || ruta === "/menu/semana")) {
+      // Ni respuesta ni error: la petición se queda abierta, igual que
+      // una API que no contesta. Sin timeout en el cliente, esto cuelga
+      // la app para siempre.
+      return;
+    }
     if (ruta === "/menu/v2") {
       return responder(200, MENU_FALSO);
     }

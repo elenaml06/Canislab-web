@@ -67,6 +67,44 @@ class ErrorBoundary extends Component {
 // se usa la de producción de siempre.
 const API_BASE = import.meta.env.VITE_API_BASE || "https://canislab-api.onrender.com";
 
+// ⚠️ AÑADIDO — CASO REAL: "se queda infinito en Calculando el menú de
+// Cairo..., nunca termina ni da error". Causa: NINGUNA petición a la API
+// tenía límite de tiempo. El servidor de canislab-api (plan gratuito de
+// Render) se duerme tras un rato sin uso, y al despertar puede tardar un
+// minuto largo -- o no contestar. Un `fetch` sin timeout, ante un
+// servidor que no responde, se queda esperando indefinidamente: ni
+// resuelve ni lanza error.
+//
+// Y el reintento que ya existía ("Despertando el servidor...") sólo salta
+// cuando el fetch LANZA un error. Si el servidor simplemente no contesta,
+// no lanza nada, así que no saltaba nunca: la pantalla se quedaba muerta
+// en "Calculando..." para siempre. Reproducido: 2 minutos sin un solo
+// cambio en pantalla.
+//
+// Con esto, una petición que se pasa de tiempo se aborta y lanza error,
+// que es justo lo que el reintento necesitaba para funcionar.
+// 45 s es holgado a propósito: un arranque en frío de Render tarda cerca
+// de un minuto, y no queremos abortar una petición que iba a llegar. Los
+// tests lo bajan por variable de entorno para no tardar un minuto cada uno.
+const TIEMPO_MAXIMO_PETICION_MS = Number(import.meta.env.VITE_TIMEOUT_API_MS) || 45000;
+
+async function fetchConTimeout(url, opciones = {}, ms = TIEMPO_MAXIMO_PETICION_MS) {
+  const control = new AbortController();
+  const alarma = setTimeout(() => control.abort(), ms);
+  try {
+    return await fetch(url, { ...opciones, signal: control.signal });
+  } catch (err) {
+    if (err?.name === "AbortError") {
+      const e = new Error(`El servidor no respondió en ${Math.round(ms / 1000)} segundos.`);
+      e.esTimeout = true;
+      throw e;
+    }
+    throw err;
+  } finally {
+    clearTimeout(alarma);
+  }
+}
+
 function especieDe(nombre) {
   if (nombre.includes(" de ")) {
     const resto = nombre.split(" de ")[1];
@@ -194,6 +232,35 @@ const fontDisplay = "Georgia, 'Times New Roman', serif";
 const fontBody = "'DM Sans', system-ui, sans-serif";
 const fontMono = "monospace";
 const TOTAL_PASOS = 6;
+
+// ⚠️ AÑADIDO — saca el nombre de la raza venga como venga. Las filas
+// guardadas antes del arreglo tienen el objeto entero serializado, así
+// que hay que saber leerlas igualmente: si no, esas usuarias seguirían
+// viendo el texto raro para siempre aunque el guardado ya esté bien.
+function nombreDeRaza(valor) {
+  if (!valor) return null;
+  if (typeof valor === "object") return valor.nombre ? nombreDeRaza(valor.nombre) : null;
+  const texto = String(valor).trim();
+  if (!texto || texto === "[object Object]") return null;
+  if (texto.startsWith("{")) {
+    try {
+      const objeto = JSON.parse(texto);
+      return objeto?.nombre ? nombreDeRaza(objeto.nombre) : null;
+    } catch {
+      return null; // JSON roto: mejor sin raza que con un churro en pantalla
+    }
+  }
+  return texto;
+}
+
+// Recupera la raza completa del catálogo a partir de su nombre, para no
+// perder tamano/pesoMedio (que se usan para calcular la etapa y el peso
+// adulto esperado). Si es una raza que no está en el catálogo, al menos
+// se conserva el nombre.
+function razaDesdeNombre(nombre) {
+  if (!nombre) return null;
+  return RAZAS.find((r) => r.nombre === nombre) || { nombre };
+}
 
 const RAZAS = [
   {"nombre": "Affenpinscher", "tamano": "Toy", "pesoMin": 3, "pesoMax": 6, "pesoMedio": 4.5},
@@ -1237,7 +1304,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   const [energiaAlimentos, setEnergiaAlimentos] = useState({});
   useEffect(() => {
     if (seccionActiva !== "analizar" || Object.keys(energiaAlimentos).length > 0) return;
-    fetch(`${API_BASE}/alimentos`)
+    fetchConTimeout(`${API_BASE}/alimentos`)
       .then((res) => res.json())
       .then((data) => {
         const mapa = {};
@@ -1304,7 +1371,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       gramos_por_alimento[it.alimento] = (gramos_por_alimento[it.alimento] || 0) + gramosReales;
     });
     try {
-      const resp = await fetch(`${API_BASE}/analizar`, {
+      const resp = await fetchConTimeout(`${API_BASE}/analizar`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1466,7 +1533,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
     // comparar contra lo que venga después.
     const antesDeVerdad = nombresActualesDelMenu();
     try {
-      const res = await fetch(`${API_BASE}${endpoint}`, {
+      const res = await fetchConTimeout(`${API_BASE}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3079,9 +3146,22 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
       categoriasExcluidas: p.categorias_excluidas || [],
       dia: fechaNac ? fechaNac.getDate() : 15,
       mesIdx: fechaNac ? fechaNac.getMonth() : 1,
-      anio: fechaNac ? fechaNac.getFullYear() : 2024,
+      // ⚠️ CORREGIDO — aquí había un 2024 en duro: cualquier perro sin
+      // fecha de nacimiento guardada aparecía nacido en 2024, dijera lo
+      // que dijera el calendario. Ahora es el año de verdad.
+      anio: fechaNac ? fechaNac.getFullYear() : new Date().getFullYear(),
       tamano: p.tamano,
-      raza: p.raza ? { nombre: p.raza } : null,
+      // ⚠️ CORREGIDO — CASO REAL: "la raza sale con texto raro". No era
+      // un problema de codificación: se estaba guardando el OBJETO
+      // entero de la raza ({nombre, tamano, pesoMin, pesoMax,
+      // pesoMedio}) en vez de sólo su nombre, y aquí se volvía a
+      // envolver -- así que perfil.raza.nombre acababa siendo otro
+      // objeto, que al pintarse salía como texto ilegible.
+      // Ahora se lee el nombre venga como venga (texto suelto, objeto,
+      // o el JSON que quedó guardado en las filas viejas) y se
+      // recupera la raza completa del catálogo, para no perder el
+      // tamaño y el peso de referencia.
+      raza: razaDesdeNombre(nombreDeRaza(p.raza)),
       sexo: p.sexo || null,
       modoRaza: null,
       tamanoManual: null,
@@ -3119,7 +3199,9 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   const [perfil, setPerfil] = useState(() => {
     const base = {
       nombre: "", sexo: null, modoRaza: null, raza: null, tamanoManual: null,
-      dia: 15, mesIdx: 1, anio: 2026,
+      // ⚠️ CORREGIDO — mismo problema, con otro año en duro: en 2027
+      // este 2026 habría envejecido igual de mal.
+      dia: 15, mesIdx: 1, anio: new Date().getFullYear(),
       pesoActual: "",
       condicionIdx: 2,
       condicionTocado: true,
@@ -3527,7 +3609,7 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     // Por defecto usa configPersonalizar (el activo ahora mismo), así
     // que las llamadas que ya existían sin este parámetro no cambian.
     const pedirMenu = (especiesYaUsadas = [], configDeEsteMenu = configPersonalizar) =>
-      fetch(`${API_BASE}/menu/v2`, {
+      fetchConTimeout(`${API_BASE}/menu/v2`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3633,7 +3715,7 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             peso_adulto_esperado_kg: pesoAdultoEsperado || null,
             tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
           };
-          const res = await fetch(`${API_BASE}/menu/semana?numero_de_menus=${cuantos}`, {
+          const res = await fetchConTimeout(`${API_BASE}/menu/semana?numero_de_menus=${cuantos}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(cuerpoBase),
@@ -3653,6 +3735,12 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             registro.push({ intento: 1, resultado: "no factible", motivo: cuerpo?.motivo || "(sin motivo)" });
           }
         } catch (err) {
+          // ⚠️ AÑADIDO — un timeout NO se trata como "no factible": se
+          // deja subir para que el bucle de reintentos de arriba lo
+          // recoja y enseñe "Despertando el servidor...". Ese reintento
+          // ya existía, pero era código muerto: como aquí se capturaba
+          // todo, nunca le llegaba nada que reintentar.
+          if (err?.esTimeout) throw err;
           ultimoError = { motivo: "La semana no se pudo calcular por un problema de conexión." };
           registro.push({ intento: 1, resultado: "error de red", motivo: String(err?.message || err) });
         }
@@ -3701,6 +3789,8 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             registro.push({ intento: i + 1, resultado: "no factible", motivo: data?.motivo || "(sin motivo)" });
           }
         } catch (err) {
+          // Igual que arriba: el timeout sube al bucle de reintentos.
+          if (err?.esTimeout) throw err;
           ultimoError = { motivo: "Uno de los menús no se pudo calcular por un problema de conexión." };
           registro.push({ intento: i + 1, resultado: "error de red", motivo: String(err?.message || err) });
         }
@@ -3801,6 +3891,13 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
         } catch (err) {
           if (intento === MAX_INTENTOS) {
             if (!cancelado) {
+              capturarError(err, {
+                donde: "generarMenu",
+                intentos: MAX_INTENTOS,
+                fueTimeout: Boolean(err?.esTimeout),
+                modo,
+                numMenus,
+              });
               setMenuError(
                 "No se ha podido conectar con el servidor. Comprueba tu conexión e inténtalo de nuevo en un momento."
               );

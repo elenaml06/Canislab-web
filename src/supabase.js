@@ -95,7 +95,12 @@ export async function guardarPerro(userId, perfil) {
     sexo: perfil.sexo,
     castrado: perfil.castrado ?? false,
     actividad: perfil.actividad,
-    raza: perfil.raza,
+    // ⚠️ CORREGIDO — aquí se guardaba el OBJETO entero de la raza
+    // ({nombre, tamano, pesoMin, pesoMax, pesoMedio}) en una columna que
+    // sólo debería llevar el nombre. Al releerlo salía texto ilegible en
+    // la ficha del perro. Se acepta cualquiera de las dos formas para no
+    // depender de cómo llame quien use esta función.
+    raza: typeof perfil.raza === 'string' ? perfil.raza : (perfil.raza?.nombre ?? null),
     fecha_nacimiento: perfil.fechaNacimiento || null,
     dieta_actual: perfil.dietaActual,
     alergia_si: perfil.alergiaSi,

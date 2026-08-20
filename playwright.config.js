@@ -72,6 +72,9 @@ export default defineConfig({
         // La API de menús también es de mentira, servida por el mismo
         // proceso: los tests no llaman a canislab-api en Render.
         VITE_API_BASE: `http://127.0.0.1:${PUERTO_SUPABASE}`,
+        // Timeout de la API bajado para los tests: con los 45 s reales,
+        // el test de "la API no responde" tardaría minutos.
+        VITE_TIMEOUT_API_MS: "3000",
         // Sin DSN: los tests no mandan nada a Sentry.
         VITE_SENTRY_DSN: "",
       },
