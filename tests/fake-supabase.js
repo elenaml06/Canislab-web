@@ -133,6 +133,9 @@ export function crearFakeSupabase(opciones = {}) {
     // API dormida en Render, que es lo que dejaba el "Calculando..."
     // colgado para siempre.
     colgarGenerador: false,
+    // Qué contesta /menu/revalidar: "vale" (sigue valiendo), "corregido"
+    // (ya no vale pero hay arreglo) o "sin_arreglo".
+    revalidar: "vale",
     // Último POST /rest/v1/menus recibido, para poder afirmar sobre él.
     ultimoMenuGuardado: null,
   };
@@ -179,6 +182,7 @@ export function crearFakeSupabase(opciones = {}) {
       }
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
       if (typeof cfg.colgarGenerador === "boolean") estado.colgarGenerador = cfg.colgarGenerador;
+      if (cfg.revalidar) estado.revalidar = cfg.revalidar;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
       // raza guardada "a la antigua" (el objeto entero), para comprobar
       // que esas filas viejas se siguen leyendo bien.
@@ -238,6 +242,61 @@ export function crearFakeSupabase(opciones = {}) {
       // la app para siempre.
       return;
     }
+    if (ruta === "/menu/revalidar") {
+      const datos = JSON.parse(cuerpo || "{}");
+      if (!datos.menu_actual_gramos || Object.keys(datos.menu_actual_gramos).length === 0) {
+        return responder(400, { detail: "Hace falta el menú actual con sus gramos." });
+      }
+      // "por_contenido": decide menú a menú, como hace el de verdad. Un
+      // menú que lleva el multivitamínico de cachorro ya no vale; los
+      // demás sí. Sirve para probar la semana MEZCLADA.
+      if (estado.revalidar === "por_contenido") {
+        const lleva = Object.keys(datos.menu_actual_gramos).includes("V-INTEGRA Cachorro");
+        if (!lleva) {
+          return responder(200, { factible: true, sigue_siendo_valido: true, menu: datos.menu_actual_gramos });
+        }
+        const corregido = { ...datos.menu_actual_gramos };
+        delete corregido["V-INTEGRA Cachorro"];
+        corregido["Mejillón de Nueva Zelanda"] = 12;
+        return responder(200, {
+          factible: true,
+          sigue_siendo_valido: false,
+          por_que_ya_no_vale: ["manganeso se queda en el 68%"],
+          menu: corregido,
+          cambios: {
+            quitados: ["V-INTEGRA Cachorro"],
+            anadidos: ["Mejillón de Nueva Zelanda"],
+            se_mantienen: Object.keys(corregido).filter((n) => n !== "Mejillón de Nueva Zelanda"),
+          },
+        });
+      }
+
+      if (estado.revalidar === "vale") {
+        return responder(200, { factible: true, sigue_siendo_valido: true, menu: datos.menu_actual_gramos });
+      }
+      if (estado.revalidar === "sin_arreglo") {
+        return responder(200, {
+          factible: false,
+          sigue_siendo_valido: false,
+          motivo: "Este menú ya no cumple los requisitos de la etapa actual del perro y no hemos encontrado forma de arreglarlo conservando sus alimentos. Genera un menú nuevo.",
+          por_que_ya_no_vale: ["manganeso se queda en el 68%", "linoleico se queda en el 75%"],
+        });
+      }
+      // "corregido": ya no vale, pero el motor lo ha rehecho conservando
+      // lo que ha podido.
+      return responder(200, {
+        factible: true,
+        sigue_siendo_valido: false,
+        por_que_ya_no_vale: ["manganeso se queda en el 68%"],
+        menu: { "Carne muscular de pollo": 430, "Hueso carnoso de pollo": 150, "Mejillón de Nueva Zelanda": 12 },
+        cambios: {
+          quitados: ["V-INTEGRA Cachorro"],
+          anadidos: ["Mejillón de Nueva Zelanda"],
+          se_mantienen: ["Carne muscular de pollo", "Hueso carnoso de pollo"],
+        },
+      });
+    }
+
     if (ruta === "/menu/v2") {
       return responder(200, MENU_FALSO);
     }
@@ -301,6 +360,12 @@ export function crearFakeSupabase(opciones = {}) {
           ? estado.menus.filter((m) => String(m.perro_id) === perroId)
           : estado.menus;
         return responder(200, filas);
+      }
+      if (req.method === "DELETE") {
+        const filtro = url.searchParams.get("id");
+        const id = filtro && filtro.startsWith("eq.") ? filtro.slice(3) : null;
+        estado.menus = estado.menus.filter((m) => String(m.id) !== id);
+        return responder(200, []);
       }
       const datos = JSON.parse(cuerpo || "{}");
       const fila = {

@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
-import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros, getMenus } from "./supabase";
+import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu } from "./supabase";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import { API_BASE, fetchConTimeout } from "./api.js";
@@ -1248,7 +1248,13 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
   );
 }
 
-function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos }) {
+// ⚠️ AMPLIADO — `soloSeccion` abre VistaMenus directamente en una de sus
+// secciones (Evolución, Analizar...) sin pintar la vista de menús que hay
+// detrás. Esas secciones no dependen para nada de que haya un menú recién
+// generado -- son la ficha de peso y el analizador de dieta -- pero
+// estaban programadas aquí dentro, así que desde el perfil no había forma
+// de llegar a ellas. Esto es lo que hace de puerta.
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO (5 agosto, madrugada): estado LOCAL para poder cerrar
   // este aviso -- se inicializa a partir de la prop, pero una vez
@@ -1265,7 +1271,14 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   // el mismo sitio), se quedaba sin ninguna forma de acceder -- código
   // muerto. Se retoma el día que exista de verdad la gestión de varias
   // mascotas.
-  const [seccionActiva, setSeccionActiva] = useState(null);
+  const [seccionActiva, setSeccionActiva] = useState(soloSeccion);
+
+  // En modo "sólo una sección" no hay vista de menús detrás a la que
+  // volver: cerrar la sección significa salir de aquí del todo. Así los
+  // botones de "← Volver" existentes siguen valiendo sin tocarlos uno a uno.
+  useEffect(() => {
+    if (soloSeccion && seccionActiva === null) onVolver?.();
+  }, [soloSeccion, seccionActiva, onVolver]);
   const [semanaConfirmada, setSemanaConfirmada] = useState(false);
   const [dietaAnalizar, setDietaAnalizar] = useState([]);
   const [abiertoAnalizar, setAbiertoAnalizar] = useState(null);
@@ -1643,6 +1656,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
   return (
     <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
       <Fuentes />
+      {!soloSeccion && (<>
       <div style={{ background: VIOLETA }} className="w-full px-6 pt-8 pb-6">
         {/* ⚠️ CORREGIDO (5 agosto, madrugada) — pedido expreso: esta era
             la ÚNICA pantalla de toda la app con el menú a la IZQUIERDA
@@ -2416,11 +2430,13 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
       </div>
 
 
+      </>)}
+
       {seccionActiva === "perfil" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <div className="flex items-center gap-3 mb-6">
             <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: VIOLETA }}>
@@ -2465,13 +2481,15 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-1" style={{ color: TINTA, fontFamily: fontDisplay }}>Evolución de {nombrePerro}</p>
           <p className="text-xs mb-6" style={{ color: MALVA, fontFamily: fontBody }}>Peso esperado vs. peso real registrado</p>
           <PremiumGate
             premium={premium}
             onSuscribir={() => { setSeccionActiva(null); onMostrarSuscripcion(); }}
+            onCerrar={() => setSeccionActiva(null)}
+            esDemo={PAYWALL_ES_DEMO}
             titulo="Evolución y crecimiento"
             descripcion="Sigue el peso real de tu perro y compáralo con la curva de crecimiento esperada."
           >
@@ -2546,7 +2564,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-4" style={{ color: TINTA, fontFamily: fontDisplay }}>Mis menús</p>
           <div className="flex flex-col gap-2">
@@ -2586,7 +2604,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver a los menús</button>
+            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué Rawku</p>
           <p className="text-sm leading-relaxed mb-4" style={{ color: TINTA, fontFamily: fontBody }}>
@@ -2620,13 +2638,16 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
           <PremiumGate
             premium={premium}
             onSuscribir={() => { setSeccionActiva(null); onMostrarSuscripcion(); }}
+            onCerrar={() => setSeccionActiva(null)}
+            esDemo={PAYWALL_ES_DEMO}
             titulo="Analizador nutricional"
             descripcion="Analiza en detalle los nutrientes de la dieta actual de tu perro."
           >
-          <div>
-          <p className="text-2xl mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>Analizar la dieta actual</p>
-            </div>
-          ) : (
+          {/* ⚠️ CORREGIDO — aquí había un ternario a medio deshacer: un
+              bloque suelto con el título repetido y un `) : (` sin su
+              `{condicion ? (` delante. JSX no se queja de eso: lo trata
+              como texto, así que en la pantalla salía literalmente
+              ") : (" debajo del título, y el título dos veces. */}
           <div>
           <p className="text-2xl mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>Analizar la dieta actual</p>
           <p className="text-sm leading-relaxed mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -3052,7 +3073,7 @@ function VistaMenus({ menus, onVolver, modo, alimentosEvitados, patologias, nomb
               {[
                 { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}`, isPremium: false },
                 { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true },
-                { key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false },
+                ...(soloSeccion ? [] : [{ key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false }]),
                 { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true },
                 { key: "porque", Icono: Heart, label: "Por qué Rawku", isPremium: false },
               ].map((op) => {
@@ -3334,6 +3355,31 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     return () => { cancelado = true; };
   }, [perfil._id]);
 
+  // ⚠️ AÑADIDO — borrar un menú guardado. eliminarMenu ya existía en
+  // supabase.js y tampoco se usaba desde ningún sitio, igual que le
+  // pasaba a getMenus.
+  const [menuAConfirmarBorrado, setMenuAConfirmarBorrado] = useState(null);
+  const [borrandoMenu, setBorrandoMenu] = useState(false);
+
+  const confirmarBorrarMenu = async () => {
+    const fila = menuAConfirmarBorrado;
+    if (!fila) return;
+    setBorrandoMenu(true);
+    try {
+      await eliminarMenu(fila.id);
+      setMenusGuardados((previos) => previos.filter((m) => m.id !== fila.id));
+      migaDePan("Menú guardado borrado", { id: fila.id });
+      setMenuAConfirmarBorrado(null);
+    } catch (err) {
+      capturarError(err, { donde: "eliminarMenu", menuId: fila.id });
+      // Se deja el diálogo abierto con el aviso: borrar y que parezca que
+      // funcionó cuando no ha funcionado es peor que decirlo.
+      setMenuAConfirmarBorrado({ ...fila, error: "No se ha podido borrar. Inténtalo otra vez." });
+    } finally {
+      setBorrandoMenu(false);
+    }
+  };
+
   const abrirMenuGuardado = (fila) => {
     setMenuGuardadoAbierto(fila);
     setMenuReal(fila.menus_data);
@@ -3488,12 +3534,35 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
               <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
             </button>
           )}
+          {/* ⚠️ AÑADIDO — Evolución y Analizar dejan de estar en gris. No
+              es que faltaran: estaban programadas dentro de VistaMenus, que
+              sólo existe con un menú recién generado, así que desde el
+              perfil no había forma de llegar. Ahora se abren en modo
+              "sólo esta sección". Ninguna de las dos necesita un menú. */}
+          {!(paso >= 1 && paso <= TOTAL_PASOS) && [
+            { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento" },
+            { key: "analizar", Icono: Search, label: "Analizar la dieta actual" },
+          ].map((op) => (
+            <button
+              key={op.key}
+              onClick={() => { setMenuLigeroAbierto(false); setSeccionSuelta(op.key); setFase("seccion"); }}
+              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
+            >
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
+                <op.Icono size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
+              </div>
+              <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{op.label}</span>
+              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+            </button>
+          ))}
           {[
-            { Icono: TrendingUp, label: "Evolución y crecimiento" },
             ...(menusGuardados.length > 0 && !(paso >= 1 && paso <= TOTAL_PASOS)
               ? []
               : [{ Icono: ClipboardList, label: "Mis menús" }]),
-            { Icono: Search, label: "Analizar la dieta actual" },
+            ...((paso >= 1 && paso <= TOTAL_PASOS)
+              ? [{ Icono: TrendingUp, label: "Evolución y crecimiento" },
+                 { Icono: Search, label: "Analizar la dieta actual" }]
+              : []),
           ].map((op) => (
             <div key={op.label} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl" style={{ opacity: 0.4 }}>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
@@ -3602,6 +3671,164 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     [perfil.pesoActual, etapaCalculada, perfil.actividadIdx, perfil.esterilizado,
      pesoAdultoEsperado, perfil.raza?.nombre, perfil.sexo, perfil.condicionIdx]
   );
+
+  // ═══ REVALIDACIÓN DEL MENÚ CUANDO CAMBIA EL PERRO ═══════════════════
+  //
+  // ⚠️ AÑADIDO — CASO 3 del backend: un menú calculado para un cachorro
+  // deja de cumplir cuando ese perro es adulto. Los requisitos FEDIAF no
+  // son los mismos por etapa: no basta con escalar las calorías, y el
+  // multivitamínico de cachorro sigue ahí dentro.
+  //
+  // Hasta ahora la web no llamaba a /menu/revalidar desde ningún sitio,
+  // así que el menú guardado se seguía enseñando tal cual.
+  //
+  // DECISIÓN IMPORTANTE: esto NO regenera nada por su cuenta. Sólo
+  // comprueba y avisa. Cambiarle el menú a alguien sin preguntar, cuando
+  // puede tener la compra hecha y la comida ya porcionada en el
+  // congelador, no es algo que deba decidir la app.
+  const [revision, setRevision] = useState({ estado: "reposo" });
+  // Qué sección suelta (Evolución / Analizar) se está viendo desde el perfil.
+  const [seccionSuelta, setSeccionSuelta] = useState(null);
+
+  // Se comprueba la rotación guardada más reciente, ENTERA.
+  //
+  // ⚠️ CORREGIDO — antes sólo se miraba el primer menú, dando por hecho
+  // que "los requisitos de etapa son los mismos para todos". Eso es
+  // cierto para los REQUISITOS, pero no para los MENÚS: cada uno lleva
+  // alimentos distintos, así que uno puede seguir cumpliendo y otro no
+  // (es justo el caso del multivitamínico de cachorro, que sólo está en
+  // algunos). Si alguien come 3 menús a la semana, hay que revisar y
+  // corregir los 3, no uno.
+  const menuParaRevisar = menusGuardados[0] || null;
+
+  const menusDeLaRotacion = (fila) => {
+    const datos = fila?.menus_data;
+    const lista = Array.isArray(datos) ? datos : datos ? [datos] : [];
+    return lista
+      .map((m) => m?.menu || m?.gramos || null)
+      .filter((g) => g && Object.keys(g).length > 0);
+  };
+
+  useEffect(() => {
+    // Sólo desde el perfil (la pantalla de inicio), y sólo si hay algo
+    // que comprobar. Así no se llama a una API dormida en cada pantalla.
+    if (fase !== "onboarding") return;
+    if (!menuParaRevisar || !derReal || !etapaCalculada) return;
+
+    const rotacion = menusDeLaRotacion(menuParaRevisar);
+    if (rotacion.length === 0) return;
+
+    // Huella de lo que determina el resultado. Si no ha cambiado, no se
+    // vuelve a preguntar: no tiene sentido gastar N llamadas por cada vez
+    // que se entra en el perfil.
+    const huella = [menuParaRevisar.id, Math.round(derReal), etapaCalculada].join("|");
+    if (revision.huella === huella) return;
+
+    let cancelado = false;
+    setRevision({ estado: "comprobando", huella });
+
+    const cuerpoBase = {
+      der_objetivo: derReal,                       // el DER de AHORA
+      etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
+      peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
+      peso_adulto_esperado_kg: pesoAdultoEsperado || null,
+      nombres_excluidos: Array.from(alimentosEvitados || []),
+      especies_excluidas: Array.from(especiesExcluidas || []),
+      patologias: perfil?.patologias || [],
+      categorias_excluidas: perfil?.categoriasExcluidas || [],
+    };
+
+    // Un menú de la semana no depende de los otros para revalidarse, así
+    // que van en paralelo: con la API recién despierta, en serie serían
+    // tres esperas seguidas de casi un minuto.
+    Promise.all(
+      rotacion.map((gramos) =>
+        fetchConTimeout(`${API_BASE}/menu/revalidar`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...cuerpoBase, menu_actual_gramos: gramos }),
+        })
+          .then((res) => res.json())
+          .then((data) => ({ original: gramos, data }))
+      )
+    )
+      .then((respuestas) => {
+        if (cancelado) return;
+
+        const caducados = respuestas.filter((r) => !r.data?.sigue_siendo_valido);
+        if (caducados.length === 0) {
+          setRevision({ estado: "al_dia", huella });
+          return;
+        }
+
+        // Si aunque sea uno no tiene arreglo, no se puede ofrecer una
+        // semana corregida a medias: se dice y se ofrece empezar de cero.
+        const sinArreglo = caducados.find((r) => !r.data?.factible);
+
+        // La semana corregida conserva tal cual los menús que SÍ siguen
+        // valiendo, y sustituye sólo los que no. Eso es lo que hace que
+        // cambie lo mínimo.
+        const semanaCorregida = respuestas.map((r) =>
+          r.data?.sigue_siendo_valido
+            ? r.original
+            : (r.data?.menu || r.data?.gramos || null)
+        );
+
+        const unir = (clave) => {
+          const vistos = new Set();
+          caducados.forEach((r) => (r.data?.cambios?.[clave] || []).forEach((n) => vistos.add(n)));
+          return Array.from(vistos);
+        };
+
+        migaDePan("La rotación guardada ya no cumple con la etapa de ahora", {
+          revisados: respuestas.length, caducados: caducados.length,
+          hayArreglo: !sinArreglo,
+        });
+
+        setRevision({
+          estado: "caducado",
+          huella,
+          revisados: respuestas.length,
+          caducados: caducados.length,
+          porQue: Array.from(new Set(caducados.flatMap((r) => r.data?.por_que_ya_no_vale || []))),
+          // /menu/revalidar ya devuelve cada menú rehecho conservando lo
+          // que puede -- no hace falta generar nada desde cero.
+          menusNuevos: sinArreglo || semanaCorregida.some((m) => !m) ? null : semanaCorregida,
+          cambios: sinArreglo ? null : { quitados: unir("quitados"), anadidos: unir("anadidos") },
+          motivo: sinArreglo?.data?.motivo || null,
+        });
+      })
+      .catch((err) => {
+        if (cancelado) return;
+        // Que la comprobación falle no puede estropear la pantalla de
+        // inicio: se calla y ya. Pero queda en Sentry.
+        if (!err?.esTimeout) capturarError(err, { donde: "menu/revalidar" });
+        setRevision({ estado: "reposo" });
+      });
+
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fase, menuParaRevisar?.id, derReal, etapaCalculada]);
+
+  // Enseña el menú ya rehecho por /menu/revalidar. Reutiliza la pantalla
+  // de menú guardado, que no dispara ninguna regeneración.
+  const verMenuRevalidado = () => {
+    if (!revision.menusNuevos?.length) return;
+    const semana = revision.menusNuevos.map((menu) => ({ menu }));
+    setMenuGuardadoAbierto({
+      ...menuParaRevisar,
+      der_real: derReal,
+      etapa_label: etapaLabel,
+      menus_data: semana,
+    });
+    setMenuReal(semana);
+    setModo(menuParaRevisar?.modo || "automatico");
+    setMenuCargando(false);
+    setMenuError(null);
+    setPantalla("menuGuardado");
+    setFase("generador");
+  };
+
 
   // ⚠️ CONECTADO al motor nuevo (5 agosto): /menu/v2 en vez de /menu. El
   // motor decide QUÉ alimentos usar Y cuánto de cada uno a la vez (programa-
@@ -4407,6 +4634,43 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     );
   }
 
+  // ⚠️ AÑADIDO — Evolución y Analizar, abiertas desde el perfil. Se
+  // reutiliza VistaMenus en modo "sólo esta sección": el código de las dos
+  // vive ahí dentro y no depende de que haya un menú generado, sólo estaba
+  // fuera de alcance. `menus` va de relleno porque en este modo la vista de
+  // menús ni se pinta.
+  if (fase === "seccion" && seccionSuelta) {
+    return (
+      <VistaMenus
+        soloSeccion={seccionSuelta}
+        menus={MENUS_EJEMPLO}
+        onVolver={() => { setSeccionSuelta(null); setFase("onboarding"); }}
+        modo={modo}
+        alimentosEvitados={alimentosEvitados}
+        patologias={perfil?.patologias || []}
+        nombrePerro={nombreMostrar}
+        necesitaTransicion={false}
+        dietaActual={dietaActual}
+        categoriasDisponibles={categoriasDisponibles}
+        perfil={perfil}
+        derReal={derReal}
+        etapaLabel={etapaLabel}
+        etapaCalculada={etapaCalculada}
+        especiesExcluidas={especiesExcluidas}
+        pesoAdultoEsperado={pesoAdultoEsperado}
+        edad={edad}
+        set={set}
+        setFase={setFase}
+        avisoNoForzado={false}
+        diagnosticoPersonalizar={null}
+        avisoExtraEspecie={null}
+        premium={premium}
+        onMostrarSuscripcion={() => setMostrarSuscripcion(true)}
+        onRegenerarConAlimentos={() => {}}
+      />
+    );
+  }
+
   // ⚠️ AÑADIDO — pantalla para los menús ya guardados en Supabase. Antes
   // no existía ninguna: se guardaban y no había forma de volver a verlos.
   if (fase === "misMenus") {
@@ -4440,27 +4704,39 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
           ) : (
             <div className="flex flex-col gap-2">
               {menusGuardados.map((fila) => (
-                <button
+                <div
                   key={fila.id}
-                  onClick={() => abrirMenuGuardado(fila)}
-                  className="flex items-center gap-3 p-4 rounded-2xl text-left"
+                  className="flex items-center gap-2 p-4 rounded-2xl"
                   style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}
                 >
-                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: VIOLETA }}>
-                    <ClipboardList size={16} style={{ color: ROSA }} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
-                      {fila.nombre || fecha(fila.created_at)}
-                    </p>
-                    <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>
-                      {ETIQUETAS_MODO[fila.modo] || "Automático"}
-                      {fila.num_menus > 1 ? ` · ${fila.num_menus} menús` : ""}
-                      {fila.der_real ? ` · ${Math.round(fila.der_real)} kcal` : ""}
-                    </p>
-                  </div>
-                  <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-                </button>
+                  <button
+                    onClick={() => abrirMenuGuardado(fila)}
+                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                  >
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: VIOLETA }}>
+                      <ClipboardList size={16} style={{ color: ROSA }} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                        {fila.nombre || fecha(fila.created_at)}
+                      </p>
+                      <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>
+                        {ETIQUETAS_MODO[fila.modo] || "Automático"}
+                        {fila.num_menus > 1 ? ` · ${fila.num_menus} menús` : ""}
+                        {fila.der_real ? ` · ${Math.round(fila.der_real)} kcal` : ""}
+                      </p>
+                    </div>
+                    <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+                  </button>
+                  <button
+                    onClick={() => setMenuAConfirmarBorrado(fila)}
+                    aria-label={`Borrar el menú del ${fecha(fila.created_at)}`}
+                    className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
+                    style={{ background: PAPEL }}
+                  >
+                    <Trash2 size={15} style={{ color: MALVA }} />
+                  </button>
+                </div>
               ))}
             </div>
           )}
@@ -4474,6 +4750,55 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             ← Volver al perfil de {nombreMostrar}
           </button>
         </div>
+        {/* Confirmación de borrado. Borrar sin preguntar un menú que
+            costó una llamada al servidor y que la usuaria puede estar
+            usando esta semana es demasiado fácil de hacer sin querer. */}
+        {menuAConfirmarBorrado && (
+          <div
+            className="fixed inset-0 z-[70] flex items-center justify-center px-6"
+            style={{ background: "rgba(35,21,57,0.45)" }}
+            onClick={() => !borrandoMenu && setMenuAConfirmarBorrado(null)}
+          >
+            <div
+              className="w-full max-w-sm rounded-2xl p-6"
+              style={{ background: "#FFFFFF" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <p className="mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 19 }}>
+                ¿Borrar este menú?
+              </p>
+              <p className="text-sm mb-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                {menuAConfirmarBorrado.nombre || fecha(menuAConfirmarBorrado.created_at)}
+              </p>
+              <p className="text-sm mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
+                No se puede deshacer.
+              </p>
+              {menuAConfirmarBorrado.error && (
+                <p className="text-sm mb-4" style={{ color: ROSA, fontFamily: fontBody }}>
+                  {menuAConfirmarBorrado.error}
+                </p>
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setMenuAConfirmarBorrado(null)}
+                  disabled={borrandoMenu}
+                  className="flex-1 py-3 rounded-xl text-sm"
+                  style={{ background: PAPEL, color: TINTA, fontFamily: fontBody, fontWeight: 600 }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={confirmarBorrarMenu}
+                  disabled={borrandoMenu}
+                  className="flex-1 py-3 rounded-xl text-sm"
+                  style={{ background: borrandoMenu ? MALVA : ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+                >
+                  {borrandoMenu ? "Borrando..." : "Borrar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
         {drawerLigero}
       </div>
     );
@@ -4557,6 +4882,71 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
       </div>
 
       <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
+        {/* ⚠️ AÑADIDO — aviso de que el menú guardado ya no le encaja al
+            perro con sus datos de ahora (típicamente porque ha dejado de
+            ser cachorro). Es un AVISO, no un cambio: el menú de la
+            usuaria no se toca hasta que ella diga. */}
+        {revision.estado === "caducado" && (
+          <div className="rounded-2xl p-4 mb-6" style={{ background: "#FFF7E8", border: `1.5px solid #F5DFA8` }}>
+            <div className="flex gap-2 items-start mb-2">
+              <AlertCircle size={16} style={{ color: "#B37A00", flexShrink: 0, marginTop: 2 }} />
+              <p className="text-sm" style={{ color: "#7A5C00", fontFamily: fontBody, fontWeight: 700 }}>
+                {revision.revisados > 1
+                  ? `${revision.caducados} de los ${revision.revisados} menús de ${nombreMostrar} se le han quedado cortos`
+                  : `El menú de ${nombreMostrar} se le ha quedado corto`}
+              </p>
+            </div>
+            <p className="text-xs mb-2" style={{ color: "#7A5C00", fontFamily: fontBody }}>
+              Con sus datos de ahora ({etapaLabel.toLowerCase()}, {Math.round(derReal)} kcal al día),
+              {revision.revisados > 1
+                ? " parte de su semana ya no cubre todo lo que necesita."
+                : " el menú que tiene guardado ya no cubre todo lo que necesita."}
+            </p>
+            {revision.porQue?.length > 0 && (
+              <ul className="text-xs mb-3 pl-4" style={{ color: "#7A5C00", fontFamily: fontBody, listStyle: "disc" }}>
+                {revision.porQue.slice(0, 4).map((motivo, i) => (
+                  <li key={i} className="mb-0.5">{motivo}</li>
+                ))}
+              </ul>
+            )}
+
+            {revision.menusNuevos?.length ? (
+              <>
+                <p className="text-xs mb-3" style={{ color: "#7A5C00", fontFamily: fontBody }}>
+                  {revision.revisados > 1
+                    ? "Hemos corregido sólo los que hacía falta; los que seguían valiendo se quedan igual."
+                    : "Hemos preparado uno corregido cambiando lo mínimo."}
+                  {revision.cambios?.quitados?.length > 0 &&
+                    ` Cambia ${revision.cambios.quitados.join(", ")}`}
+                  {revision.cambios?.anadidos?.length > 0 &&
+                    ` por ${revision.cambios.anadidos.join(", ")}`}
+                  {revision.cambios?.quitados?.length > 0 && "."}
+                </p>
+                <button
+                  onClick={verMenuRevalidado}
+                  className="w-full py-3 rounded-xl text-sm"
+                  style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+                >
+                  {revision.revisados > 1 ? "Ver la semana corregida →" : "Ver el menú corregido →"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-xs mb-3" style={{ color: "#7A5C00", fontFamily: fontBody }}>
+                  {revision.motivo || "No hemos podido arreglarlo conservando sus alimentos, hace falta un menú nuevo."}
+                </p>
+                <button
+                  onClick={() => { setPantalla("elegir"); setFase("generador"); }}
+                  className="w-full py-3 rounded-xl text-sm"
+                  style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+                >
+                  Hacer un menú nuevo →
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-col gap-2 mb-6">
           {filas.map((f) => {
             const Icono = f.Icono;
@@ -4874,9 +5264,36 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
           <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color={VIOLETA} className="absolute top-10 left-6 p-1" />
           <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
           <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
-            {necesitaVeterinario ? "Esto lo tiene que pautar tu veterinario" : "No se pudo calcular el menú"}
+            {necesitaVeterinario
+              ? "Esto lo tiene que pautar tu veterinario"
+              : "No hemos encontrado un menú que cumpla"}
           </p>
-          <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody }}>{menuError}</p>
+          <p className="text-sm mb-4" style={{ color: MALVA, fontFamily: fontBody }}>{menuError}</p>
+
+          {/* ⚠️ AÑADIDO — el motor ahora rechaza menús que antes sí daba,
+              a propósito: verifica los 30 requisitos y los límites de
+              seguridad, y prefiere no dar menú a dar uno que no cumple.
+              Sin esta explicación, "no se pudo calcular" se lee como una
+              app rota, cuando en realidad es la app haciendo su trabajo. */}
+          {!necesitaVeterinario && (
+            <div className="rounded-xl p-4 mb-6 text-left" style={{ background: "#F0ECF7", maxWidth: 340 }}>
+              <p className="text-xs mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                Esto no es un fallo de la app
+              </p>
+              <p className="text-xs mb-2" style={{ color: TINTA, fontFamily: fontBody }}>
+                Cada menú se comprueba contra los 30 requisitos nutricionales de
+                la etapa de {nombreMostrar} y contra los límites de seguridad.
+                Si no encontramos una combinación que los cumpla todos,
+                preferimos no darte un menú antes que darte uno que se queda
+                corto — es comida de verdad para tu perro, no una sugerencia.
+              </p>
+              <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                Suele arreglarse quitando alguna restricción (alergias,
+                categorías excluidas) o dejando más alimentos disponibles.
+              </p>
+            </div>
+          )}
+
           <button
             onClick={() => setPantalla("elegir")}
             className="px-5 py-3 rounded-xl text-sm"
