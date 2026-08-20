@@ -86,27 +86,33 @@ de las veces, en vez de depender de la suerte.
 
 ---
 
-## Muro de pago: apagado
+## Muro de pago: en modo prueba
 
-Ahora mismo **no hay nada bloqueado** y no se ofrece ninguna suscripción.
-El interruptor es una sola línea en `src/App.jsx`:
+El cobro de verdad todavía no está montado (`/stripe/checkout` no responde),
+pero Premium **no se quita de la app**. Hay tres modos, y se cambian sin
+tocar código: variable `VITE_PAYWALL` en Vercel + redeploy.
 
-```js
-const PAYWALL_ACTIVO = import.meta.env.VITE_PAYWALL === "on";
-```
+| Modo | Qué hace |
+|---|---|
+| **`demo`** *(por defecto)* | Premium se ve y se puede encender al momento, **sin pago**. Para probar cómo queda la app como Premium y como no-Premium. |
+| `off` | Nada bloqueado y Premium no se ofrece por ningún lado. |
+| `on` | El de verdad: plan consultado en Supabase y pago por Stripe. |
 
-Con el muro apagado, `premium` vale siempre `true`, así que todo lo que
-dependía de él queda abierto de una vez: el `PremiumGate`, las secciones del
-menú lateral, y el límite de menús en rotación. El botón *"Hazte Premium"*
-desaparece solo, porque sólo se pintaba cuando `!premium`.
+En modo `demo` la activación se guarda **sólo en ese navegador**
+(`localStorage`): nunca toca Supabase, así no deja cuentas de verdad
+marcadas como `plan="premium"` que luego haya que limpiar a mano. Y se
+puede **volver a apagar** desde el menú lateral — si no, en cuanto lo
+enciendes una vez ya no hay forma de ver la app como la ve alguien que no
+es Premium.
 
-**Para volver a encenderlo no hace falta tocar código:** poner
-`VITE_PAYWALL=on` en las variables de entorno de Vercel y redesplegar.
+La pantalla avisa en amarillo de que no se cobra nada: un botón que diga
+*"prueba gratis"* y active una suscripción sin más se lee como que va a
+haber un cargo más adelante.
 
-> Antes de encenderlo, comprobar que `/stripe/checkout` funciona de verdad
-> en `canislab-api`. El botón de prueba gratuita se quedaba colgado en
-> *"Un momento..."* porque su `fetch` tampoco tenía timeout (ya arreglado),
-> pero eso sólo hace visible el fallo — no arregla el endpoint.
+> Antes de poner `on`, comprobar que `/stripe/checkout` responde de verdad
+> en `canislab-api`. El botón se quedaba colgado en *"Un momento..."* porque
+> su `fetch` no tenía timeout (ya arreglado), pero eso sólo hace visible el
+> fallo — no arregla el endpoint.
 
 ---
 

@@ -9,12 +9,19 @@ const MALVA = '#9A8CB8'
 const fontDisplay = '"Georgia", serif'
 const fontBody = '"DM Sans", sans-serif'
 
-export default function Suscripcion({ usuario, onVolver }) {
+export default function Suscripcion({ usuario, onVolver, esDemo = false, onActivarDemo }) {
   const [planSeleccionado, setPlanSeleccionado] = useState('mensual')
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(null)
 
   const iniciarCheckout = async () => {
+    // ⚠️ Modo prueba: Premium se enciende al momento, sin pasar por
+    // Stripe. Sirve para ver cómo queda la app siendo Premium mientras el
+    // cobro de verdad todavía no está montado.
+    if (esDemo) {
+      onActivarDemo?.()
+      return
+    }
     setCargando(true)
     setError(null)
     try {
@@ -61,8 +68,23 @@ export default function Suscripcion({ usuario, onVolver }) {
         Rawku Premium
       </p>
       <p style={{ fontFamily: fontBody, fontSize: 15, color: MALVA, marginBottom: 8, textAlign: 'center' }}>
-        7 días gratis, luego elige tu plan
+        {esDemo ? 'Modo prueba — todavía no se cobra nada' : '7 días gratis, luego elige tu plan'}
       </p>
+
+      {/* Que quede clarísimo que aquí no se paga: un botón que diga
+          "prueba gratis" y active una suscripción sin avisar de que es
+          de mentira se lee como que va a haber un cargo más adelante. */}
+      {esDemo && (
+        <div style={{
+          width: '100%', maxWidth: 380, marginBottom: 20, padding: '12px 14px',
+          borderRadius: 14, background: '#FFF7E8', border: '1px solid #F5DFA8',
+        }}>
+          <p style={{ fontFamily: fontBody, fontSize: 13, color: '#7A5C00', margin: 0, textAlign: 'center' }}>
+            Rawku está en pruebas: el pago todavía no está activo. Puedes
+            encender Premium para verlo por dentro, sin ningún cargo.
+          </p>
+        </div>
+      )}
       <p style={{ fontFamily: fontBody, fontSize: 13, color: MALVA, marginBottom: 32, textAlign: 'center' }}>
         Sin permanencia. Cancela cuando quieras.
       </p>
@@ -147,7 +169,9 @@ export default function Suscripcion({ usuario, onVolver }) {
             marginBottom: 12,
           }}
         >
-          {cargando ? 'Un momento...' : 'Empezar prueba gratis de 7 días'}
+          {cargando
+            ? 'Un momento...'
+            : esDemo ? 'Activar Premium (sin pago)' : 'Empezar prueba gratis de 7 días'}
         </button>
 
         <button
@@ -169,7 +193,9 @@ export default function Suscripcion({ usuario, onVolver }) {
       </div>
 
       <p style={{ fontFamily: fontBody, fontSize: 12, color: '#C0B8D0', marginTop: 24, textAlign: 'center', maxWidth: 300 }}>
-        Pago seguro con Stripe. Puedes cancelar en cualquier momento desde tu cuenta.
+        {esDemo
+          ? 'Se guarda sólo en este dispositivo. Puedes apagarlo cuando quieras desde el menú.'
+          : 'Pago seguro con Stripe. Puedes cancelar en cualquier momento desde tu cuenta.'}
       </p>
     </div>
   )

@@ -7,10 +7,37 @@ import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import { API_BASE, fetchConTimeout } from "./api.js";
 
-// ⚠️ AÑADIDO — el muro de pago se enciende y se apaga desde aquí.
-// Apagado (por defecto): la app entera está abierta y no se ofrece ninguna
-// suscripción. Encendido: VITE_PAYWALL=on en Vercel.
-const PAYWALL_ACTIVO = import.meta.env.VITE_PAYWALL === "on";
+// ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
+// código: variable VITE_PAYWALL en Vercel + redeploy.
+//
+//   "demo"  (por defecto ahora) — Premium se ve y se puede activar, pero
+//           SIN pago: el botón lo enciende al momento. Sirve para probar
+//           cómo se ve la app como Premium y como no-Premium, sin
+//           depender de que Stripe funcione. La activación se guarda
+//           SOLO en este navegador (localStorage): nunca toca Supabase,
+//           así no deja plan="premium" en cuentas de verdad que luego
+//           haya que limpiar a mano.
+//
+//   "off"   — nada bloqueado y Premium no se ofrece por ningún lado.
+//
+//   "on"    — el de verdad: se consulta el plan en Supabase y se paga
+//           por Stripe. Antes de poner esto hay que comprobar que
+//           /stripe/checkout responde de verdad en canislab-api.
+const PAYWALL_MODO = import.meta.env.VITE_PAYWALL || "demo";
+const PAYWALL_ACTIVO = PAYWALL_MODO !== "off";
+const PAYWALL_ES_DEMO = PAYWALL_MODO === "demo";
+
+// Premium de mentira, sólo en este navegador.
+const CLAVE_PREMIUM_DEMO = "rawku_premium_demo";
+const leerPremiumDemo = () => {
+  try { return window.localStorage.getItem(CLAVE_PREMIUM_DEMO) === "si"; } catch { return false; }
+};
+const guardarPremiumDemo = (valor) => {
+  try {
+    if (valor) window.localStorage.setItem(CLAVE_PREMIUM_DEMO, "si");
+    else window.localStorage.removeItem(CLAVE_PREMIUM_DEMO);
+  } catch { /* navegador sin localStorage: se queda en memoria y ya */ }
+};
 import { capturarError, migaDePan, identificarUsuarioEnSentry } from "./sentry.js";
 
 // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: "pantalla en blanco al
@@ -3078,23 +3105,28 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   // ─── AUTH — recibido como prop desde AuthGate ─────────────
   // ⚠️ AÑADIDO — interruptor único del muro de pago.
   //
-  // Ahora mismo está APAGADO a propósito: no hay nada bloqueado y no se
-  // ofrece ninguna suscripción. Con el paywall apagado, `premium` vale
-  // siempre true, así que todo lo que dependía de él (PremiumGate, las
-  // secciones del menú, el límite de menús en rotación) queda abierto, y
-  // el botón de "Hazte Premium" desaparece solo, porque sólo se pintaba
-  // cuando `!premium`.
-  //
-  // Para volver a activarlo NO hace falta tocar código: basta con poner
-  // VITE_PAYWALL=on en las variables de entorno de Vercel y redesplegar.
-  const [premiumReal, setPremiumReal] = useState(false);
+  // Ver PAYWALL_MODO arriba: en "demo" manda el interruptor local, en "on"
+  // manda el plan guardado en Supabase, y en "off" todo está abierto.
+  const [premiumReal, setPremiumReal] = useState(PAYWALL_ES_DEMO ? leerPremiumDemo() : false);
   const premium = PAYWALL_ACTIVO ? premiumReal : true;
+
+  // Activar/desactivar el Premium de mentira. En modo demo se puede
+  // apagar otra vez, que es lo que hace falta para comprobar cómo ve la
+  // app alguien que NO es Premium.
+  const cambiarPremiumDemo = (valor) => {
+    guardarPremiumDemo(valor);
+    setPremiumReal(valor);
+    setMostrarSuscripcion(false);
+  };
   const [mostrarSuscripcion, setMostrarSuscripcion] = useState(false);
   const [cargandoPerfil] = useState(false); // ya no necesario, carga en AuthGate
 
   useEffect(() => {
     if (usuario) {
-      if (PAYWALL_ACTIVO) esPremium(usuario.id).then(setPremiumReal).catch(() => setPremiumReal(false));
+      // En demo NO se pregunta a Supabase: manda el interruptor local.
+      if (PAYWALL_ACTIVO && !PAYWALL_ES_DEMO) {
+        esPremium(usuario.id).then(setPremiumReal).catch(() => setPremiumReal(false));
+      }
     }
     const params = new URLSearchParams(window.location.search);
     if (params.get('pago') === 'ok') {
@@ -3485,7 +3517,19 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             className="w-full text-center py-3 mx-auto mb-2 rounded-xl"
             style={{ color: '#FFFFFF', background: ROSA, fontFamily: fontBody, fontSize: 14, fontWeight: 700, border: 'none', cursor: 'pointer', maxWidth: 280 }}
           >
-            ✨ Hazte Premium — 7 días gratis
+            {PAYWALL_ES_DEMO ? "✨ Ver Rawku Premium (sin pago)" : "✨ Hazte Premium — 7 días gratis"}
+          </button>
+        )}
+        {/* ⚠️ En modo prueba hace falta poder VOLVER a no ser Premium:
+            si no, en cuanto lo enciendes una vez ya no hay forma de ver
+            la app como la ve alguien que no lo es. */}
+        {usuario && premium && PAYWALL_ES_DEMO && (
+          <button
+            onClick={() => { setMenuLigeroAbierto(false); cambiarPremiumDemo(false); }}
+            className="w-full text-center py-2 mx-auto mb-2"
+            style={{ color: MALVA, fontFamily: 'monospace', fontSize: 11, background: 'none', border: 'none', cursor: 'pointer' }}
+          >
+            Premium de prueba activo · apagar
           </button>
         )}
         {usuario && (
@@ -4357,6 +4401,8 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
       <Suscripcion
         usuario={usuario}
         onVolver={() => setMostrarSuscripcion(false)}
+        esDemo={PAYWALL_ES_DEMO}
+        onActivarDemo={() => cambiarPremiumDemo(true)}
       />
     );
   }
