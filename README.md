@@ -86,6 +86,35 @@ de las veces, en vez de depender de la suerte.
 
 ---
 
+## Tres bugs de producción arreglados
+
+**"Calculando el menú de Cairo..." infinito.** Ninguna petición a la API
+tenía límite de tiempo — no había un solo `AbortController` en la app. El
+servidor de `canislab-api` (plan gratuito de Render) se duerme tras un rato
+sin uso, y un `fetch` sin timeout ante un servidor que no contesta se queda
+esperando indefinidamente: ni resuelve ni lanza error. Reproducido: 2
+minutos sin un solo cambio en pantalla.
+
+El reintento que ya existía (*"Despertando el servidor..."*) era **código
+muerto**: sólo salta cuando el `fetch` lanza error, y un servidor mudo no
+lanza nada. Ahora hay timeout (`TIEMPO_MAXIMO_PETICION_MS`, 45 s, holgado
+para un arranque en frío) y el error de timeout se deja subir hasta el
+bucle de reintentos en vez de tragárselo, que es justo para lo que estaba.
+Si se agotan los reintentos, el fallo va a Sentry.
+
+**La raza salía como texto ilegible.** No era codificación: se guardaba el
+**objeto entero** de la raza (`{nombre, tamano, pesoMin, pesoMax,
+pesoMedio}`) en una columna que sólo debía llevar el nombre, y al leerlo se
+volvía a envolver, así que `perfil.raza.nombre` acababa siendo otro objeto.
+Ahora se guarda sólo el nombre y se lee venga como venga — las filas viejas
+incluidas, sin necesidad de migración — recuperando la raza completa del
+catálogo para no perder el tamaño ni el peso de referencia.
+
+**El año de nacimiento por defecto era 2024.** Había dos años escritos en
+duro (`2024` y `2026`). Ahora se usa el año actual.
+
+---
+
 ## Pantalla de inicio: el perfil del perro
 
 Al entrar con un perro ya guardado, la app aterriza en el **perfil del perro**
