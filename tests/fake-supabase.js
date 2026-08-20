@@ -121,7 +121,17 @@ export function crearFakeSupabase(opciones = {}) {
 
   // Mutables: los tests los cambian en caliente vía POST /__control,
   // así un mismo servidor sirve para todos los escenarios.
-  const estado = { retrasoPerrosMs, perros: sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }] };
+  const estado = {
+    retrasoPerrosMs,
+    perros: sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }],
+    // Menús guardados, con su perro_id. El GET filtra de verdad por esa
+    // columna: así, si la app volviera a guardarlos con perro_id vacío,
+    // el test lo notaría (la lista saldría vacía) en vez de pasar por
+    // casualidad.
+    menus: [],
+    // Último POST /rest/v1/menus recibido, para poder afirmar sobre él.
+    ultimoMenuGuardado: null,
+  };
 
   const servidor = http.createServer(async (req, res) => {
     const url = new URL(req.url, "http://localhost");
@@ -163,9 +173,13 @@ export function crearFakeSupabase(opciones = {}) {
       if (typeof cfg.sinPerro === "boolean") {
         estado.perros = cfg.sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }];
       }
+      if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
+      if (cfg.olvidarUltimoMenu) estado.ultimoMenuGuardado = null;
       return responder(200, {
         retrasoPerrosMs: estado.retrasoPerrosMs,
         perros: estado.perros.length,
+        menus: estado.menus.length,
+        ultimoMenuGuardado: estado.ultimoMenuGuardado,
       });
     }
 
@@ -189,6 +203,44 @@ export function crearFakeSupabase(opciones = {}) {
     if (ruta === "/auth/v1/recover") return responder(200, {});
     if (ruta === "/auth/v1/settings") {
       return responder(200, { external: {}, disable_signup: false, mailer_autoconfirm: true });
+    }
+
+    // ── API de menús de mentira (lo que en producción es canislab-api) ──
+    //
+    // No calcula nada: devuelve siempre el mismo menú plausible. Los tests
+    // de este fichero comprueban la NAVEGACIÓN y el GUARDADO, no la
+    // nutrición — de eso se encarga el backend, que tiene sus propias
+    // pruebas. Lo único que importa aquí es que la respuesta tenga la
+    // forma que la app espera.
+    const MENU_FALSO = {
+      factible: true,
+      menu: {
+        "Carne muscular de pollo": 420,
+        "Hueso carnoso de pollo": 150,
+        "Hígado de ternera": 40,
+        "Vísceras de ternera": 40,
+        "Calabacín": 90,
+      },
+    };
+
+    if (ruta === "/menu/v2") {
+      return responder(200, MENU_FALSO);
+    }
+    if (ruta === "/menu/semana") {
+      const cuantos = Number(url.searchParams.get("numero_de_menus") || 1);
+      return responder(200, {
+        factible: true,
+        menus: Array.from({ length: cuantos }, () => ({ ...MENU_FALSO })),
+      });
+    }
+    if (ruta === "/alimentos") {
+      return responder(200, {
+        "Carne muscular": [{ nombre: "Carne muscular de pollo", kcal_100g: 110 }],
+        "Hueso carnoso": [{ nombre: "Hueso carnoso de pollo", kcal_100g: 150 }],
+      });
+    }
+    if (ruta.startsWith("/revisar") || ruta.startsWith("/analizar")) {
+      return responder(200, { factible: true, problemas: [] });
     }
 
     // ── PostgREST ───────────────────────────────────────────────────────
@@ -225,9 +277,25 @@ export function crearFakeSupabase(opciones = {}) {
     }
 
     if (ruta === "/rest/v1/menus") {
-      if (req.method === "GET") return responder(200, []);
-      const menu = { id: "menu-de-prueba", ...JSON.parse(cuerpo || "{}") };
-      return responder(201, unSoloObjeto ? menu : [menu]);
+      if (req.method === "GET") {
+        // PostgREST manda ?perro_id=eq.<uuid>. Filtramos de verdad: es lo
+        // que hace que el test detecte un perro_id mal guardado.
+        const filtro = url.searchParams.get("perro_id");
+        const perroId = filtro && filtro.startsWith("eq.") ? filtro.slice(3) : null;
+        const filas = perroId
+          ? estado.menus.filter((m) => String(m.perro_id) === perroId)
+          : estado.menus;
+        return responder(200, filas);
+      }
+      const datos = JSON.parse(cuerpo || "{}");
+      const fila = {
+        id: `menu-${estado.menus.length + 1}`,
+        created_at: new Date().toISOString(),
+        ...datos,
+      };
+      estado.ultimoMenuGuardado = fila;
+      estado.menus.unshift(fila);
+      return responder(201, unSoloObjeto ? fila : [fila]);
     }
 
     responder(404, { message: `fake-supabase: sin ruta para ${req.method} ${ruta}` });
