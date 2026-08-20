@@ -1,0 +1,22 @@
+# Dependencias
+node_modules/
+
+# Build de Vite
+dist/
+
+# Variables de entorno locales (¡nunca subir el DSN ni claves aquí!)
+.env
+.env.local
+.env.*.local
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Sistema / editor
+.DS_Store
+*.log
+.vscode/
+.idea/
