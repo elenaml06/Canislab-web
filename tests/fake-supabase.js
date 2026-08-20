@@ -138,6 +138,13 @@ export function crearFakeSupabase(opciones = {}) {
     revalidar: "vale",
     // Último POST /rest/v1/menus recibido, para poder afirmar sobre él.
     ultimoMenuGuardado: null,
+    // Qué manda el backend en "aviso_composicion": el texto que explica
+    // por qué a este menú le falta una categoría entera. null = no falta
+    // nada. Se puede fijar por separado para la GENERACIÓN y para la
+    // EDICIÓN, porque el caso interesante es justo que cambien: se genera
+    // con aviso y al editar deja de haberlo.
+    avisoComposicion: null,
+    avisoComposicionAlEditar: null,
   };
 
   const servidor = http.createServer(async (req, res) => {
@@ -182,6 +189,8 @@ export function crearFakeSupabase(opciones = {}) {
       }
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
       if (typeof cfg.colgarGenerador === "boolean") estado.colgarGenerador = cfg.colgarGenerador;
+      if ("avisoComposicion" in cfg) estado.avisoComposicion = cfg.avisoComposicion;
+      if ("avisoComposicionAlEditar" in cfg) estado.avisoComposicionAlEditar = cfg.avisoComposicionAlEditar;
       if (cfg.revalidar) estado.revalidar = cfg.revalidar;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
       // raza guardada "a la antigua" (el objeto entero), para comprobar
@@ -298,13 +307,25 @@ export function crearFakeSupabase(opciones = {}) {
     }
 
     if (ruta === "/menu/v2") {
-      return responder(200, MENU_FALSO);
+      return responder(200, { ...MENU_FALSO, aviso_composicion: estado.avisoComposicion });
+    }
+    // Los tres caminos de edición devuelven el menú en "gramos", no en
+    // "menu" -- igual que el backend de verdad.
+    if (ruta === "/menu/cambiar" || ruta === "/menu/anadir" || ruta === "/menu/quitar") {
+      return responder(200, {
+        factible: true,
+        gramos: MENU_FALSO.menu,
+        ficha: { semaforo: "verde", correctos: 30, total: 30 },
+        problemas_seguridad: [],
+        aviso_composicion: estado.avisoComposicionAlEditar,
+      });
     }
     if (ruta === "/menu/semana") {
       const cuantos = Number(url.searchParams.get("numero_de_menus") || 1);
       return responder(200, {
         factible: true,
-        menus: Array.from({ length: cuantos }, () => ({ ...MENU_FALSO })),
+        menus: Array.from({ length: cuantos },
+                          () => ({ ...MENU_FALSO, aviso_composicion: estado.avisoComposicion })),
       });
     }
     if (ruta === "/alimentos") {
