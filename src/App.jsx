@@ -5,6 +5,7 @@ import Auth from "./auth";
 import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros } from "./supabase";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
+import { capturarError, migaDePan, identificarUsuarioEnSentry } from "./sentry.js";
 
 // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: "pantalla en blanco al
 // tocar el menú" reportado varias veces sin conseguir localizar la
@@ -30,6 +31,10 @@ class ErrorBoundary extends Component {
     // queda en la consola del navegador (F12 → Console) para poder
     // copiar el mensaje exacto si hace falta investigarlo más a fondo
     console.error("RAWKU — error atrapado:", error, info);
+    // ⚠️ AÑADIDO — y además se manda a Sentry con el "component stack"
+    // (el árbol de componentes React donde reventó), que es justo el
+    // dato que no se ve en una captura de pantalla de la consola.
+    capturarError(error, { componentStack: info?.componentStack });
   }
   render() {
     if (this.state.error) {
@@ -3081,7 +3086,33 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   };
 
   // ─── RESTO DE ESTADOS — inicializados con perroInicial si existe ──
-  const [paso, setPaso] = useState(1);
+  //
+  // ⚠️ CORREGIDO — CASO REAL: "el perfil se carga desde Supabase (los
+  // datos SÍ llegan) pero la app no navega al generador, se queda en el
+  // onboarding". Causa real encontrada: este componente decide qué
+  // pintar mirando PRIMERO `paso` y sólo DESPUÉS `fase`:
+  //
+  //     if (paso === 1) { ...asistente, pantalla 1 de 6... }
+  //     ...
+  //     if (fase === "onboarding") { ...resumen del perfil... }
+  //     if (fase === "generador" && pantalla === "elegir") { ...generador... }
+  //
+  // `fase` SÍ se inicializaba con perroInicial, pero `paso` se quedaba
+  // siempre en 1. Resultado: al volver con un perro ya guardado,
+  // fase valía "generador" (correcto) pero paso valía 1, y como el
+  // `if (paso === 1)` va antes, ganaba él y se pintaba el asistente
+  // desde cero -- la pantalla del generador era literalmente
+  // inalcanzable. No faltaba ningún dato: el perro estaba cargado,
+  // simplemente nunca se llegaba a mirar `fase`.
+  //
+  // Terminar el onboarding a mano deja `paso` en TOTAL_PASOS + 1 (ver
+  // `siguiente()`), así que ése es el valor que significa "asistente ya
+  // completado". Ahora los tres estados que describen "por dónde va
+  // esta usuaria" (paso, fase y pantalla) se derivan de UNA sola
+  // fuente de verdad, para que no puedan volver a contradecirse.
+  const yaTienePerroGuardado = Boolean(perroInicial);
+
+  const [paso, setPaso] = useState(yaTienePerroGuardado ? TOTAL_PASOS + 1 : 1);
   const [perfil, setPerfil] = useState(() => {
     const base = {
       nombre: "", sexo: null, modoRaza: null, raza: null, tamanoManual: null,
@@ -3108,7 +3139,20 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   const nombreMostrar = perfil.nombre.trim() || "tu perro";
   const [busqueda, setBusqueda] = useState("");
 
-  const [fase, setFase] = useState(perroInicial ? "generador" : "onboarding");
+  const [fase, setFase] = useState(yaTienePerroGuardado ? "generador" : "onboarding");
+
+  // Deja constancia en Sentry de la decisión de arranque. Si algún día
+  // vuelve a fallar la navegación, en el error se verá con qué datos se
+  // montó la pantalla, sin tener que pedirle a nadie que abra la consola.
+  useEffect(() => {
+    migaDePan("Pantalla inicial decidida", {
+      tienePerroGuardado: yaTienePerroGuardado,
+      paso: yaTienePerroGuardado ? TOTAL_PASOS + 1 : 1,
+      fase: yaTienePerroGuardado ? "generador" : "onboarding",
+    });
+    // Sólo al montar: es la decisión de arranque, no un seguimiento continuo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [menuReal, setMenuReal] = useState(null);
   const [alimentosAPreservar, setAlimentosAPreservar] = useState([]);
   // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso, AUDITORÍA: el
@@ -5119,24 +5163,74 @@ function AuthGate() {
   const [usuario, setUsuario] = useState(undefined);
   const [perroInicial, setPerroInicial] = useState(undefined); // undefined=cargando, null=no hay, {...}=hay perro
 
-  useEffect(() => {
-    const { data: { subscription } } = onAuthChange(async (user) => {
-      if (!user) {
-        setUsuario(null);
-        setPerroInicial(null);
-        return;
-      }
+  // ⚠️ CORREGIDO — había DOS caminos distintos cargando el perro a la vez
+  // y pisándose el uno al otro:
+  //   1. el listener de onAuthChange (se dispara solo al hacer login), y
+  //   2. onAutenticado, el callback que <Auth> llama tras el login.
+  // Se veían literalmente dos GET /rest/v1/perros seguidos por cada
+  // login. Además el listener hacía `setUsuario(user)` y sólo DESPUÉS
+  // (tras un await) tocaba perroInicial: en esa rendija, usuario ya
+  // valía "hay sesión" mientras perroInicial seguía valiendo el `null`
+  // viejo de "aquí no hay nadie logueado". Si React pintaba justo ahí,
+  // el componente principal se montaba creyendo que la usuaria NO tiene
+  // perro -- y como sus estados iniciales se calculan una única vez al
+  // montar, se quedaba en el onboarding para siempre aunque el perro
+  // llegase medio segundo después.
+  //
+  // Ahora hay UN solo cargador. Pone usuario y perroInicial JUNTOS y sin
+  // ningún await entre medias, así que nunca existe un render con esa
+  // pareja de valores incoherente. Y lleva un contador de peticiones,
+  // para que una respuesta lenta de una sesión vieja no pise a otra más
+  // nueva (login → logout → login rápido).
+  const cargaRef = useRef({ token: 0, userIdEnCurso: null });
+
+  const cargarSesion = (user) => {
+    if (!user) {
+      cargaRef.current = { token: cargaRef.current.token + 1, userIdEnCurso: null };
+      identificarUsuarioEnSentry(null);
+      setUsuario(null);
+      setPerroInicial(null);
+      return;
+    }
+
+    identificarUsuarioEnSentry(user);
+
+    // Ya estamos cargando (o hemos cargado) el perro de este mismo
+    // usuario: refrescar el objeto de sesión es suficiente. Evita el
+    // GET duplicado del login y los refetch inútiles cada vez que
+    // Supabase renueva el token.
+    if (cargaRef.current.userIdEnCurso === user.id) {
       setUsuario(user);
-      // Cargamos el perro AQUÍ, en AuthGate, antes de montar el componente principal
-      // Así el componente principal sabe desde el principio si hay perfil o no,
-      // y puede inicializar fase correctamente sin necesidad de cambiarlo después
-      try {
-        const perros = await getPerros(user.id);
-        setPerroInicial(perros && perros.length > 0 ? perros[0] : null);
-      } catch {
+      return;
+    }
+
+    const token = cargaRef.current.token + 1;
+    cargaRef.current = { token, userIdEnCurso: user.id };
+
+    // ── Los dos juntos, sin await de por medio ──
+    setUsuario(user);
+    setPerroInicial(undefined);
+    migaDePan("AuthGate: sesión iniciada, cargando perro");
+
+    getPerros(user.id)
+      .then((perros) => {
+        if (cargaRef.current.token !== token) return; // respuesta obsoleta
+        const perro = perros && perros.length > 0 ? perros[0] : null;
+        migaDePan("AuthGate: perro cargado", { tienePerro: Boolean(perro) });
+        setPerroInicial(perro);
+      })
+      .catch((err) => {
+        if (cargaRef.current.token !== token) return;
+        // Antes esto era un `catch {}` mudo: si Supabase fallaba, la
+        // usuaria acababa en el onboarding sin que quedara rastro en
+        // ningún sitio. Ahora el fallo llega a Sentry.
+        capturarError(err, { donde: "AuthGate.getPerros", userId: user.id });
         setPerroInicial(null);
-      }
-    });
+      });
+  };
+
+  useEffect(() => {
+    const { data: { subscription } } = onAuthChange(cargarSesion);
     return () => subscription.unsubscribe();
   }, []);
 
@@ -5151,21 +5245,17 @@ function AuthGate() {
   }
 
   if (usuario === null) {
-    return <Auth onAutenticado={async (user) => {
-      setUsuario(user);
-      setPerroInicial(undefined); // vuelve a cargar
-      try {
-        const perros = await getPerros(user.id);
-        setPerroInicial(perros && perros.length > 0 ? perros[0] : null);
-      } catch {
-        setPerroInicial(null);
-      }
-    }} />;
+    // Pasa por el MISMO cargador que el listener. Es idempotente: si el
+    // listener de onAuthChange ya arrancó la carga de este usuario (que
+    // es lo normal), esto no lanza una segunda petición.
+    return <Auth onAutenticado={cargarSesion} />;
   }
 
   return (
     <ErrorBoundary>
-      <RawkuOnboardingInterna usuario={usuario} perroInicial={perroInicial} />
+      {/* key por cuenta: si se cambia de usuario, el componente se monta
+          de cero en vez de heredar el estado del anterior. */}
+      <RawkuOnboardingInterna key={usuario.id} usuario={usuario} perroInicial={perroInicial} />
     </ErrorBoundary>
   );
 }

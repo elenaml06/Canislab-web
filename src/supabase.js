@@ -1,7 +1,12 @@
 import { createClient } from '@supabase/supabase-js'
 
-const SUPABASE_URL = 'https://kvtkdpgpmrvwmvymyqof.supabase.co'
-const SUPABASE_PUBLISHABLE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2dGtkcGdwbXJ2d212eW15cW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTY4OTEsImV4cCI6MjEwMjczMjg5MX0.-I339koFHO6TE2bf0ty9hNji-9CeH57AE0C4a2ZccYE'
+// Se pueden sobreescribir por variable de entorno (VITE_SUPABASE_URL /
+// VITE_SUPABASE_ANON_KEY). Si no existen, se usan los valores de
+// siempre, así el deploy de Vercel sigue funcionando sin tocar nada.
+// Los tests automáticos las usan para apuntar a un Supabase de mentira
+// levantado en local, sin rozar la base de datos real.
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://kvtkdpgpmrvwmvymyqof.supabase.co'
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2dGtkcGdwbXJ2d212eW15cW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTY4OTEsImV4cCI6MjEwMjczMjg5MX0.-I339koFHO6TE2bf0ty9hNji-9CeH57AE0C4a2ZccYE'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
