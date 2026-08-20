@@ -99,12 +99,47 @@ celebra (*"¡Listo, Cairo!"*), y al volver cada día informa (*"Cairo — sus
 datos y lo que necesita al día"*). Antes decía siempre lo primero, que leído
 a diario sonaba a que la app creía que acababas de darte de alta.
 
-> **Pendiente.** El menú lateral de esta pantalla es el *ligero*
-> (`drawerLigero`): "Evolución y crecimiento", "Mis menús" y "Analizar la
-> dieta actual" salen en gris con *"aún no"*, porque esas secciones viven
-> dentro de `VistaMenus` y sólo existen cuando ya hay un menú generado.
-> Para que el perfil funcione del todo como pantalla de inicio, harían falta
-> alcanzables desde aquí — es un cambio aparte, no trivial.
+Desde el menú lateral se llega a **Mis menús** (ver abajo). *"Evolución y
+crecimiento"* y *"Analizar la dieta actual"* siguen en gris con *"aún no"*:
+esas dos viven dentro de `VistaMenus` y sólo existen cuando hay un menú
+recién generado.
+
+---
+
+## Menús guardados
+
+Los menús se guardan en Supabase al generarlos y se pueden volver a
+consultar desde **Menú lateral → Mis menús**. Al abrir uno se ve tal y como
+se generó, con las kcal y la etapa que tenía **entonces** — no las de hoy:
+el perro puede haber cambiado de peso, y repintarlo con los números
+actuales diría algo que nunca fue verdad.
+
+Esto estaba roto de tres formas a la vez:
+
+1. **Se guardaban sin dueño.** La llamada era `guardarMenu(usuario.id, null, …)`
+   y ese `null` era el `perro_id`. Como `getMenus(perroId)` filtra justo por
+   esa columna, ningún menú guardado se podía encontrar jamás.
+2. **Nunca se leían.** `getMenus` estaba escrita en `src/supabase.js` y no se
+   llamaba desde ningún sitio. Los menús entraban en la base de datos y no
+   volvían a salir: cerrabas la app y los perdías de vista para siempre.
+3. **No había pantalla** donde verlos. La sección "Mis menús" que ya existía
+   vive dentro de `VistaMenus` y lista sólo los de la sesión actual, recién
+   generados — no los guardados.
+
+### Migración pendiente para los menús viejos
+
+El código ya guarda el `perro_id` correcto, pero **los menús guardados antes
+de este cambio tienen la columna vacía** y no aparecerán en "Mis menús"
+hasta que se adopten. Hay que ejecutar una vez, en Supabase → SQL Editor:
+
+[`supabase/migracion-menus-perro-id.sql`](supabase/migracion-menus-perro-id.sql)
+
+Asigna cada menú huérfano al perro de su propia cuenta (el `user_id` sí se
+guardaba bien). Es seguro repetirla: sólo toca filas con `perro_id` vacío.
+
+Se eligió arreglar la columna de verdad, en vez de filtrar por `user_id`,
+porque más adelante habrá **varias mascotas por cuenta** y entonces
+`user_id` dejaría de identificar de quién es cada menú.
 
 ---
 

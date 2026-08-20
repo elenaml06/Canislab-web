@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
-import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros } from "./supabase";
+import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros, getMenus } from "./supabase";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import { capturarError, migaDePan, identificarUsuarioEnSentry } from "./sentry.js";
@@ -62,7 +62,10 @@ class ErrorBoundary extends Component {
   }
 }
 
-const API_BASE = "https://canislab-api.onrender.com";
+// Igual que con Supabase: se puede apuntar a otro sitio por variable de
+// entorno (los tests levantan una API de mentira en local). Sin variable,
+// se usa la de producción de siempre.
+const API_BASE = import.meta.env.VITE_API_BASE || "https://canislab-api.onrender.com";
 
 function especieDe(nombre) {
   if (nombre.includes(" de ")) {
@@ -3204,6 +3207,62 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   const [pantalla, setPantalla] = useState("elegir");
 
   const [numMenus, setNumMenus] = useState(1);
+
+  // ⚠️ AÑADIDO — los menús SÍ se guardaban en Supabase (guardarMenu), pero
+  // nadie los leía nunca: getMenus estaba escrita en supabase.js y no se
+  // llamaba desde ningún sitio. Es decir, entraban en la base de datos y
+  // no volvían a salir: cerrabas la app y los perdías de vista para
+  // siempre. Esto los recupera y los enseña.
+  const [menusGuardados, setMenusGuardados] = useState([]);
+  const [cargandoMenusGuardados, setCargandoMenusGuardados] = useState(false);
+  // Fila de Supabase que se está viendo ahora mismo, si se ha abierto uno
+  // guardado. Sirve para dos cosas: saber que NO hay que regenerar nada, y
+  // mostrar las kcal/etapa con las que se hizo aquel menú, no las de hoy
+  // (el perro puede haber cambiado de peso desde entonces).
+  const [menuGuardadoAbierto, setMenuGuardadoAbierto] = useState(null);
+
+  useEffect(() => {
+    if (!perfil._id) { setMenusGuardados([]); return; }
+    let cancelado = false;
+    setCargandoMenusGuardados(true);
+    getMenus(perfil._id)
+      .then((filas) => {
+        if (cancelado) return;
+        migaDePan("Menús guardados cargados", { n: filas.length });
+        setMenusGuardados(filas);
+      })
+      .catch((err) => {
+        if (cancelado) return;
+        capturarError(err, { donde: "getMenus", perroId: perfil._id });
+        setMenusGuardados([]);
+      })
+      .finally(() => { if (!cancelado) setCargandoMenusGuardados(false); });
+    return () => { cancelado = true; };
+  }, [perfil._id]);
+
+  const abrirMenuGuardado = (fila) => {
+    setMenuGuardadoAbierto(fila);
+    setMenuReal(fila.menus_data);
+    setModo(fila.modo || "automatico");
+    // Limpiar restos de una generación anterior, o la pantalla de
+    // resultado mostraría el "Calculando..." o un error viejo.
+    setMenuCargando(false);
+    setMenuError(null);
+    setDiagnosticoMenus(null);
+    setNecesitaVeterinario(false);
+    setMenuLigeroAbierto(false);
+    // Pantalla propia: la de "resultado" tiene un useEffect que genera un
+    // menú nuevo cada vez que se entra en ella, y nos machacaría éste.
+    setPantalla("menuGuardado");
+    setFase("generador");
+  };
+
+  const salirDeMenuGuardado = () => {
+    setMenuGuardadoAbierto(null);
+    setMenuReal(null);
+    setPantalla("elegir");
+    setFase("misMenus");
+  };
   // ⚠️ AÑADIDO (5 agosto, noche): la barra de arriba con el menú lateral
   // desaparecía en cuantos/personalizar/resultado -- vivía solo dentro de
   // VistaMenus, que no existe todavía en esas pantallas (aún no hay
@@ -3318,9 +3377,28 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
               termine este proceso) -- así se entiende que van a estar
               ahí en cuanto termines, en vez de que simplemente no
               existan. */}
+          {/* ⚠️ AÑADIDO — "Mis menús" ya no está siempre en gris: si hay
+              menús guardados de verdad y no estamos a mitad del asistente,
+              se puede entrar. Las otras dos siguen viviendo dentro de
+              VistaMenus y necesitan un menú recién generado. */}
+          {menusGuardados.length > 0 && !(paso >= 1 && paso <= TOTAL_PASOS) && (
+            <button
+              onClick={() => { setMenuLigeroAbierto(false); setFase("misMenus"); }}
+              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
+            >
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
+                <ClipboardList size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
+              </div>
+              <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>Mis menús</span>
+              <span className="text-[10px] mr-1" style={{ color: MALVA, fontFamily: "monospace" }}>{menusGuardados.length}</span>
+              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+            </button>
+          )}
           {[
             { Icono: TrendingUp, label: "Evolución y crecimiento" },
-            { Icono: ClipboardList, label: "Mis menús" },
+            ...(menusGuardados.length > 0 && !(paso >= 1 && paso <= TOTAL_PASOS)
+              ? []
+              : [{ Icono: ClipboardList, label: "Mis menús" }]),
             { Icono: Search, label: "Analizar la dieta actual" },
           ].map((op) => (
             <div key={op.label} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl" style={{ opacity: 0.4 }}>
@@ -3645,13 +3723,29 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             setAvisoNoForzado(resultados.some((r) => r.no_se_pudo_forzar));
             // Guardar menú en Supabase si el usuario está autenticado
             if (usuario) {
-              guardarMenu(usuario.id, null, {
+              // ⚠️ CORREGIDO — aquí iba `null` como perro_id, así que TODOS
+              // los menús se guardaban sin dueño. getMenus filtra justo por
+              // esa columna, de modo que aunque se hubiera llamado, no
+              // habría encontrado nada. Ahora se guarda el perro de verdad,
+              // que es lo que hará falta cuando haya varios perros por
+              // cuenta.
+              if (!perfil._id) {
+                capturarError(new Error("Menú guardado sin perro_id"), {
+                  donde: "guardarMenu", motivo: "perfil._id vacío al generar",
+                });
+              }
+              guardarMenu(usuario.id, perfil._id || null, {
                 modo,
                 derReal,
                 etapaLabel,
                 menusData: resultados,
                 numMenus: resultados.length,
-              }).catch(console.error);
+              })
+                .then((fila) => {
+                  // Que aparezca ya en "Mis menús" sin recargar la app.
+                  if (fila) setMenusGuardados((previos) => [fila, ...previos]);
+                })
+                .catch((err) => capturarError(err, { donde: "guardarMenu" }));
             }
             // ⚠️ AÑADIDO (5 agosto, madrugada): captura el aviso de
             // "también se ha añadido X" que puede mandar cualquiera de
@@ -4190,6 +4284,78 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     );
   }
 
+  // ⚠️ AÑADIDO — pantalla para los menús ya guardados en Supabase. Antes
+  // no existía ninguna: se guardaban y no había forma de volver a verlos.
+  if (fase === "misMenus") {
+    const ETIQUETAS_MODO = { automatico: "Automático", personalizar: "Personalizado" };
+    const fecha = (iso) => {
+      if (!iso) return "";
+      try {
+        return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+      } catch { return ""; }
+    };
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+        <Fuentes />
+        <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
+          <div className="flex items-center justify-between mb-3">
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
+            <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Mis menús</p>
+          </div>
+          <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+            Los menús de<br />{nombreMostrar}
+          </h1>
+        </div>
+
+        <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
+          {cargandoMenusGuardados ? (
+            <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>Cargando...</p>
+          ) : menusGuardados.length === 0 ? (
+            <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
+              Todavía no hay ningún menú guardado. En cuanto generes uno, aparecerá aquí.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {menusGuardados.map((fila) => (
+                <button
+                  key={fila.id}
+                  onClick={() => abrirMenuGuardado(fila)}
+                  className="flex items-center gap-3 p-4 rounded-2xl text-left"
+                  style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}
+                >
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: VIOLETA }}>
+                    <ClipboardList size={16} style={{ color: ROSA }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                      {fila.nombre || fecha(fila.created_at)}
+                    </p>
+                    <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>
+                      {ETIQUETAS_MODO[fila.modo] || "Automático"}
+                      {fila.num_menus > 1 ? ` · ${fila.num_menus} menús` : ""}
+                      {fila.der_real ? ` · ${Math.round(fila.der_real)} kcal` : ""}
+                    </p>
+                  </div>
+                  <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="flex-1" />
+          <button
+            onClick={() => setFase("onboarding")}
+            className="text-xs mt-6"
+            style={{ color: MALVA, fontFamily: fontBody }}
+          >
+            ← Volver al perfil de {nombreMostrar}
+          </button>
+        </div>
+        {drawerLigero}
+      </div>
+    );
+  }
+
   if (fase === "onboarding") {
   const filas = [
     {
@@ -4545,7 +4711,11 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     );
   }
 
-  if (fase === "generador" && pantalla === "resultado") {
+  // ⚠️ "menuGuardado" reutiliza toda esta pantalla, pero es una pantalla
+  // DISTINTA a propósito: el useEffect que genera menús se dispara con
+  // pantalla === "resultado", así que si un menú guardado se abriera ahí,
+  // se regeneraría encima y perderíamos justo el que se quería ver.
+  if (fase === "generador" && (pantalla === "resultado" || pantalla === "menuGuardado")) {
     if (menuCargando) {
       return (
         <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center relative" style={{ background: PAPEL }}>
@@ -4595,7 +4765,12 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
         </div>
       );
     }
-    const menus = menuReal ? respuestaApiAMenu(menuReal, derReal) : MENUS_EJEMPLO;
+    // Un menú guardado se enseña con las kcal y la etapa que tenía CUANDO
+    // se generó: el perro puede haber cambiado de peso desde entonces, y
+    // repintarlo con los números de hoy diría algo que nunca fue verdad.
+    const derParaMostrar = menuGuardadoAbierto?.der_real || derReal;
+    const etapaParaMostrar = menuGuardadoAbierto?.etapa_label || etapaLabel;
+    const menus = menuReal ? respuestaApiAMenu(menuReal, derParaMostrar) : MENUS_EJEMPLO;
     const huboDiscrepancia = diagnosticoMenus && diagnosticoMenus.conseguidos < diagnosticoMenus.pedidos;
     return (
       <>
@@ -4615,7 +4790,7 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derReal} etapaLabel={etapaLabel} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} />
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} />
       </>
     );
   }

@@ -69,6 +69,9 @@ export default defineConfig({
         // La app de los tests apunta al Supabase de mentira, NUNCA al real.
         VITE_SUPABASE_URL: `http://127.0.0.1:${PUERTO_SUPABASE}`,
         VITE_SUPABASE_ANON_KEY: "clave-anon-de-mentira",
+        // La API de menús también es de mentira, servida por el mismo
+        // proceso: los tests no llaman a canislab-api en Render.
+        VITE_API_BASE: `http://127.0.0.1:${PUERTO_SUPABASE}`,
         // Sin DSN: los tests no mandan nada a Sentry.
         VITE_SENTRY_DSN: "",
       },
