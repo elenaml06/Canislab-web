@@ -951,6 +951,13 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // sola, hígado en exceso, patologías...) en cada respuesta, pero
       // nunca se leían aquí -- se perdían sin que nadie los viera.
       problemasSeguridad: data.problemas_seguridad || [],
+      // ⚠️ AÑADIDO — mismo caso que problemasSeguridad: el servidor ya
+      // mandaba esto y no se leía en ningún sitio. Explica por qué a
+      // este menú le falta una categoría entera (típicamente vísceras o
+      // hígado, cuando el perro tiene varias alergias y no hay ninguna
+      // compatible). El menú cumple los 30 requisitos igual, pero no se
+      // parece a los demás -- sin explicación, parece un error.
+      avisoComposicion: data.aviso_composicion || null,
     };
   });
 }
@@ -1422,6 +1429,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // quedaría oculto para siempre solo porque el usuario cerró OTRO
   // aviso anterior.
   const [problemasSeguridadVisible, setProblemasSeguridadVisible] = useState(true);
+  const [avisoComposicionVisible, setAvisoComposicionVisible] = useState(true);
   // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: recordatorio
   // general de congelación/descongelación, visible arriba del todo en
   // la pantalla de menús, no solo enterrado dentro del texto de "cómo
@@ -1443,6 +1451,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // fichaPorMenu -- se actualiza tras cada edición, para que los avisos
   // de seguridad reflejen el menú ACTUAL, no el original sin editar.
   const [problemasSeguridadPorMenu, setProblemasSeguridadPorMenu] = useState({});
+  const [avisoComposicionPorMenu, setAvisoComposicionPorMenu] = useState({});
 
   const menu = menus.find((m) => m.id === tabActiva);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
@@ -1514,7 +1523,16 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // exceso, límites por patología...) en cada respuesta, y nunca se
   // mostraban en ningún sitio -- se perdían en silencio.
   const problemasSeguridad = problemasSeguridadPorMenu[tabActiva] || menu.problemasSeguridad || [];
+  // El aviso de composición va por menú igual que los de seguridad: en
+  // una rotación, un menú puede llevar vísceras y otro no.
+  // Se usa `??` y no `||` a propósito: tras editar, el servidor manda
+  // null para decir "ya no falta nada", y con `||` ese null caería al
+  // valor de la generación y el aviso se quedaría pegado para siempre.
+  const avisoComposicion = tabActiva in avisoComposicionPorMenu
+    ? avisoComposicionPorMenu[tabActiva]
+    : (menu.avisoComposicion || null);
   useEffect(() => { setProblemasSeguridadVisible(true); }, [JSON.stringify(problemasSeguridad)]);
+  useEffect(() => { setAvisoComposicionVisible(true); }, [avisoComposicion]);
   useEffect(() => { setAvisoPatologiaVisible(true); }, [JSON.stringify(patologias)]);
 
   // ⚠️ CORREGIDO (5 agosto, madrugada): mismo motivo que itemsBase --
@@ -1591,6 +1609,11 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         // puede resolver un problema, o crear uno nuevo) -- había que
         // refrescarlos igual que se refresca la ficha.
         setProblemasSeguridadPorMenu((prev) => ({ ...prev, [tabActiva]: data.problemas_seguridad || [] }));
+        // ⚠️ Mismo motivo: al editar, la composición puede cambiar. Si el
+        // cambio hace que vuelvan a entrar las vísceras, el aviso tiene
+        // que desaparecer -- por eso se guarda también cuando viene null,
+        // en vez de dejar el de antes.
+        setAvisoComposicionPorMenu((prev) => ({ ...prev, [tabActiva]: data.aviso_composicion || null }));
         // ⚠️ AÑADIDO (5 agosto, madrugada): si el servidor tuvo que
         // cambiar otros alimentos además del pedido para que el cambio
         // fuera viable, lo dice aquí -- se muestra como aviso, no como
@@ -2035,6 +2058,40 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             </p>
           </div>
         )}
+        {avisoComposicion && avisoComposicionVisible && (
+          // ⚠️ AÑADIDO — por qué este menú no se parece a los demás.
+          //
+          // Va en su PROPIO panel y no dentro de "avisos de seguridad", y
+          // no es un descuido: que a un menú le falten las vísceras no es
+          // un riesgo, es una consecuencia de las alergias del perro. El
+          // menú cumple los 30 requisitos igual. Meterlo bajo el rótulo
+          // de seguridad, en ámbar, diría que hay algo peligroso cuando
+          // no lo hay -- y a base de teñir de ámbar cosas que no lo son,
+          // los avisos que SÍ importan dejan de leerse.
+          //
+          // Va ENCIMA del de seguridad y en violeta (el color de la app
+          // para informar, el mismo de los otros avisos informativos),
+          // manteniendo la forma del panel para que se lea como parte
+          // del mismo sistema.
+          <div className="rounded-xl p-3 mb-3" style={{ background: "#F4F0FB", border: "1px solid #DCD2F0" }}>
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="flex items-center gap-1.5">
+                <Info size={14} style={{ color: VIOLETA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  Sobre la composición
+                </p>
+              </div>
+              <button onClick={() => setAvisoComposicionVisible(false)}
+                      aria-label="Cerrar el aviso sobre la composición">
+                <X size={14} style={{ color: VIOLETA }} />
+              </button>
+            </div>
+            <p className="text-xs leading-relaxed" style={{ color: TINTA, fontFamily: fontBody }}>
+              {avisoComposicion}
+            </p>
+          </div>
+        )}
+
         {problemasSeguridad.length > 0 && problemasSeguridadVisible && (
           <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
             <div className="flex items-center justify-between mb-1.5">
