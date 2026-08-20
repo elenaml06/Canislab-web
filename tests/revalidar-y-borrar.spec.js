@@ -146,3 +146,72 @@ test.describe("borrar menús guardados", () => {
     expect(estado.menus, "el menú sigue en la base de datos").toBe(0);
   });
 });
+
+// ─── La semana entera, no sólo un menú ───────────────────────────────────────
+//
+// Si alguien come 3 menús distintos a la semana, hay que revisar los 3: los
+// requisitos de etapa son los mismos, pero los ALIMENTOS no, así que uno
+// puede seguir cumpliendo y otro no.
+
+const rotacionDeTres = () => ({
+  id: "menu-rotacion",
+  user_id: CUENTA_DE_PRUEBA.userId,
+  perro_id: PERRO_DE_PRUEBA.id,
+  modo: "automatico",
+  der_real: 1211,
+  etapa_label: "Adulto",
+  num_menus: 3,
+  nombre: "Semana de 3 menús",
+  created_at: "2026-08-01T10:00:00.000Z",
+  menus_data: [
+    { menu: { "Carne muscular de pollo": 420, "Hueso carnoso de pollo": 150 } },
+    // Éste es el que se ha quedado viejo: lleva el multi de cachorro.
+    { menu: { "Carne muscular de ternera": 400, "V-INTEGRA Cachorro": 8 } },
+    { menu: { "Carne muscular de pavo": 410, "Hueso carnoso de pavo": 140 } },
+  ],
+});
+
+test.describe("la semana entera", () => {
+  test.beforeEach(async ({ request }) => {
+    await configurarBackend(request, {
+      sinPerro: false, retrasoPerrosMs: 100, colgarGenerador: false, perro: {},
+      menus: [rotacionDeTres()], revalidar: "por_contenido",
+    });
+  });
+
+  test("se revisan TODOS los menús de la rotación, no sólo el primero", async ({ page }) => {
+    const revalidaciones = [];
+    page.on("request", (req) => {
+      if (req.url().includes("/menu/revalidar")) revalidaciones.push(req.url());
+    });
+
+    await page.goto("/");
+    await iniciarSesion(page);
+    await expect(page.getByText(/se le han quedado cortos/)).toBeVisible({ timeout: 20_000 });
+
+    expect(revalidaciones.length, "una llamada por menú de la semana").toBe(3);
+    // Y el aviso dice cuántos fallan de cuántos.
+    await expect(page.getByText(/1 de los 3 menús/)).toBeVisible();
+  });
+
+  test("la semana corregida conserva intactos los menús que sí valían", async ({ page }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+    await page.getByRole("button", { name: /Ver la semana corregida/ }).click();
+
+    await expect(page.getByText(/SEMANA DE/i)).toBeVisible();
+
+    // Los menús se ven de uno en uno, por pestañas. El 1 seguía valiendo:
+    // tiene que estar intacto.
+    await expect(page.getByText(/Carne muscular de pollo/).first()).toBeVisible();
+
+    // El 2 es el que se ha corregido.
+    await page.getByRole("button", { name: /Menú 2/ }).first().click();
+    await expect(page.getByText(/Mejillón de Nueva Zelanda/).first()).toBeVisible();
+    await expect(page.getByText(/V-INTEGRA Cachorro/)).toHaveCount(0);
+
+    // Y el 3 tampoco se ha tocado.
+    await page.getByRole("button", { name: /Menú 3/ }).first().click();
+    await expect(page.getByText(/Carne muscular de pavo/).first()).toBeVisible();
+  });
+});

@@ -138,6 +138,18 @@ fingiendo que funcionó.
 
 ---
 
+## Un muro de pago nunca encierra
+
+El overlay de `PremiumGate` es `fixed inset-0` con `z-index: 100`, así que
+tapaba la pantalla entera **incluido el botón de volver** de la sección que
+hay debajo. Quien entraba sin ser Premium se quedaba encerrado: o pagaba o
+recargaba la página.
+
+Ahora `PremiumGate` acepta `onCerrar` y pinta un *"← Ahora no, volver"*.
+Puede bloquear el contenido; nunca la salida. Hay un test que lo fija.
+
+---
+
 ## Muro de pago: en modo prueba
 
 El cobro de verdad todavía no está montado (`/stripe/checkout` no responde),
@@ -210,10 +222,13 @@ celebra (*"¡Listo, Cairo!"*), y al volver cada día informa (*"Cairo — sus
 datos y lo que necesita al día"*). Antes decía siempre lo primero, que leído
 a diario sonaba a que la app creía que acababas de darte de alta.
 
-Desde el menú lateral se llega a **Mis menús** (ver abajo). *"Evolución y
-crecimiento"* y *"Analizar la dieta actual"* siguen en gris con *"aún no"*:
-esas dos viven dentro de `VistaMenus` y sólo existen cuando hay un menú
-recién generado.
+Desde el menú lateral se llega a **Mis menús**, **Evolución y crecimiento**
+y **Analizar la dieta actual**. Las dos últimas viven dentro de
+`VistaMenus` (que sólo existe con un menú recién generado), así que se
+abren con `soloSeccion`: VistaMenus pinta únicamente esa sección, sin la
+vista de menús detrás. Ninguna de las dos necesita un menú — una es la
+ficha de peso y la otra el analizador de dieta; sólo estaban fuera de
+alcance.
 
 ---
 

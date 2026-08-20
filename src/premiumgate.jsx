@@ -5,7 +5,7 @@ const MALVA = '#9A8CB8'
 const fontDisplay = '"Georgia", serif'
 const fontBody = '"DM Sans", sans-serif'
 
-export default function PremiumGate({ premium, onSuscribir, titulo, descripcion, children }) {
+export default function PremiumGate({ premium, onSuscribir, onCerrar, titulo, descripcion, esDemo = false, children }) {
   if (premium) return children;
 
   return (
@@ -96,12 +96,36 @@ export default function PremiumGate({ premium, onSuscribir, titulo, descripcion,
             marginTop: 4,
           }}
         >
-          ✨ Prueba gratis 7 días
+          {esDemo ? '✨ Activar Premium (sin pago)' : '✨ Prueba gratis 7 días'}
         </button>
 
         <p style={{ fontFamily: fontBody, fontSize: 12, color: '#C0B8D0', margin: 0 }}>
-          Sin permanencia · Cancela cuando quieras
+          {esDemo ? 'Rawku está en pruebas: todavía no se cobra nada' : 'Sin permanencia · Cancela cuando quieras'}
         </p>
+
+        {/* ⚠️ AÑADIDO — CASO REAL: este overlay es `fixed inset-0` con
+            z-index 100, así que tapaba TODA la pantalla, incluido el
+            botón de "volver" de la sección que hay debajo. Quien entraba
+            sin ser Premium se quedaba encerrado: o pagaba o recargaba la
+            página. Un muro de pago puede bloquear el contenido, pero
+            nunca la salida. */}
+        {onCerrar && (
+          <button
+            onClick={onCerrar}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: MALVA,
+              fontFamily: fontBody,
+              fontSize: 14,
+              cursor: 'pointer',
+              marginTop: 6,
+              padding: '8px 16px',
+            }}
+          >
+            ← Ahora no, volver
+          </button>
+        )}
       </div>
     </div>
   );

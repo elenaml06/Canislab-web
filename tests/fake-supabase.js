@@ -247,6 +247,30 @@ export function crearFakeSupabase(opciones = {}) {
       if (!datos.menu_actual_gramos || Object.keys(datos.menu_actual_gramos).length === 0) {
         return responder(400, { detail: "Hace falta el menú actual con sus gramos." });
       }
+      // "por_contenido": decide menú a menú, como hace el de verdad. Un
+      // menú que lleva el multivitamínico de cachorro ya no vale; los
+      // demás sí. Sirve para probar la semana MEZCLADA.
+      if (estado.revalidar === "por_contenido") {
+        const lleva = Object.keys(datos.menu_actual_gramos).includes("V-INTEGRA Cachorro");
+        if (!lleva) {
+          return responder(200, { factible: true, sigue_siendo_valido: true, menu: datos.menu_actual_gramos });
+        }
+        const corregido = { ...datos.menu_actual_gramos };
+        delete corregido["V-INTEGRA Cachorro"];
+        corregido["Mejillón de Nueva Zelanda"] = 12;
+        return responder(200, {
+          factible: true,
+          sigue_siendo_valido: false,
+          por_que_ya_no_vale: ["manganeso se queda en el 68%"],
+          menu: corregido,
+          cambios: {
+            quitados: ["V-INTEGRA Cachorro"],
+            anadidos: ["Mejillón de Nueva Zelanda"],
+            se_mantienen: Object.keys(corregido).filter((n) => n !== "Mejillón de Nueva Zelanda"),
+          },
+        });
+      }
+
       if (estado.revalidar === "vale") {
         return responder(200, { factible: true, sigue_siendo_valido: true, menu: datos.menu_actual_gramos });
       }
