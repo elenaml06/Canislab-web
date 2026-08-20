@@ -3139,7 +3139,18 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   const nombreMostrar = perfil.nombre.trim() || "tu perro";
   const [busqueda, setBusqueda] = useState("");
 
-  const [fase, setFase] = useState(yaTienePerroGuardado ? "generador" : "onboarding");
+  // ⚠️ CAMBIADO — pedido expreso: al entrar, en vez de caer directamente
+  // en el generador de menús, se aterriza en el PERFIL del perro (la
+  // pantalla del resumen, con sus datos y sus kcal/día), y desde ahí se
+  // va a donde haga falta. Entrar directamente a "¿cómo quieres hacer el
+  // menú?" daba por hecho que lo único que quieres hacer es generar un
+  // menú, y encima dejaba el perfil escondido.
+  //
+  // Ojo: `fase` arranca igual para todo el mundo; quien manda es `paso`.
+  // Con perro guardado, paso vale TOTAL_PASOS + 1 y se pinta el resumen.
+  // Sin perro, paso vale 1 y gana el asistente (el `if (paso === 1)` va
+  // antes). Por eso aquí ya no hace falta mirar yaTienePerroGuardado.
+  const [fase, setFase] = useState("onboarding");
 
   // Deja constancia en Sentry de la decisión de arranque. Si algún día
   // vuelve a fallar la navegación, en el error se verá con qué datos se
@@ -3148,7 +3159,8 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     migaDePan("Pantalla inicial decidida", {
       tienePerroGuardado: yaTienePerroGuardado,
       paso: yaTienePerroGuardado ? TOTAL_PASOS + 1 : 1,
-      fase: yaTienePerroGuardado ? "generador" : "onboarding",
+      fase: "onboarding",
+      pantallaQueSeVe: yaTienePerroGuardado ? "perfil del perro" : "asistente paso 1",
     });
     // Sólo al montar: es la decisión de arranque, no un seguimiento continuo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -3274,7 +3286,12 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
               activa en las pantallas de después (elegir/cuantos/
               personalizar/resultado), donde sí tiene sentido volver a
               revisar un perfil ya completado. */}
-          {paso >= 1 && paso <= TOTAL_PASOS ? (
+          {/* ⚠️ AMPLIADO — antes esto solo contemplaba estar DENTRO de los
+              pasos 1-6. Ahora que el perfil es la pantalla de inicio, el
+              menú también se puede abrir estando ya en el resumen del
+              perfil (paso > TOTAL_PASOS con fase "onboarding"), donde
+              "Editar perfil de X" tampoco lleva a ningún sitio nuevo. */}
+          {(paso >= 1 && paso <= TOTAL_PASOS) || (fase === "onboarding" && paso > TOTAL_PASOS) ? (
             <div className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl" style={{ opacity: 0.4 }}>
               <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
                 <Dog size={17} strokeWidth={1.6} style={{ color: MALVA }} />
@@ -4223,13 +4240,30 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   return (
     <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
       <Fuentes />
+      {/* ⚠️ AÑADIDO — esta pantalla era la única sin botón de menú, algo
+          que no importaba cuando solo se veía al terminar el onboarding,
+          pero que ahora sí: siendo la pantalla de inicio, sin menú te
+          quedas sin poder ir a ningún otro sitio. */}
       <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8 text-center">
+        <div className="flex items-center justify-between mb-4">
+          <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
+          <span className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
+            Perfil
+          </span>
+        </div>
         <Dog size={36} strokeWidth={1.4} style={{ color: ROSA, margin: "0 auto" }} />
+        {/* ⚠️ El mismo sitio sirve para dos momentos muy distintos, y el
+            texto tiene que notarlo: justo después de rellenar el perfil
+            por primera vez (celebración), o cada vez que entras con un
+            perro ya guardado (pantalla de inicio). "¡Listo, Cairo!" está
+            bien lo primero y raro lo segundo. */}
         <p className="text-2xl mt-4" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
-          ¡Listo, {nombreMostrar}!
+          {yaTienePerroGuardado ? nombreMostrar : `¡Listo, ${nombreMostrar}!`}
         </p>
         <p className="text-xs mt-1" style={{ color: MALVA, fontFamily: fontBody }}>
-          Revisa que todo esté bien — toca el lápiz para cambiar algo
+          {yaTienePerroGuardado
+            ? "Sus datos y lo que necesita al día — toca el lápiz para cambiar algo"
+            : "Revisa que todo esté bien — toca el lápiz para cambiar algo"}
         </p>
       </div>
 
@@ -4319,9 +4353,12 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
           className="w-full py-4 rounded-2xl text-base"
           style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
         >
-          Todo bien, ir al generador de menús →
+          {yaTienePerroGuardado
+            ? "Hacer el menú de la semana →"
+            : "Todo bien, ir al generador de menús →"}
         </button>
       </div>
+      {drawerLigero}
     </div>
   );
   }

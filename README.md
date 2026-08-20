@@ -86,6 +86,28 @@ de las veces, en vez de depender de la suerte.
 
 ---
 
+## Pantalla de inicio: el perfil del perro
+
+Al entrar con un perro ya guardado, la app aterriza en el **perfil del perro**
+(sus datos, con un lápiz por fila para corregir cualquier cosa, y la tarjeta
+con sus kcal/día), no directamente en el generador de menús. Desde ahí se va
+al generador con un toque: *"Hacer el menú de la semana →"*.
+
+Es la misma pantalla que se ve al terminar el onboarding, así que los textos
+cambian según el momento (`yaTienePerroGuardado`): en el primer registro
+celebra (*"¡Listo, Cairo!"*), y al volver cada día informa (*"Cairo — sus
+datos y lo que necesita al día"*). Antes decía siempre lo primero, que leído
+a diario sonaba a que la app creía que acababas de darte de alta.
+
+> **Pendiente.** El menú lateral de esta pantalla es el *ligero*
+> (`drawerLigero`): "Evolución y crecimiento", "Mis menús" y "Analizar la
+> dieta actual" salen en gris con *"aún no"*, porque esas secciones viven
+> dentro de `VistaMenus` y sólo existen cuando ya hay un menú generado.
+> Para que el perfil funcione del todo como pantalla de inicio, harían falta
+> alcanzables desde aquí — es un cambio aparte, no trivial.
+
+---
+
 ## Bug arreglado: "el perfil carga pero no navega al generador"
 
 **Síntoma.** Al entrar con una cuenta que ya tenía un perro guardado, los
