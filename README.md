@@ -86,6 +86,58 @@ de las veces, en vez de depender de la suerte.
 
 ---
 
+## Revalidación del menú cuando cambia el perro
+
+Un menú calculado para un cachorro **deja de cumplir** cuando ese perro es
+adulto: los requisitos FEDIAF cambian por etapa, no basta con escalar las
+calorías, y el multivitamínico de cachorro sigue dentro del menú.
+
+El backend tiene `/menu/revalidar` para esto, pero la web no lo llamaba desde
+ningún sitio: el menú guardado se seguía enseñando tal cual.
+
+**Cómo funciona ahora.** Al entrar en el perfil, si hay un menú guardado se
+comprueba contra el DER y la etapa de *ahora*. Si ya no cumple, sale un aviso
+con el motivo concreto (*"manganeso se queda en el 68%"*) y un botón para ver
+el menú corregido — que `/menu/revalidar` ya devuelve hecho, conservando
+todos los alimentos que puede.
+
+> **La app avisa; no cambia el menú por su cuenta.** Cambiarle el menú a
+> alguien sin preguntar, cuando puede tener la compra hecha y la comida
+> porcionada en el congelador, no es una decisión de la app. Hay un test que
+> fija esta regla.
+
+Sólo se comprueba el menú más reciente, y sólo desde el perfil, con una
+huella (menú + DER + etapa) para no repetir la llamada: es un aviso para que
+decida la usuaria, no una auditoría del historial, y la API se duerme.
+
+### Los tres casos que pasan por verificación completa
+
+Comprobado en el código de `canislab-api`, no supuesto:
+
+| Caso | Endpoint | Verificación |
+|---|---|---|
+| Añadir/quitar alimento | `/menu/anadir`, `/menu/quitar` | `_recalcular_con_motor` → `_garantizar_verificado` |
+| Elegir un alimento distinto | `/menu/cambiar` | `_recalcular_con_motor` → `_garantizar_verificado` |
+| El perro cambia de etapa | `/menu/revalidar` | `verificar_v2` + `_menu_precalculado_es_seguro` |
+
+Los tres rehacen el menú entero con el motor y pasan por el mismo filtro
+final, que recalcula la ficha sobre los gramos que de verdad se devuelven y
+rechaza el menú si no sale verde.
+
+### "No hemos encontrado un menú que cumpla"
+
+La API puede rechazar menús que antes daba. Es intencionado: prefiere no dar
+menú a dar uno que no cumple. La pantalla de error lo explica ahora en esos
+términos y sugiere qué aflojar, en vez de parecer que la app está rota.
+
+### Borrar menús guardados
+
+Papelera por fila en "Mis menús", con confirmación (*"no se puede
+deshacer"*). Si el borrado falla, se dice — no se quita de la pantalla
+fingiendo que funcionó.
+
+---
+
 ## Muro de pago: en modo prueba
 
 El cobro de verdad todavía no está montado (`/stripe/checkout` no responde),
