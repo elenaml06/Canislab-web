@@ -35,6 +35,8 @@ async function iniciarSesion(page) {
 // Marcas de cada pantalla, tal y como las ve una usuaria.
 const generador = (page) => page.getByText("Menú semanal");
 const asistentePaso1 = (page) => page.getByText("Perfil nuevo");
+// Pantalla de inicio: el perfil del perro (sus datos y sus kcal/día).
+const perfilDelPerro = (page) => page.getByRole("button", { name: /Hacer el menú de la semana/ });
 
 test.describe("login → generador", () => {
   test.beforeEach(async ({ request }) => {
@@ -43,19 +45,39 @@ test.describe("login → generador", () => {
     await configurarBackend(request, { sinPerro: false, retrasoPerrosMs: 400 });
   });
 
-  test("una cuenta con perro guardado entra directa al generador", async ({ page }) => {
+  test("una cuenta con perro guardado entra en el perfil del perro", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
 
-    // Lo que se espera: el generador de menús.
+    // Lo que se espera: el perfil, con el nombre del perro y sus datos.
+    await expect(page.getByText(PERRO_DE_PRUEBA.nombre).first()).toBeVisible();
+    await expect(perfilDelPerro(page)).toBeVisible();
+
+    // Y lo que NO puede pasar (el bug original): quedarse en el asistente
+    // de perfil nuevo, pidiendo otra vez unos datos que ya están guardados.
+    await expect(asistentePaso1(page)).toHaveCount(0);
+  });
+
+  test("desde el perfil se llega al generador en un toque", async ({ page }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    await perfilDelPerro(page).click();
+
     await expect(generador(page)).toBeVisible();
     await expect(
       page.getByRole("heading", { name: new RegExp(PERRO_DE_PRUEBA.nombre) })
     ).toBeVisible();
+  });
 
-    // Y lo que NO puede pasar (el bug): quedarse en el asistente de
-    // perfil nuevo, pidiendo otra vez unos datos que ya están guardados.
-    await expect(asistentePaso1(page)).toHaveCount(0);
+  test("el perfil tiene menú lateral para ir a otro sitio", async ({ page }) => {
+    // Esta pantalla era la única sin botón de menú. Siendo ahora la
+    // pantalla de inicio, sin él te quedarías sin navegación.
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    await page.getByRole("button", { name: "Menú", exact: true }).click();
+    await expect(page.getByText(/Editar perfil de/)).toBeVisible();
   });
 
   test("sigue funcionando aunque Supabase tarde mucho en devolver el perro", async ({ page, request }) => {
@@ -71,18 +93,18 @@ test.describe("login → generador", () => {
     await expect(page.getByText("Cargando...")).toBeVisible();
     await expect(asistentePaso1(page)).toHaveCount(0);
 
-    await expect(generador(page)).toBeVisible({ timeout: 20_000 });
+    await expect(perfilDelPerro(page)).toBeVisible({ timeout: 20_000 });
     await expect(asistentePaso1(page)).toHaveCount(0);
   });
 
-  test("al recargar con la sesión abierta se sigue en el generador", async ({ page }) => {
+  test("al recargar con la sesión abierta se sigue en el perfil, no en el asistente", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await expect(generador(page)).toBeVisible();
+    await expect(perfilDelPerro(page)).toBeVisible();
 
     await page.reload();
 
-    await expect(generador(page)).toBeVisible();
+    await expect(perfilDelPerro(page)).toBeVisible();
     await expect(asistentePaso1(page)).toHaveCount(0);
   });
 
@@ -97,7 +119,7 @@ test.describe("login → generador", () => {
 
     await page.goto("/");
     await iniciarSesion(page);
-    await expect(generador(page)).toBeVisible();
+    await expect(perfilDelPerro(page)).toBeVisible();
 
     expect(peticionesPerros.length, `peticiones a /perros: ${peticionesPerros.length}`).toBe(1);
   });
@@ -114,6 +136,7 @@ test.describe("login → generador", () => {
     await expect(asistentePaso1(page)).toBeVisible();
     await expect(page.getByText("1 / 6")).toBeVisible();
     await expect(generador(page)).toHaveCount(0);
+    await expect(perfilDelPerro(page)).toHaveCount(0);
   });
 
   test("el login no deja errores de JavaScript en consola", async ({ page }) => {
@@ -124,7 +147,7 @@ test.describe("login → generador", () => {
 
     await page.goto("/");
     await iniciarSesion(page);
-    await expect(generador(page)).toBeVisible();
+    await expect(perfilDelPerro(page)).toBeVisible();
 
     expect(errores).toEqual([]);
   });
