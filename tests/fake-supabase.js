@@ -163,6 +163,13 @@ export function crearFakeSupabase(opciones = {}) {
     // los perros con los mismos alimentos) y si la llamada falla entera.
     casaCompraUnica: true,
     casaFalla: false,
+    // Última petición recibida en /menu/varios-perros, para poder
+    // comprobar que la app manda lo que dice mandar.
+    ultimaPeticionCasa: null,
+    // Si la cuenta de prueba es Premium. Hace falta para probar lo que
+    // está detrás del muro de pago (varios menús en la semana), sin tener
+    // que tocar Stripe ni nada real.
+    premium: false,
   };
 
   const servidor = http.createServer(async (req, res) => {
@@ -212,6 +219,7 @@ export function crearFakeSupabase(opciones = {}) {
       if (cfg.revalidar) estado.revalidar = cfg.revalidar;
       if (typeof cfg.casaCompraUnica === "boolean") estado.casaCompraUnica = cfg.casaCompraUnica;
       if (typeof cfg.casaFalla === "boolean") estado.casaFalla = cfg.casaFalla;
+      if (typeof cfg.premium === "boolean") estado.premium = cfg.premium;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
       // raza guardada "a la antigua" (el objeto entero), para comprobar
       // que esas filas viejas se siguen leyendo bien.
@@ -238,6 +246,7 @@ export function crearFakeSupabase(opciones = {}) {
         // aquí se quedaría corta justo cuando se añada uno nuevo — que es
         // el momento en que hace falta.
         perrosGuardados: estado.perros.map((p) => ({ ...p })),
+        ultimaPeticionCasa: estado.ultimaPeticionCasa,
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
           const k = String(m.perro_id);
           cuenta[k] = (cuenta[k] || 0) + 1;
@@ -370,38 +379,51 @@ export function crearFakeSupabase(opciones = {}) {
     if (ruta === "/menu/varios-perros") {
       const pedido = JSON.parse(cuerpo || "{}");
       const noms = pedido.nombres || [];
+      const cuantos = Math.max(1, Number(pedido.numero_de_menus) || 1);
+      const unica = estado.casaCompraUnica;
       const base = { "Carne muscular de pollo": 420, "Hueso carnoso de pollo": 150,
                      "Hígado de ternera": 40 };
-      const unica = estado.casaCompraUnica;
-      const menus = noms.map((nombre, i) => {
+      // Días por menú, igual que reparte el backend de verdad.
+      const dias = Array.from({ length: cuantos },
+                              (_, k) => Math.floor(7 / cuantos) + (k < 7 % cuantos ? 1 : 0));
+      const perros = noms.map((nombre, i) => {
         // el primero manda; los demás, o iguales, o con uno más
-        const propio = (i > 0 && !unica)
-          ? { ...base, "Sardina": 25 }
-          : { ...base };
         const anadidos = (i > 0 && !unica) ? ["Sardina"] : [];
-        // las cantidades cambian por perro: es el sentido de "parecidos"
-        const escalado = Object.fromEntries(
-          Object.entries(propio).map(([n, g]) => [n, Math.round(g * (1 - i * 0.4))]));
+        const menus = Array.from({ length: cuantos }, (_, k) => {
+          const propio = { ...base, ...(anadidos.length ? { Sardina: 25 } : {}) };
+          // las cantidades cambian por perro: es el sentido de "parecidos"
+          const escalado = Object.fromEntries(
+            Object.entries(propio).map(([n, g]) => [n, Math.round(g * (1 - i * 0.4))]));
+          return {
+            menu: escalado, dias: dias[k],
+            kcal_total: 1200 - i * 400, gramos_total: 610 - i * 200,
+            cambios: { iguales: Object.keys(base), anadidos, quitados: [],
+                       cuantos_cambios: anadidos.length },
+          };
+        });
         return {
-          indice: i, nombre, es_la_base: i === 0, factible: true,
-          menu: escalado,
-          kcal_total: 1200 - i * 400, gramos_total: 610 - i * 200,
-          cambios: { iguales: Object.keys(base), anadidos, quitados: [],
-                     cuantos_cambios: anadidos.length },
+          indice: i, nombre, es_la_base: i === 0, factible: true, menus,
+          cambios: i === 0 ? null
+            : { iguales: Object.keys(base), anadidos, quitados: [],
+                cuantos_cambios: anadidos.length * cuantos },
           resumen_parecido: i === 0 ? null : (anadidos.length === 0
             ? `El menú de ${nombre} lleva exactamente los mismos alimentos que el de ${noms[0]}: solo cambian las cantidades. Compras una vez y repartes.`
-            : `El menú de ${nombre} comparte 3 alimentos con el de ${noms[0]}, pero lleva además Sardina. Es un cambio respecto a la compra de ${noms[0]}.`),
+            : `El menú de ${nombre} comparte 3 alimentos con el de ${noms[0]}, pero lleva además Sardina.`),
         };
       });
-      const totales = menus.reduce((t, m) => t + m.cambios.cuantos_cambios, 0);
+      const totales = perros.reduce((t, p) => t + (p.cambios?.cuantos_cambios || 0), 0);
       return responder(200, {
         factible: !estado.casaFalla,
         motivo: estado.casaFalla ? "No hemos encontrado menús que cumplan para todos." : undefined,
         modo_conjunto: pedido.modo_conjunto,
+        numero_de_menus: cuantos,
         perro_base: noms[0],
         cambios_totales: totales,
         compra_unica: totales === 0,
-        menus,
+        perros,
+        // Se guarda lo que pidió la app, para poder afirmar sobre ello: que
+        // el número de menús y lo elegido en Personalizar llegan de verdad.
+        ...(estado.ultimaPeticionCasa = pedido, {}),
       });
     }
     if (ruta === "/menu/semana") {
@@ -478,8 +500,10 @@ export function crearFakeSupabase(opciones = {}) {
     if (ruta === "/rest/v1/profiles") {
       const perfil = {
         id: USER_ID,
-        plan: "free",
-        suscripcion_activa_hasta: null,
+        plan: estado.premium ? "premium" : "free",
+        suscripcion_activa_hasta: estado.premium
+          ? new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
+          : null,
         nombre: "Cuenta de prueba",
       };
       return responder(200, unSoloObjeto ? perfil : [perfil]);
