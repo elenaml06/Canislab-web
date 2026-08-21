@@ -233,11 +233,11 @@ export function crearFakeSupabase(opciones = {}) {
         // sobre lo que la pantalla enseña: la ficha se pinta desde el
         // estado local, así que puede verse bien y estar guardada mal
         // (que es exactamente el fallo del 21 de agosto).
-        perrosGuardados: estado.perros.map((p) => ({
-          nombre: p.nombre, fecha_nacimiento: p.fecha_nacimiento,
-          castrado: p.castrado, actividad: p.actividad, tamano: p.tamano,
-          etapa: p.etapa, peso_actual: p.peso_actual,
-        })),
+        // La fila ENTERA, no una selección: una prueba de ida y vuelta
+        // tiene que poder mirar cualquier columna, y una lista de campos
+        // aquí se quedaría corta justo cuando se añada uno nuevo — que es
+        // el momento en que hace falta.
+        perrosGuardados: estado.perros.map((p) => ({ ...p })),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
           const k = String(m.perro_id);
           cuenta[k] = (cuenta[k] || 0) + 1;

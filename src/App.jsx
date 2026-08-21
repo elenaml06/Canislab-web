@@ -3176,7 +3176,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-21 · ficha del perro completa
+              build 2026-08-21 · ficha completa y dieta recordada
             </p>
           </div>
         </div>
@@ -3490,7 +3490,16 @@ function RawkuOnboardingInterna({
   const [menuError, setMenuError] = useState(null);
   const [necesitaVeterinario, setNecesitaVeterinario] = useState(false);
   const [menuDespertando, setMenuDespertando] = useState(false);
-  const [dietaActual, setDietaActual] = useState(null);
+  // ⚠️ CORREGIDO (21 agosto) — MISMA FAMILIA QUE EL FALLO DE LA FICHA:
+  // esto arrancaba SIEMPRE en null y la columna `dieta_actual` no se leía
+  // en ningún sitio de la app. O sea: se preguntaba "¿qué come X ahora
+  // mismo?" en cada visita, aunque ya lo hubieras contestado, y encima al
+  // guardar la ficha se escribía null encima de lo que había.
+  //
+  // No es solo una molestia: de aquí sale si el perro necesita TRANSICIÓN
+  // (pienso o comida cocinada -> BARF no se hace de golpe). Un perro que
+  // venía de pienso perdía ese dato y con él el aviso de transición.
+  const [dietaActual, setDietaActual] = useState(perroInicial?.dieta_actual ?? null);
   const [modo, setModo] = useState(null);
   const [pantalla, setPantalla] = useState("elegir");
 
@@ -3891,7 +3900,7 @@ function RawkuOnboardingInterna({
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-21 · ficha del perro completa
+          build 2026-08-21 · ficha completa y dieta recordada
         </p>
         {usuario && !premium && (
           <button
