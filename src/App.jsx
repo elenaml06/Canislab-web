@@ -3128,7 +3128,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
       )}
       {menuLateralAbierto && (
         <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
-          <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+          <div role="dialog" aria-label="Panel lateral" className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
               <div>
                 <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombrePerro}</p>
@@ -3193,6 +3193,131 @@ function BotonPrincipal({ activo, onClick, texto }) {
   );
 }
 
+const ETAPA_LABEL = {
+  cachorro_joven: "Cachorro muy joven",
+  cachorro_crecimiento: "Cachorro en crecimiento",
+  adulto: "Adulto",
+  senior: "Senior",
+};
+
+/**
+ * Todo lo que se deduce de la ficha de un perro: su edad, en qué etapa
+ * está, cuántas kcal necesita al día y qué no puede comer.
+ *
+ * Está a nivel de módulo, y no dentro del componente, porque hace falta
+ * para perros que NO son el que se está mirando: al hacer los menús de
+ * varios perros de la misma casa hay que mandarle al servidor las kcal y
+ * la etapa de cada uno, y los demás solo existen como filas de Supabase.
+ *
+ * Es una función pura: mismos datos, mismo resultado, sin tocar nada.
+ */
+// Convierte la fila de un perro tal y como viene de Supabase al formato
+// de perfil que usa la app.
+//
+// ⚠️ MOVIDO FUERA DEL COMPONENTE (21 agosto) — hacía falta también para
+// los OTROS perros de la casa, no solo para el que se está mirando: al
+// hacer sus menús a la vez hay que sacar de cada fila sus kcal y su
+// etapa, y eso empieza por convertirla.
+function perfilDesdeSupabase(p) {
+  if (!p) return null;
+  const fechaNac = p.fecha_nacimiento ? new Date(p.fecha_nacimiento) : null;
+  return {
+    _id: p.id,
+    nombre: p.nombre || "",
+    pesoActual: p.peso_actual ? String(p.peso_actual) : "",
+    condicionIdx: p.condicion_idx ?? 2,
+    condicionTocado: true,
+    actividadIdx: p.actividad === "alta" ? 2 : p.actividad === "baja" ? 0 : 1,
+    actividadTocado: true,
+    esterilizado: p.castrado ? "si" : "no",
+    alergiaSi: p.alergia_si,
+    alergias: p.alergias || [],
+    otrosEvitarSi: p.otros_evitar_si,
+    otrosEvitar: p.otros_evitar || [],
+    patologiaSi: p.patologia_si,
+    patologias: p.patologias || [],
+    categoriasExcluidasSi: p.categorias_excluidas_si,
+    categoriasExcluidas: p.categorias_excluidas || [],
+    dia: fechaNac ? fechaNac.getDate() : 15,
+    mesIdx: fechaNac ? fechaNac.getMonth() : 1,
+    // ⚠️ CORREGIDO — aquí había un 2024 en duro: cualquier perro sin
+    // fecha de nacimiento guardada aparecía nacido en 2024, dijera lo
+    // que dijera el calendario. Ahora es el año de verdad.
+    anio: fechaNac ? fechaNac.getFullYear() : new Date().getFullYear(),
+    tamano: p.tamano,
+    // ⚠️ CORREGIDO — CASO REAL: "la raza sale con texto raro". No era
+    // un problema de codificación: se estaba guardando el OBJETO
+    // entero de la raza ({nombre, tamano, pesoMin, pesoMax,
+    // pesoMedio}) en vez de sólo su nombre, y aquí se volvía a
+    // envolver -- así que perfil.raza.nombre acababa siendo otro
+    // objeto, que al pintarse salía como texto ilegible.
+    // Ahora se lee el nombre venga como venga (texto suelto, objeto,
+    // o el JSON que quedó guardado en las filas viejas) y se
+    // recupera la raza completa del catálogo, para no perder el
+    // tamaño y el peso de referencia.
+    raza: razaDesdeNombre(nombreDeRaza(p.raza)),
+    sexo: p.sexo || null,
+    modoRaza: null,
+    tamanoManual: null,
+  };
+}
+
+
+function datosDeUnPerro(perfil) {
+  const edad = calcularEdad(perfil.dia, perfil.mesIdx, perfil.anio);
+  const especiesExcluidas = especiesExcluidasDePerfil(perfil);
+  const alimentosEvitados = alimentosEvitadosDePerfil(perfil);
+
+  // ⚠️ CORREGIDO (5 agosto, noche): antes esto era directamente la media
+  // de la raza, sin ajustar nunca por la curva de crecimiento real del
+  // cachorro. Ahora, si hay edad y peso actual, se usa su propia
+  // trayectoria (igual que ya hacía der.py en el servidor) -- la media
+  // de la raza queda solo como último recurso, cuando faltan datos.
+  const pesoAdultoMedioRaza = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+  const pesoAdultoEsperado = pesoAdultoDesdeCurva(
+    Number(perfil.pesoActual), edad?.totalMeses, pesoAdultoMedioRaza,
+    perfil.raza?.pesoMin, perfil.raza?.pesoMax
+  ) || pesoAdultoMedioRaza;
+  const etapaCalculada = determinarEtapa(edad, pesoAdultoEsperado);
+  const derReal = calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx,
+      perfil.esterilizado, {
+        pesoAdultoKg: pesoAdultoEsperado,
+        pesoIdealKg: pesoIdealDesdeCondicion(Number(perfil.pesoActual), perfil.condicionIdx),
+        raza: perfil.raza?.nombre,
+        machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
+      });
+
+  return {
+    edad, especiesExcluidas, alimentosEvitados, pesoAdultoEsperado,
+    etapaCalculada, etapaLabel: ETAPA_LABEL[etapaCalculada] || "Adulto", derReal,
+  };
+}
+
+/**
+ * La ficha de un perro en el idioma que habla la API. Mismo cuerpo que
+ * manda el generador de un solo perro -- por eso se construye aquí una
+ * vez y no en cada sitio que lo necesita.
+ */
+function cuerpoApiDeUnPerro(perfil) {
+  const d = datosDeUnPerro(perfil);
+  return {
+    modo: "automatico",
+    nombres_alimentos: [],
+    forzar_presencia: [],
+    restringir_especie: null,
+    der_objetivo: d.derReal,
+    etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
+    especies_excluidas: Array.from(d.especiesExcluidas),
+    evitar_especies: [],
+    nombres_excluidos: Array.from(d.alimentosEvitados),
+    peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
+    patologias: perfil?.patologias || [],
+    categorias_excluidas: perfil?.categoriasExcluidas || [],
+    peso_adulto_esperado_kg: d.pesoAdultoEsperado || null,
+    tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
+  };
+}
+
 function RawkuOnboardingInterna({
   usuario,
   perroInicial,
@@ -3234,51 +3359,6 @@ function RawkuOnboardingInterna({
       window.history.replaceState({}, '', '/');
     }
   }, [usuario]);
-
-  // Función que convierte un perro de Supabase al formato del perfil local
-  const perfilDesdeSupabase = (p) => {
-    if (!p) return null;
-    const fechaNac = p.fecha_nacimiento ? new Date(p.fecha_nacimiento) : null;
-    return {
-      _id: p.id,
-      nombre: p.nombre || "",
-      pesoActual: p.peso_actual ? String(p.peso_actual) : "",
-      condicionIdx: p.condicion_idx ?? 2,
-      condicionTocado: true,
-      actividadIdx: p.actividad === "alta" ? 2 : p.actividad === "baja" ? 0 : 1,
-      actividadTocado: true,
-      esterilizado: p.castrado ? "si" : "no",
-      alergiaSi: p.alergia_si,
-      alergias: p.alergias || [],
-      otrosEvitarSi: p.otros_evitar_si,
-      otrosEvitar: p.otros_evitar || [],
-      patologiaSi: p.patologia_si,
-      patologias: p.patologias || [],
-      categoriasExcluidasSi: p.categorias_excluidas_si,
-      categoriasExcluidas: p.categorias_excluidas || [],
-      dia: fechaNac ? fechaNac.getDate() : 15,
-      mesIdx: fechaNac ? fechaNac.getMonth() : 1,
-      // ⚠️ CORREGIDO — aquí había un 2024 en duro: cualquier perro sin
-      // fecha de nacimiento guardada aparecía nacido en 2024, dijera lo
-      // que dijera el calendario. Ahora es el año de verdad.
-      anio: fechaNac ? fechaNac.getFullYear() : new Date().getFullYear(),
-      tamano: p.tamano,
-      // ⚠️ CORREGIDO — CASO REAL: "la raza sale con texto raro". No era
-      // un problema de codificación: se estaba guardando el OBJETO
-      // entero de la raza ({nombre, tamano, pesoMin, pesoMax,
-      // pesoMedio}) en vez de sólo su nombre, y aquí se volvía a
-      // envolver -- así que perfil.raza.nombre acababa siendo otro
-      // objeto, que al pintarse salía como texto ilegible.
-      // Ahora se lee el nombre venga como venga (texto suelto, objeto,
-      // o el JSON que quedó guardado en las filas viejas) y se
-      // recupera la raza completa del catálogo, para no perder el
-      // tamaño y el peso de referencia.
-      raza: razaDesdeNombre(nombreDeRaza(p.raza)),
-      sexo: p.sexo || null,
-      modoRaza: null,
-      tamanoManual: null,
-    };
-  };
 
   // ─── RESTO DE ESTADOS — inicializados con perroInicial si existe ──
   //
@@ -3670,7 +3750,7 @@ function RawkuOnboardingInterna({
   // de VistaMenus, una vez ya hay un menú de verdad.
   const panelLigero = menuLigeroAbierto && (
     <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLigeroAbierto(false)}>
-      <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-label="Panel lateral" className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
           <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombreMostrar}</p>
           <button onClick={() => setMenuLigeroAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
@@ -3945,38 +4025,21 @@ function RawkuOnboardingInterna({
     return RAZAS.filter((r) => r.nombre.toLowerCase().includes(q)).slice(0, 12);
   }, [busqueda]);
 
-  const edad = useMemo(() => calcularEdad(perfil.dia, perfil.mesIdx, perfil.anio), [perfil.dia, perfil.mesIdx, perfil.anio]);
-
-  const especiesExcluidas = useMemo(() => especiesExcluidasDePerfil(perfil), [perfil.alergias, perfil.otrosEvitar]);
-  const alimentosEvitados = useMemo(() => alimentosEvitadosDePerfil(perfil), [perfil.alergias, perfil.otrosEvitar]);
+  // ⚠️ MOVIDO FUERA DEL COMPONENTE (21 agosto) — estos cálculos (edad,
+  // etapa, kcal al día, qué no puede comer) describen a UN perro, y
+  // vivían aquí dentro porque solo hacía falta el que se está mirando.
+  // Al poder hacer los menús de VARIOS perros de la casa a la vez hacen
+  // falta también los de los OTROS, que no están en `perfil` sino en la
+  // lista que vino de Supabase. Están en datosDeUnPerro(), tal cual: la
+  // fórmula no se ha tocado. Copiarla habría sido asegurarse de que
+  // algún día las dos versiones dieran kcal distintas para el mismo
+  // perro, y nadie sabría cuál mira la app.
+  const { edad, especiesExcluidas, alimentosEvitados, pesoAdultoEsperado,
+          etapaCalculada, etapaLabel, derReal } = useMemo(
+    () => datosDeUnPerro(perfil), [perfil]);
   const categoriasDisponibles = useMemo(
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
     [especiesExcluidas]
-  );
-
-  // ⚠️ CORREGIDO (5 agosto, noche): antes esto era directamente la media
-  // de la raza, sin ajustar nunca por la curva de crecimiento real del
-  // cachorro. Ahora, si hay edad y peso actual, se usa su propia
-  // trayectoria (igual que ya hacía der.py en el servidor) -- la media
-  // de la raza queda solo como último recurso, cuando faltan datos.
-  const pesoAdultoMedioRaza = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
-  const pesoAdultoEsperado = pesoAdultoDesdeCurva(
-    Number(perfil.pesoActual), edad?.totalMeses, pesoAdultoMedioRaza,
-    perfil.raza?.pesoMin, perfil.raza?.pesoMax
-  ) || pesoAdultoMedioRaza;
-  const etapaCalculada = useMemo(() => determinarEtapa(edad, pesoAdultoEsperado), [edad, pesoAdultoEsperado]);
-  const ETAPA_LABEL = { cachorro_joven: "Cachorro muy joven", cachorro_crecimiento: "Cachorro en crecimiento", adulto: "Adulto", senior: "Senior" };
-  const etapaLabel = ETAPA_LABEL[etapaCalculada] || "Adulto";
-  const derReal = useMemo(
-    () => calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx,
-        perfil.esterilizado, {
-          pesoAdultoKg: pesoAdultoEsperado,
-          pesoIdealKg: pesoIdealDesdeCondicion(Number(perfil.pesoActual), perfil.condicionIdx),
-          raza: perfil.raza?.nombre,
-          machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
-        }),
-    [perfil.pesoActual, etapaCalculada, perfil.actividadIdx, perfil.esterilizado,
-     pesoAdultoEsperado, perfil.raza?.nombre, perfil.sexo, perfil.condicionIdx]
   );
 
   // ═══ REVALIDACIÓN DEL MENÚ CUANDO CAMBIA EL PERRO ═══════════════════
@@ -5195,6 +5258,34 @@ function RawkuOnboardingInterna({
             ? "Sus datos y lo que necesita al día — toca el lápiz para cambiar algo"
             : "Revisa que todo esté bien — toca el lápiz para cambiar algo"}
         </p>
+        {/* ⚠️ AÑADIDO — CAMBIAR DE PERRO, A LA VISTA.
+            Cuando esto solo vivía dentro del panel lateral, tener varios
+            perros era una función invisible: si no abrías el panel, no
+            existía. Aquí, en la pantalla de inicio, se ve sin buscarla.
+            Con un solo perro no se pinta nada: no hay entre qué elegir. */}
+        {listaDePerros.length > 1 && (
+          <div className="flex gap-2 mt-4 overflow-x-auto pb-1" style={{ justifyContent: "center", flexWrap: "wrap" }}>
+            {listaDePerros.map((p) => (
+              <button
+                key={p.id ?? "__nuevo__"}
+                onClick={() => {
+                  if (p.esElDeAhora) return;
+                  if (!perfil._id && perfil.nombre.trim()) { setPerroAlQueIrmeTrasAvisar(p.id); return; }
+                  onCambiarDePerro(p.id);
+                }}
+                className="px-4 py-2 rounded-full text-sm shrink-0"
+                style={{
+                  background: p.esElDeAhora ? "#FFFFFF" : "rgba(255,255,255,0.14)",
+                  color: p.esElDeAhora ? VIOLETA : "#FFFFFF",
+                  border: "none", fontFamily: fontBody,
+                  fontWeight: p.esElDeAhora ? 700 : 500,
+                }}
+              >
+                {p.nombre}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
@@ -5361,6 +5452,39 @@ function RawkuOnboardingInterna({
             ? "Hacer el menú de la semana →"
             : "Todo bien, ir al generador de menús →"}
         </button>
+        {/* ⚠️ AÑADIDO — LA INVITACIÓN A AÑADIR OTRO PERRO.
+            Pedido expreso: "cuando entras por primera vez tendría que
+            verse algún botón de tengo más de un perro". Tenía razón: la
+            función existía pero solo dentro del panel lateral, o sea que
+            para descubrirla había que saber ya que estaba.
+
+            Se pinta solo con UN perro y con su ficha ya guardada: antes
+            de eso estás a medio rellenar la primera y ofrecerte una
+            segunda no viene a cuento. Con dos o más ya no hace falta
+            invitar a nada — para eso están las pestañas de arriba y el
+            panel. */}
+        {perfil._id && listaDePerros.length === 1 && (
+          <button
+            onClick={onAnadirPerro}
+            className="w-full flex items-center gap-3 p-4 rounded-2xl mt-3"
+            style={{ background: "#FFFFFF", border: `1.5px dashed #D8CFEC` }}
+          >
+            <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+              <Plus size={18} strokeWidth={2} style={{ color: VIOLETA }} />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p style={{ color: TINTA, fontFamily: fontBody, fontSize: 14, fontWeight: 700 }}>
+                ¿Tienes más perros?
+              </p>
+              <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                Añade a otro y podrás hacerles menús lo más parecidos posible:
+                una sola compra para los dos.
+              </p>
+            </div>
+            <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+          </button>
+        )}
+
         {/* ⚠️ AÑADIDO — borrar perro. Hasta ahora un perro creado por
             error se quedaba en la cuenta para siempre: no había forma de
             quitarlo desde la app. Va aquí abajo, en gris y pequeño, y no

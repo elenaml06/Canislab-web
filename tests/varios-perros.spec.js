@@ -42,10 +42,21 @@ async function iniciarSesion(page) {
 
 const abrirMenuLateral = (page) => page.getByRole("button", { name: "Menú", exact: true }).click();
 
+// El panel lateral. Hace falta acotar a él porque desde que el selector de
+// perros también se ve EN LA FICHA (las pestañas de la cabecera), un
+// "Cairo" suelto encuentra dos botones distintos.
+const panel = (page) => page.getByRole("dialog", { name: "Panel lateral" });
+
 async function abrirSelectorDePerros(page) {
   await abrirMenuLateral(page);
-  await page.getByRole("button", { name: /\d+ perros/ }).click();
+  await panel(page).getByRole("button", { name: /\d+ perros/ }).click();
+  return panel(page);
 }
+
+// Cambiar de perro desde las pestañas de la ficha, que es el camino a la
+// vista: el del panel se prueba aparte.
+const pestanaDePerro = (page, nombre) =>
+  page.getByRole("button", { name: nombre, exact: true }).first();
 
 const menuDeEjemplo = (perroId, extra = {}) => ({
   id: `menu-de-${perroId}`,
@@ -71,13 +82,38 @@ test.describe("varios perros por cuenta", () => {
     });
   });
 
-  test("con dos perros, los dos salen en el selector", async ({ page }) => {
+  test("con dos perros, los dos salen en el selector del panel", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await abrirSelectorDePerros(page);
+    const p = await abrirSelectorDePerros(page);
 
-    await expect(page.getByRole("button", { name: PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
+    await expect(p.getByRole("button", { name: PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
+    await expect(p.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
+  });
+
+  // ⚠️ Esta prueba existe por un fallo de DISEÑO, no de código: cuando
+  // cambiar de perro solo vivía dentro del panel lateral, tener varios
+  // perros era una función invisible — si no sabías que estaba ahí, no
+  // existía. Se pidió expresamente que se viera al entrar.
+  test("con dos perros, se puede cambiar sin abrir ningún panel", async ({ page }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    await expect(pestanaDePerro(page, PERRO_DE_PRUEBA.nombre)).toBeVisible();
+    await expect(pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre)).toBeVisible();
+
+    await pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre).click();
+    await expect(page.getByText(`${SEGUNDO_PERRO_DE_PRUEBA.peso_actual}kg`).first()).toBeVisible();
+  });
+
+  test("con un solo perro se invita a añadir otro, sin buscarlo", async ({ page, request }) => {
+    await configurarBackend(request, { perros: [PERRO_DE_PRUEBA] });
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    await page.getByRole("button", { name: /¿Tienes más perros\?/ }).click();
+    // lleva al asistente, con la ficha en blanco
+    await expect(page.getByPlaceholder(/nombre/i).first()).toHaveValue("");
   });
 
   test("cambiar de perro cambia los datos, no sólo el nombre", async ({ page }) => {
@@ -87,8 +123,7 @@ test.describe("varios perros por cuenta", () => {
     // Arranca con el primero (el más antiguo).
     await expect(page.getByText(`${PERRO_DE_PRUEBA.peso_actual}kg`).first()).toBeVisible();
 
-    await abrirSelectorDePerros(page);
-    await page.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true }).click();
+    await pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre).click();
 
     // Si el componente no se remontara, aquí seguiría el peso del primero
     // con el nombre del segundo -- exactamente el fallo que se busca.
@@ -111,8 +146,11 @@ test.describe("varios perros por cuenta", () => {
     await expect(page.getByText("Menú de Nala")).toBeVisible();
     await expect(page.getByText("Menú de Cairo")).toHaveCount(0);
 
-    await abrirSelectorDePerros(page);
-    await page.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true }).click();
+    // Desde "Mis menús" no hay pestañas de perro (solo están en la ficha),
+    // así que aquí se cambia por el panel — que es justo para lo que sigue
+    // existiendo el selector de dentro.
+    const p2 = await abrirSelectorDePerros(page);
+    await p2.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true }).click();
 
     await abrirMenuLateral(page);
     await page.getByRole("button", { name: /Mis menús/ }).click();
@@ -123,8 +161,7 @@ test.describe("varios perros por cuenta", () => {
   test("se recuerda con qué perro se estaba al volver a entrar", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await abrirSelectorDePerros(page);
-    await page.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true }).click();
+    await pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre).click();
     await expect(page.getByText(`${SEGUNDO_PERRO_DE_PRUEBA.peso_actual}kg`).first()).toBeVisible();
 
     await page.reload();
