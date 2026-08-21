@@ -73,6 +73,20 @@ export const PERRO_DE_PRUEBA = {
   updated_at: "2024-01-01T00:00:00.000Z",
 };
 
+// ⚠️ AÑADIDO — segundo perro, para las pruebas de varios perros por
+// cuenta. No se siembra por defecto: las pruebas que no van de esto
+// siguen viendo una cuenta con UN perro, como antes.
+export const SEGUNDO_PERRO_DE_PRUEBA = {
+  ...PERRO_DE_PRUEBA,
+  id: "22222222-2222-4222-8222-222222222222",
+  nombre: "Cairo",
+  peso_actual: 8.2,
+  tamano: "pequeño",
+  sexo: "macho",
+  raza: "Bulldog francés",
+  created_at: "2024-06-01T00:00:00.000Z",
+};
+
 function usuario() {
   return {
     id: USER_ID,
@@ -145,6 +159,10 @@ export function crearFakeSupabase(opciones = {}) {
     // con aviso y al editar deja de haberlo.
     avisoComposicion: null,
     avisoComposicionAlEditar: null,
+    // Escenarios de /menu/varios-perros: si la compra sale única (todos
+    // los perros con los mismos alimentos) y si la llamada falla entera.
+    casaCompraUnica: true,
+    casaFalla: false,
   };
 
   const servidor = http.createServer(async (req, res) => {
@@ -192,14 +210,29 @@ export function crearFakeSupabase(opciones = {}) {
       if ("avisoComposicion" in cfg) estado.avisoComposicion = cfg.avisoComposicion;
       if ("avisoComposicionAlEditar" in cfg) estado.avisoComposicionAlEditar = cfg.avisoComposicionAlEditar;
       if (cfg.revalidar) estado.revalidar = cfg.revalidar;
+      if (typeof cfg.casaCompraUnica === "boolean") estado.casaCompraUnica = cfg.casaCompraUnica;
+      if (typeof cfg.casaFalla === "boolean") estado.casaFalla = cfg.casaFalla;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
       // raza guardada "a la antigua" (el objeto entero), para comprobar
       // que esas filas viejas se siguen leyendo bien.
       if (cfg.perro) estado.perros = [{ ...PERRO_DE_PRUEBA, ...cfg.perro }];
+      // Sembrar VARIOS perros de golpe (pruebas de multi-perro). Va
+      // después de `cfg.perro` a propósito: si se mandan los dos, manda
+      // la lista completa.
+      if (Array.isArray(cfg.perros)) estado.perros = cfg.perros.map((p) => ({ ...PERRO_DE_PRUEBA, ...p }));
       if (cfg.olvidarUltimoMenu) estado.ultimoMenuGuardado = null;
       return responder(200, {
         retrasoPerrosMs: estado.retrasoPerrosMs,
         perros: estado.perros.length,
+        nombresDePerros: estado.perros.map((p) => p.nombre),
+        // Cuántos menús guardados tiene CADA perro. Mirar solo el total
+        // no distingue "un menú para cada uno" de "los dos menús en el
+        // mismo perro", que es justo el fallo que hay que poder cazar.
+        menusPorPerro: estado.menus.reduce((cuenta, m) => {
+          const k = String(m.perro_id);
+          cuenta[k] = (cuenta[k] || 0) + 1;
+          return cuenta;
+        }, {}),
         menus: estado.menus.length,
         ultimoMenuGuardado: estado.ultimoMenuGuardado,
       });
@@ -320,6 +353,47 @@ export function crearFakeSupabase(opciones = {}) {
         aviso_composicion: estado.avisoComposicionAlEditar,
       });
     }
+    // ⚠️ AÑADIDO — los menús de todos los perros de la casa en una sola
+    // llamada. No calcula nada (para eso está el backend, con sus propias
+    // pruebas): devuelve una respuesta con la FORMA que la app espera, y
+    // los tests eligen el escenario con estado.casaCompraUnica.
+    if (ruta === "/menu/varios-perros") {
+      const pedido = JSON.parse(cuerpo || "{}");
+      const noms = pedido.nombres || [];
+      const base = { "Carne muscular de pollo": 420, "Hueso carnoso de pollo": 150,
+                     "Hígado de ternera": 40 };
+      const unica = estado.casaCompraUnica;
+      const menus = noms.map((nombre, i) => {
+        // el primero manda; los demás, o iguales, o con uno más
+        const propio = (i > 0 && !unica)
+          ? { ...base, "Sardina": 25 }
+          : { ...base };
+        const anadidos = (i > 0 && !unica) ? ["Sardina"] : [];
+        // las cantidades cambian por perro: es el sentido de "parecidos"
+        const escalado = Object.fromEntries(
+          Object.entries(propio).map(([n, g]) => [n, Math.round(g * (1 - i * 0.4))]));
+        return {
+          indice: i, nombre, es_la_base: i === 0, factible: true,
+          menu: escalado,
+          kcal_total: 1200 - i * 400, gramos_total: 610 - i * 200,
+          cambios: { iguales: Object.keys(base), anadidos, quitados: [],
+                     cuantos_cambios: anadidos.length },
+          resumen_parecido: i === 0 ? null : (anadidos.length === 0
+            ? `El menú de ${nombre} lleva exactamente los mismos alimentos que el de ${noms[0]}: solo cambian las cantidades. Compras una vez y repartes.`
+            : `El menú de ${nombre} comparte 3 alimentos con el de ${noms[0]}, pero lleva además Sardina. Es un cambio respecto a la compra de ${noms[0]}.`),
+        };
+      });
+      const totales = menus.reduce((t, m) => t + m.cambios.cuantos_cambios, 0);
+      return responder(200, {
+        factible: !estado.casaFalla,
+        motivo: estado.casaFalla ? "No hemos encontrado menús que cumplan para todos." : undefined,
+        modo_conjunto: pedido.modo_conjunto,
+        perro_base: noms[0],
+        cambios_totales: totales,
+        compra_unica: totales === 0,
+        menus,
+      });
+    }
     if (ruta === "/menu/semana") {
       const cuantos = Number(url.searchParams.get("numero_de_menus") || 1);
       return responder(200, {
@@ -340,6 +414,11 @@ export function crearFakeSupabase(opciones = {}) {
 
     // ── PostgREST ───────────────────────────────────────────────────────
     const unSoloObjeto = (req.headers.accept || "").includes("pgrst.object");
+    // PostgREST manda los filtros como ?columna=eq.<valor>.
+    const idDelFiltro = (u, columna) => {
+      const filtro = u.searchParams.get(columna);
+      return filtro && filtro.startsWith("eq.") ? filtro.slice(3) : null;
+    };
 
     if (ruta === "/rest/v1/perros") {
       if (req.method === "GET") {
@@ -348,17 +427,42 @@ export function crearFakeSupabase(opciones = {}) {
         await dormir(estado.retrasoPerrosMs);
         return responder(200, estado.perros);
       }
+      // ⚠️ AMPLIADO — antes esta tabla sólo sabía guardar UN perro:
+      // POST y PATCH hacían `splice(0, length, ...)`, o sea machacaban
+      // la lista entera, y DELETE la vaciaba del todo. Con eso, una
+      // prueba de varios perros habría pasado en verde diciendo cosas
+      // falsas (crear el segundo perro habría "funcionado" borrando el
+      // primero). Ahora se comporta como una tabla de verdad: por id.
       if (req.method === "POST") {
-        const nuevo = { ...PERRO_DE_PRUEBA, ...JSON.parse(cuerpo || "{}"), id: PERRO_ID };
-        estado.perros.splice(0, estado.perros.length, nuevo);
+        const enviado = JSON.parse(cuerpo || "{}");
+        // El primer perro conserva el id de siempre para no romper las
+        // pruebas que lo dan por hecho; los siguientes llevan uno nuevo.
+        const nuevo = {
+          ...PERRO_DE_PRUEBA,
+          ...enviado,
+          id: estado.perros.length === 0
+            ? PERRO_ID
+            : `33333333-3333-4333-8333-${String(estado.perros.length).padStart(12, "0")}`,
+          created_at: new Date().toISOString(),
+        };
+        estado.perros.push(nuevo);
         return responder(201, unSoloObjeto ? nuevo : [nuevo]);
       }
       if (req.method === "PATCH") {
-        const actualizado = { ...(estado.perros[0] || PERRO_DE_PRUEBA), ...JSON.parse(cuerpo || "{}") };
-        estado.perros.splice(0, estado.perros.length, actualizado);
+        const id = idDelFiltro(url, "id");
+        const i = id ? estado.perros.findIndex((p) => String(p.id) === id) : 0;
+        if (i < 0) return responder(200, unSoloObjeto ? null : []);
+        const actualizado = { ...(estado.perros[i] || PERRO_DE_PRUEBA), ...JSON.parse(cuerpo || "{}") };
+        estado.perros[i] = actualizado;
         return responder(200, unSoloObjeto ? actualizado : [actualizado]);
       }
-      if (req.method === "DELETE") { estado.perros.length = 0; return responder(200, []); }
+      if (req.method === "DELETE") {
+        const id = idDelFiltro(url, "id");
+        estado.perros = id
+          ? estado.perros.filter((p) => String(p.id) !== id)
+          : [];
+        return responder(200, []);
+      }
     }
 
     if (ruta === "/rest/v1/profiles") {
@@ -383,9 +487,13 @@ export function crearFakeSupabase(opciones = {}) {
         return responder(200, filas);
       }
       if (req.method === "DELETE") {
-        const filtro = url.searchParams.get("id");
-        const id = filtro && filtro.startsWith("eq.") ? filtro.slice(3) : null;
-        estado.menus = estado.menus.filter((m) => String(m.id) !== id);
+        // Se borra por menú suelto (id) o por perro entero (perro_id):
+        // borrar un perro se lleva sus menús por delante, y esta tabla
+        // tiene que reflejarlo para que la prueba lo pueda comprobar.
+        const id = idDelFiltro(url, "id");
+        const perroId = idDelFiltro(url, "perro_id");
+        if (perroId) estado.menus = estado.menus.filter((m) => String(m.perro_id) !== perroId);
+        else if (id) estado.menus = estado.menus.filter((m) => String(m.id) !== id);
         return responder(200, []);
       }
       const datos = JSON.parse(cuerpo || "{}");

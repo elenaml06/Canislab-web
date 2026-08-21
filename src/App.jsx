@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
-import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu } from "./supabase";
+import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, eliminarPerro } from "./supabase";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import { API_BASE, fetchConTimeout } from "./api.js";
@@ -1261,7 +1261,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
-function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos }) {
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, selectorDePerros = null, usuario = null, onPerroGuardado = () => {} }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO (5 agosto, madrugada): estado LOCAL para poder cerrar
   // este aviso -- se inicializa a partir de la prop, pero una vez
@@ -2583,9 +2583,19 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 set("pesoActual", nuevoPeso);
                 setNuevoPeso("");
                 setAvisoPesoActualizado(true);
-                // Guardar el nuevo peso en Supabase
+                // ⚠️ CORREGIDO — CASO REAL: pesar al perro aquí decía
+                // "✅ Peso actualizado" pero NO lo guardaba nunca. Este
+                // `usuario` no existía en esta pantalla: VistaMenus no lo
+                // recibía. Al pulsar Guardar, las tres líneas de antes ya
+                // habían corrido (por eso salía el ✅ y cambiaba el peso
+                // en pantalla) y justo aquí reventaba con un
+                // ReferenceError — el peso se perdía al recargar y el
+                // error se lo comía React. Ahora `usuario` llega como
+                // prop desde arriba.
                 if (usuario && perfil._id) {
-                  guardarPerro(usuario.id, { ...perfil, pesoActual: nuevoPeso, id: perfil._id }).catch(console.error);
+                  guardarPerro(usuario.id, { ...perfil, pesoActual: nuevoPeso, id: perfil._id })
+                    .then((perroGuardado) => { if (perroGuardado?.id) onPerroGuardado(perroGuardado); })
+                    .catch(console.error);
                 }
               }
             }}
@@ -3118,7 +3128,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
       )}
       {menuLateralAbierto && (
         <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
-          <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+          <div role="dialog" aria-label="Panel lateral" className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
             <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
               <div>
                 <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombrePerro}</p>
@@ -3126,6 +3136,10 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               </div>
               <button onClick={() => setMenuLateralAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
             </div>
+            {/* El mismo selector de perros que el panel ligero. Se pasa ya
+                montado desde fuera porque toda la información de perros
+                vive en RawkuOnboardingInterna, no aquí. */}
+            {selectorDePerros}
             <div className="flex-1 px-3 pt-4">
               {[
                 { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}`, isPremium: false },
@@ -3157,7 +3171,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-13 19:40 UTC
+              build 2026-08-21 · varios perros desde el inicio
             </p>
           </div>
         </div>
@@ -3179,7 +3193,140 @@ function BotonPrincipal({ activo, onClick, texto }) {
   );
 }
 
-function RawkuOnboardingInterna({ usuario, perroInicial }) {
+const ETAPA_LABEL = {
+  cachorro_joven: "Cachorro muy joven",
+  cachorro_crecimiento: "Cachorro en crecimiento",
+  adulto: "Adulto",
+  senior: "Senior",
+};
+
+/**
+ * Todo lo que se deduce de la ficha de un perro: su edad, en qué etapa
+ * está, cuántas kcal necesita al día y qué no puede comer.
+ *
+ * Está a nivel de módulo, y no dentro del componente, porque hace falta
+ * para perros que NO son el que se está mirando: al hacer los menús de
+ * varios perros de la misma casa hay que mandarle al servidor las kcal y
+ * la etapa de cada uno, y los demás solo existen como filas de Supabase.
+ *
+ * Es una función pura: mismos datos, mismo resultado, sin tocar nada.
+ */
+// Convierte la fila de un perro tal y como viene de Supabase al formato
+// de perfil que usa la app.
+//
+// ⚠️ MOVIDO FUERA DEL COMPONENTE (21 agosto) — hacía falta también para
+// los OTROS perros de la casa, no solo para el que se está mirando: al
+// hacer sus menús a la vez hay que sacar de cada fila sus kcal y su
+// etapa, y eso empieza por convertirla.
+function perfilDesdeSupabase(p) {
+  if (!p) return null;
+  const fechaNac = p.fecha_nacimiento ? new Date(p.fecha_nacimiento) : null;
+  return {
+    _id: p.id,
+    nombre: p.nombre || "",
+    pesoActual: p.peso_actual ? String(p.peso_actual) : "",
+    condicionIdx: p.condicion_idx ?? 2,
+    condicionTocado: true,
+    actividadIdx: p.actividad === "alta" ? 2 : p.actividad === "baja" ? 0 : 1,
+    actividadTocado: true,
+    esterilizado: p.castrado ? "si" : "no",
+    alergiaSi: p.alergia_si,
+    alergias: p.alergias || [],
+    otrosEvitarSi: p.otros_evitar_si,
+    otrosEvitar: p.otros_evitar || [],
+    patologiaSi: p.patologia_si,
+    patologias: p.patologias || [],
+    categoriasExcluidasSi: p.categorias_excluidas_si,
+    categoriasExcluidas: p.categorias_excluidas || [],
+    dia: fechaNac ? fechaNac.getDate() : 15,
+    mesIdx: fechaNac ? fechaNac.getMonth() : 1,
+    // ⚠️ CORREGIDO — aquí había un 2024 en duro: cualquier perro sin
+    // fecha de nacimiento guardada aparecía nacido en 2024, dijera lo
+    // que dijera el calendario. Ahora es el año de verdad.
+    anio: fechaNac ? fechaNac.getFullYear() : new Date().getFullYear(),
+    tamano: p.tamano,
+    // ⚠️ CORREGIDO — CASO REAL: "la raza sale con texto raro". No era
+    // un problema de codificación: se estaba guardando el OBJETO
+    // entero de la raza ({nombre, tamano, pesoMin, pesoMax,
+    // pesoMedio}) en vez de sólo su nombre, y aquí se volvía a
+    // envolver -- así que perfil.raza.nombre acababa siendo otro
+    // objeto, que al pintarse salía como texto ilegible.
+    // Ahora se lee el nombre venga como venga (texto suelto, objeto,
+    // o el JSON que quedó guardado en las filas viejas) y se
+    // recupera la raza completa del catálogo, para no perder el
+    // tamaño y el peso de referencia.
+    raza: razaDesdeNombre(nombreDeRaza(p.raza)),
+    sexo: p.sexo || null,
+    modoRaza: null,
+    tamanoManual: null,
+  };
+}
+
+
+function datosDeUnPerro(perfil) {
+  const edad = calcularEdad(perfil.dia, perfil.mesIdx, perfil.anio);
+  const especiesExcluidas = especiesExcluidasDePerfil(perfil);
+  const alimentosEvitados = alimentosEvitadosDePerfil(perfil);
+
+  // ⚠️ CORREGIDO (5 agosto, noche): antes esto era directamente la media
+  // de la raza, sin ajustar nunca por la curva de crecimiento real del
+  // cachorro. Ahora, si hay edad y peso actual, se usa su propia
+  // trayectoria (igual que ya hacía der.py en el servidor) -- la media
+  // de la raza queda solo como último recurso, cuando faltan datos.
+  const pesoAdultoMedioRaza = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+  const pesoAdultoEsperado = pesoAdultoDesdeCurva(
+    Number(perfil.pesoActual), edad?.totalMeses, pesoAdultoMedioRaza,
+    perfil.raza?.pesoMin, perfil.raza?.pesoMax
+  ) || pesoAdultoMedioRaza;
+  const etapaCalculada = determinarEtapa(edad, pesoAdultoEsperado);
+  const derReal = calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx,
+      perfil.esterilizado, {
+        pesoAdultoKg: pesoAdultoEsperado,
+        pesoIdealKg: pesoIdealDesdeCondicion(Number(perfil.pesoActual), perfil.condicionIdx),
+        raza: perfil.raza?.nombre,
+        machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
+      });
+
+  return {
+    edad, especiesExcluidas, alimentosEvitados, pesoAdultoEsperado,
+    etapaCalculada, etapaLabel: ETAPA_LABEL[etapaCalculada] || "Adulto", derReal,
+  };
+}
+
+/**
+ * La ficha de un perro en el idioma que habla la API. Mismo cuerpo que
+ * manda el generador de un solo perro -- por eso se construye aquí una
+ * vez y no en cada sitio que lo necesita.
+ */
+function cuerpoApiDeUnPerro(perfil) {
+  const d = datosDeUnPerro(perfil);
+  return {
+    modo: "automatico",
+    nombres_alimentos: [],
+    forzar_presencia: [],
+    restringir_especie: null,
+    der_objetivo: d.derReal,
+    etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
+    especies_excluidas: Array.from(d.especiesExcluidas),
+    evitar_especies: [],
+    nombres_excluidos: Array.from(d.alimentosEvitados),
+    peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
+    patologias: perfil?.patologias || [],
+    categorias_excluidas: perfil?.categoriasExcluidas || [],
+    peso_adulto_esperado_kg: d.pesoAdultoEsperado || null,
+    tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
+  };
+}
+
+function RawkuOnboardingInterna({
+  usuario,
+  perroInicial,
+  perros = [],
+  onCambiarDePerro = () => {},
+  onAnadirPerro = () => {},
+  onPerroGuardado = () => {},
+  onPerroEliminado = () => {},
+}) {
   // ─── AUTH — recibido como prop desde AuthGate ─────────────
   // ⚠️ AÑADIDO — interruptor único del muro de pago.
   //
@@ -3212,51 +3359,6 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
       window.history.replaceState({}, '', '/');
     }
   }, [usuario]);
-
-  // Función que convierte un perro de Supabase al formato del perfil local
-  const perfilDesdeSupabase = (p) => {
-    if (!p) return null;
-    const fechaNac = p.fecha_nacimiento ? new Date(p.fecha_nacimiento) : null;
-    return {
-      _id: p.id,
-      nombre: p.nombre || "",
-      pesoActual: p.peso_actual ? String(p.peso_actual) : "",
-      condicionIdx: p.condicion_idx ?? 2,
-      condicionTocado: true,
-      actividadIdx: p.actividad === "alta" ? 2 : p.actividad === "baja" ? 0 : 1,
-      actividadTocado: true,
-      esterilizado: p.castrado ? "si" : "no",
-      alergiaSi: p.alergia_si,
-      alergias: p.alergias || [],
-      otrosEvitarSi: p.otros_evitar_si,
-      otrosEvitar: p.otros_evitar || [],
-      patologiaSi: p.patologia_si,
-      patologias: p.patologias || [],
-      categoriasExcluidasSi: p.categorias_excluidas_si,
-      categoriasExcluidas: p.categorias_excluidas || [],
-      dia: fechaNac ? fechaNac.getDate() : 15,
-      mesIdx: fechaNac ? fechaNac.getMonth() : 1,
-      // ⚠️ CORREGIDO — aquí había un 2024 en duro: cualquier perro sin
-      // fecha de nacimiento guardada aparecía nacido en 2024, dijera lo
-      // que dijera el calendario. Ahora es el año de verdad.
-      anio: fechaNac ? fechaNac.getFullYear() : new Date().getFullYear(),
-      tamano: p.tamano,
-      // ⚠️ CORREGIDO — CASO REAL: "la raza sale con texto raro". No era
-      // un problema de codificación: se estaba guardando el OBJETO
-      // entero de la raza ({nombre, tamano, pesoMin, pesoMax,
-      // pesoMedio}) en vez de sólo su nombre, y aquí se volvía a
-      // envolver -- así que perfil.raza.nombre acababa siendo otro
-      // objeto, que al pintarse salía como texto ilegible.
-      // Ahora se lee el nombre venga como venga (texto suelto, objeto,
-      // o el JSON que quedó guardado en las filas viejas) y se
-      // recupera la raza completa del catálogo, para no perder el
-      // tamaño y el peso de referencia.
-      raza: razaDesdeNombre(nombreDeRaza(p.raza)),
-      sexo: p.sexo || null,
-      modoRaza: null,
-      tamanoManual: null,
-    };
-  };
 
   // ─── RESTO DE ESTADOS — inicializados con perroInicial si existe ──
   //
@@ -3513,18 +3615,158 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     setConfigPersonalizar(configsPorMenu[nuevoIdx] || configPersonalizarBase());
   };
 
+  // ⚠️ AÑADIDO — SELECTOR DE PERROS.
+  //
+  // Hasta ahora la app enseñaba el primer perro de la cuenta y ya: quien
+  // tuviera dos, sólo podía usar uno. La lista y el guardado siempre han
+  // admitido varios (la tabla `perros` va por user_id, y los menús ya
+  // llevan su `perro_id`); lo que faltaba era poder elegir.
+  //
+  // Vive en la cabecera de los dos paneles laterales, que es el único
+  // sitio que se puede abrir desde cualquier pantalla. Con un solo perro
+  // no se despliega nada: sólo aparece "Añadir otro perro", para que a
+  // quien tenga uno no le cambie la app de sitio.
+  // ─── MENÚS DE TODA LA CASA ────────────────────────────────────────
+  // "solo"      → como siempre, el menú de este perro.
+  // "parecidos" → los de todos, amoldados entre sí: misma compra.
+  // "cada_uno"  → los de todos, pero cada uno el mejor suyo.
+  const [paraQuien, setParaQuien] = useState("solo");
+  const [menusDeLaCasa, setMenusDeLaCasa] = useState(null);
+  const [cargandoCasa, setCargandoCasa] = useState(false);
+  const [errorCasa, setErrorCasa] = useState(null);
+  const [guardandoCasa, setGuardandoCasa] = useState(false);
+  const [guardadosCasa, setGuardadosCasa] = useState(false);
+
+  const [selectorPerrosAbierto, setSelectorPerrosAbierto] = useState(false);
+  // Perro al que se quiere ir teniendo otro a medio crear: se guarda
+  // aquí para poder preguntar antes de tirar lo escrito.
+  const [perroAlQueIrmeTrasAvisar, setPerroAlQueIrmeTrasAvisar] = useState(null);
+  // Perro que se está a punto de borrar (con sus menús).
+  const [perroABorrar, setPerroABorrar] = useState(null);
+  const [borrandoPerro, setBorrandoPerro] = useState(false);
+  const [errorAlBorrarPerro, setErrorAlBorrarPerro] = useState(null);
+
+  // Se pinta el perro en curso con el nombre que se esté escribiendo AHORA
+  // (perfil.nombre), no con el guardado: durante el asistente aún no hay
+  // fila en Supabase, y verse a uno mismo como "Sin nombre" mientras
+  // acabas de teclear el nombre es raro.
+  const listaDePerros = (() => {
+    const guardados = (perros ?? []).map((p) => ({
+      id: p.id,
+      nombre: p.id === perfil._id ? (perfil.nombre.trim() || p.nombre || "Sin nombre") : (p.nombre || "Sin nombre"),
+      esElDeAhora: p.id === perfil._id,
+      sinGuardar: false,
+    }));
+    // Perro a medio crear: todavía no está en la lista de Supabase, pero
+    // hay que verlo para saber que estás dentro de él.
+    if (!perfil._id) {
+      guardados.push({
+        id: null,
+        nombre: perfil.nombre.trim() || "Perro nuevo",
+        esElDeAhora: true,
+        sinGuardar: true,
+      });
+    }
+    return guardados;
+  })();
+
+  const cerrarPaneles = () => {
+    setSelectorPerrosAbierto(false);
+    setMenuLigeroAbierto(false);
+  };
+
+  const selectorDePerros = (
+    <div style={{ borderBottom: "1px solid #F0EAF8" }} className="px-3 pt-3 pb-2">
+      {listaDePerros.length > 1 && (
+        <button
+          onClick={() => setSelectorPerrosAbierto((v) => !v)}
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl"
+          style={{ background: "none", border: "none" }}
+        >
+          <span className="text-[10px] tracking-[0.14em] uppercase flex-1 text-left" style={{ color: MALVA, fontFamily: "monospace" }}>
+            {listaDePerros.length} perros
+          </span>
+          <ChevronRight
+            size={14}
+            style={{ color: MALVA, transform: selectorPerrosAbierto ? "rotate(90deg)" : "none", transition: "transform .15s" }}
+          />
+        </button>
+      )}
+      {(selectorPerrosAbierto || listaDePerros.length <= 1) && (
+        <>
+          {listaDePerros.length > 1 && listaDePerros.map((p) => (
+            <button
+              key={p.id ?? "__nuevo__"}
+              onClick={() => {
+                if (p.esElDeAhora) { cerrarPaneles(); return; }
+                // ⚠️ Cambiar de perro remonta la app entera con los datos
+                // del otro (ver AuthGate). Si se está a medio crear un
+                // perro sin guardar, ese perro se pierde — por eso se
+                // avisa antes en vez de hacerlo a la brava.
+                if (!perfil._id && perfil.nombre.trim()) {
+                  setPerroAlQueIrmeTrasAvisar(p.id);
+                  return;
+                }
+                cerrarPaneles();
+                onCambiarDePerro(p.id);
+              }}
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl"
+              style={{ background: p.esElDeAhora ? PAPEL : "none", border: "none" }}
+            >
+              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: p.esElDeAhora ? VIOLETA : "#F0EAF8" }}>
+                <Dog size={15} strokeWidth={1.7} style={{ color: p.esElDeAhora ? "#FFFFFF" : MALVA }} />
+              </div>
+              <span className="flex-1 text-left truncate" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>
+                {p.nombre}
+              </span>
+              {p.sinGuardar
+                ? <span className="text-[9px]" style={{ color: MALVA, fontFamily: "monospace" }}>sin guardar</span>
+                : p.esElDeAhora
+                  ? <Check size={15} style={{ color: VIOLETA }} />
+                  : null}
+            </button>
+          ))}
+          <button
+            onClick={() => {
+              if (!perfil._id) {
+                // Ya está creando uno. Mandarla otra vez al paso 1
+                // borraría lo que lleva escrito sin avisar.
+                cerrarPaneles();
+                setFase("onboarding");
+                setPaso(1);
+                return;
+              }
+              cerrarPaneles();
+              onAnadirPerro();
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl"
+            style={{ background: "none", border: "none" }}
+          >
+            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "#F0EAF8" }}>
+              <Plus size={15} strokeWidth={2} style={{ color: VIOLETA }} />
+            </div>
+            <span className="flex-1 text-left" style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 15 }}>
+              Añadir otro perro
+            </span>
+          </button>
+        </>
+      )}
+    </div>
+  );
+
   // ⚠️ AÑADIDO (5 agosto, noche): panel ligero para las pantallas de
   // antes de tener un menú generado (cuantos/personalizar/resultado) --
   // solo "Editar perfil", que es lo único que tiene sentido ahí. El
   // panel completo (con Evolución, Mis menús...) sigue viviendo dentro
   // de VistaMenus, una vez ya hay un menú de verdad.
-  const drawerLigero = menuLigeroAbierto && (
+  const panelLigero = menuLigeroAbierto && (
     <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLigeroAbierto(false)}>
-      <div className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-label="Panel lateral" className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
           <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombreMostrar}</p>
           <button onClick={() => setMenuLigeroAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
         </div>
+        {selectorDePerros}
         <div className="flex-1 px-3 pt-4">
           {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL ENCONTRADO:
               "Editar perfil de X" llevaba a la pantalla de RESUMEN
@@ -3635,7 +3877,7 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-13 19:40 UTC
+          build 2026-08-21 · varios perros desde el inicio
         </p>
         {usuario && !premium && (
           <button
@@ -3671,6 +3913,283 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     </div>
   );
 
+  // ⚠️ Los avisos van FUERA del panel: hay que poder verlos con el panel
+  // ya cerrado (el de borrar se lanza desde la ficha del perro) y por
+  // encima de él (el de cambiar de perro se lanza desde el propio panel).
+  // Se cuelgan de `drawerLigero` para que aparezcan en las ~16 pantallas
+  // que ya lo pintaban, sin tener que tocarlas una por una.
+  const avisoCambiarDePerro = perroAlQueIrmeTrasAvisar !== null && (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center px-6" style={{ background: "rgba(35,21,57,0.55)" }}>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: "#FFFFFF" }}>
+        <p className="text-lg mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>
+          Estás creando a {perfil.nombre.trim() || "un perro nuevo"}
+        </p>
+        <p className="text-sm mb-5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+          Todavía no está guardado. Si cambias de perro ahora, tendrás que
+          empezar su ficha otra vez desde el principio.
+        </p>
+        <button
+          onClick={() => {
+            const destino = perroAlQueIrmeTrasAvisar;
+            setPerroAlQueIrmeTrasAvisar(null);
+            cerrarPaneles();
+            onCambiarDePerro(destino);
+          }}
+          className="w-full py-3 rounded-xl mb-2"
+          style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}
+        >
+          Cambiar igualmente
+        </button>
+        <button
+          onClick={() => setPerroAlQueIrmeTrasAvisar(null)}
+          className="w-full py-3 rounded-xl"
+          style={{ background: "none", color: MALVA, fontFamily: fontBody, border: "none" }}
+        >
+          Seguir con esta ficha
+        </button>
+      </div>
+    </div>
+  );
+
+  const avisoBorrarPerro = perroABorrar && (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center px-6" style={{ background: "rgba(35,21,57,0.55)" }}>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: "#FFFFFF" }}>
+        <p className="text-lg mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>
+          ¿Borrar a {perroABorrar.nombre}?
+        </p>
+        <p className="text-sm mb-5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+          Se borran también sus menús guardados
+          {menusGuardados.length > 0 ? ` (${menusGuardados.length})` : ""}. Esto no se puede deshacer.
+        </p>
+        {errorAlBorrarPerro && (
+          <p className="text-sm mb-3 leading-snug" style={{ color: "#B4436C", fontFamily: fontBody }}>
+            {errorAlBorrarPerro}
+          </p>
+        )}
+        <button
+          disabled={borrandoPerro}
+          onClick={() => {
+            const id = perroABorrar.id;
+            setBorrandoPerro(true);
+            setErrorAlBorrarPerro(null);
+            eliminarPerro(id)
+              .then(() => {
+                setBorrandoPerro(false);
+                setPerroABorrar(null);
+                onPerroEliminado(id);
+              })
+              .catch((err) => {
+                // Antes de esto no existía borrar perro, así que no había
+                // fallo que enseñar. Ahora sí: si Supabase dice que no, se
+                // dice, y el perro sigue donde estaba.
+                setBorrandoPerro(false);
+                setErrorAlBorrarPerro("No se ha podido borrar. Inténtalo otra vez en un momento.");
+                capturarError(err, { donde: "eliminarPerro", perroId: id });
+              });
+          }}
+          className="w-full py-3 rounded-xl mb-2"
+          style={{ background: borrandoPerro ? "#E0D3D9" : "#B4436C", color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}
+        >
+          {borrandoPerro ? "Borrando..." : "Sí, borrar"}
+        </button>
+        <button
+          disabled={borrandoPerro}
+          onClick={() => { setPerroABorrar(null); setErrorAlBorrarPerro(null); }}
+          className="w-full py-3 rounded-xl"
+          style={{ background: "none", color: MALVA, fontFamily: fontBody, border: "none" }}
+        >
+          No, dejarlo
+        </button>
+      </div>
+    </div>
+  );
+
+  const drawerLigero = (
+    <>
+      {panelLigero}
+      {avisoCambiarDePerro}
+      {avisoBorrarPerro}
+    </>
+  );
+
+  // ⚠️ AÑADIDO — GENERAR LOS MENÚS DE TODOS LOS PERROS DE LA CASA.
+  //
+  // Una sola llamada a /menu/varios-perros con la ficha de cada perro.
+  // El reparto de quién manda y cuánto se amolda cada uno lo decide el
+  // servidor, que es donde está el motor -- aquí solo se manda quién es
+  // quién y se enseña lo que vuelve.
+  //
+  // Cada perro va con SUS kcal, SU etapa y SUS alergias: lo único que se
+  // comparte, y solo en modo "parecidos", es la lista de alimentos. Un
+  // menú que no cumpla lo suyo no sale, igual que en el resto de la app.
+  const generarMenusDeLaCasa = async (comoSeQuieren) => {
+    setCargandoCasa(true);
+    setErrorCasa(null);
+    setMenusDeLaCasa(null);
+    setGuardadosCasa(false);
+    setFase("casa");
+
+    // Se manda el perro que se está mirando PRIMERO y con el perfil de
+    // pantalla (que puede llevar cambios sin guardar todavía); los demás,
+    // tal y como están en Supabase.
+    const fichas = [
+      { id: perfil._id, nombre: nombreMostrar, perfil },
+      ...(perros || [])
+        .filter((p) => p.id !== perfil._id)
+        .map((p) => ({ id: p.id, nombre: p.nombre || "Sin nombre", perfil: perfilDesdeSupabase(p) })),
+    ];
+
+    try {
+      const res = await fetchConTimeout(`${API_BASE}/menu/varios-perros`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          perros: fichas.map((f) => cuerpoApiDeUnPerro(f.perfil)),
+          nombres: fichas.map((f) => f.nombre),
+          modo_conjunto: comoSeQuieren === "parecidos" ? "parecidos" : "distintos",
+        }),
+      });
+      let cuerpo;
+      try {
+        cuerpo = await res.json();
+      } catch {
+        cuerpo = { factible: false, motivo: `Respuesta no válida del servidor (HTTP ${res.status}).` };
+      }
+      if (!cuerpo.factible) {
+        setErrorCasa(cuerpo.motivo || "No hemos encontrado menús que cumplan para todos.");
+      } else {
+        // Se guarda junto el id del perro, que la respuesta no lo trae
+        // (el servidor no sabe nada de Supabase) y hace falta para poder
+        // guardar el menú de cada uno en su sitio.
+        setMenusDeLaCasa({
+          ...cuerpo,
+          menus: (cuerpo.menus || []).map((m, i) => ({ ...m, perroId: fichas[i]?.id ?? null })),
+        });
+      }
+    } catch (err) {
+      setErrorCasa(err?.esTimeout
+        ? "El servidor no ha contestado a tiempo. Suele pasar tras un rato sin uso: inténtalo otra vez."
+        : "No hemos podido conectar con el servidor. Comprueba la conexión e inténtalo otra vez.");
+      capturarError(err, { donde: "generarMenusDeLaCasa", cuantos: fichas.length });
+    } finally {
+      setCargandoCasa(false);
+    }
+  };
+
+  const guardarMenusDeLaCasa = async () => {
+    if (!usuario || !menusDeLaCasa || guardandoCasa) return;
+    setGuardandoCasa(true);
+    try {
+      for (const m of menusDeLaCasa.menus) {
+        if (!m.perroId || !m.factible) continue;  // sin dueño no se guarda: sería un menú perdido
+        const fila = await guardarMenu(usuario.id, m.perroId, {
+          modo: "automatico",
+          derReal: m.kcal_total ?? null,
+          etapaLabel: null,
+          menusData: [m],
+          numMenus: 1,
+          nombre: `Menú de casa · ${m.nombre}`,
+        });
+        // Que aparezca ya en "Mis menús" del perro que se está mirando,
+        // sin recargar. Los de los otros perros aparecen al cambiar a ellos.
+        if (fila && m.perroId === perfil._id) setMenusGuardados((previos) => [fila, ...previos]);
+      }
+      setGuardadosCasa(true);
+    } catch (err) {
+      capturarError(err, { donde: "guardarMenusDeLaCasa" });
+      setErrorCasa("Los menús están hechos, pero no se han podido guardar. Inténtalo otra vez.");
+    } finally {
+      setGuardandoCasa(false);
+    }
+  };
+
+  // La compra de la semana, sumando lo de todos los perros. Es el motivo
+  // entero de que los menús se parezcan: si cada perro lleva lo suyo, la
+  // lista es el doble de larga y hay que porcionar dos veces.
+  const compraDeLaCasa = useMemo(() => {
+    if (!menusDeLaCasa) return [];
+    const total = {};
+    for (const m of menusDeLaCasa.menus || []) {
+      for (const [alimento, gramos] of Object.entries(m.menu || {})) {
+        if (!total[alimento]) total[alimento] = { gramos: 0, deQuien: [] };
+        total[alimento].gramos += gramos;
+        total[alimento].deQuien.push(m.nombre);
+      }
+    }
+    return Object.entries(total)
+      .map(([alimento, d]) => ({ alimento, ...d }))
+      .sort((a, b) => b.gramos - a.gramos);
+  }, [menusDeLaCasa]);
+
+  // ⚠️ AÑADIDO — AÑADIR OTRO PERRO DESDE LA PRIMERA VEZ.
+  //
+  // Pedido expreso: poder decir "tengo más de un perro" ya en la primera
+  // pantalla, la de la ficha del perro antes de hacer el menú. Antes la
+  // invitación solo salía con la ficha YA guardada, o sea nunca la
+  // primera vez -- que es justo cuando la persona está pensando en sus
+  // perros y sabe cuántos tiene.
+  //
+  // La primera vez la ficha todavía no está en Supabase (se guarda al
+  // entrar al generador), así que hay que guardarla ANTES de empezar la
+  // siguiente: empezar otra sin guardar ésta se la llevaría por delante,
+  // porque añadir perro remonta la app entera.
+  const [guardandoParaAnadirOtro, setGuardandoParaAnadirOtro] = useState(false);
+  const [errorAlAnadirOtro, setErrorAlAnadirOtro] = useState(null);
+
+  const anadirOtroPerroGuardandoEste = async () => {
+    if (guardandoParaAnadirOtro) return;
+    // Ya guardado (o sin sesión donde guardar): directo.
+    if (perfil._id || !usuario) { onAnadirPerro(); return; }
+    setGuardandoParaAnadirOtro(true);
+    setErrorAlAnadirOtro(null);
+    try {
+      const guardado = await guardarPerro(usuario.id, { ...perfil, id: perfil._id });
+      if (!guardado?.id) throw new Error("Supabase no devolvió el perro guardado");
+      onPerroGuardado(guardado);
+      onAnadirPerro();
+    } catch (err) {
+      // Si no se ha podido guardar NO se navega: irse ahora perdería la
+      // ficha que se acaba de rellenar entera.
+      capturarError(err, { donde: "anadirOtroPerroGuardandoEste" });
+      setErrorAlAnadirOtro(`No hemos podido guardar la ficha de ${nombreMostrar}. ` +
+                           "Inténtalo otra vez antes de añadir otro perro.");
+    } finally {
+      setGuardandoParaAnadirOtro(false);
+    }
+  };
+
+  // La tarjeta de "¿tienes más perros?", que se usa en dos sitios: en la
+  // ficha del perro y en la pantalla de hacer el menú.
+  const invitacionAOtroPerro = (
+    <>
+      <button
+        onClick={anadirOtroPerroGuardandoEste}
+        disabled={guardandoParaAnadirOtro}
+        className="w-full flex items-center gap-3 p-4 rounded-2xl"
+        style={{ background: "#FFFFFF", border: `1.5px dashed #D8CFEC` }}
+      >
+        <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+          <Plus size={18} strokeWidth={2} style={{ color: VIOLETA }} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p style={{ color: TINTA, fontFamily: fontBody, fontSize: 14, fontWeight: 700 }}>
+            {guardandoParaAnadirOtro ? `Guardando a ${nombreMostrar}...` : "¿Tienes más perros?"}
+          </p>
+          <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+            Añade a otro y podréis hacer sus menús lo más parecidos posible:
+            una sola compra para los dos.
+          </p>
+        </div>
+        <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+      </button>
+      {errorAlAnadirOtro && (
+        <p className="text-xs mt-2 leading-snug" style={{ color: "#B4436C", fontFamily: fontBody }}>
+          {errorAlAnadirOtro}
+        </p>
+      )}
+    </>
+  );
+
   const irAModo = (m) => {
     setModo(m);
     // ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso: antes solo
@@ -3695,38 +4214,21 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
     return RAZAS.filter((r) => r.nombre.toLowerCase().includes(q)).slice(0, 12);
   }, [busqueda]);
 
-  const edad = useMemo(() => calcularEdad(perfil.dia, perfil.mesIdx, perfil.anio), [perfil.dia, perfil.mesIdx, perfil.anio]);
-
-  const especiesExcluidas = useMemo(() => especiesExcluidasDePerfil(perfil), [perfil.alergias, perfil.otrosEvitar]);
-  const alimentosEvitados = useMemo(() => alimentosEvitadosDePerfil(perfil), [perfil.alergias, perfil.otrosEvitar]);
+  // ⚠️ MOVIDO FUERA DEL COMPONENTE (21 agosto) — estos cálculos (edad,
+  // etapa, kcal al día, qué no puede comer) describen a UN perro, y
+  // vivían aquí dentro porque solo hacía falta el que se está mirando.
+  // Al poder hacer los menús de VARIOS perros de la casa a la vez hacen
+  // falta también los de los OTROS, que no están en `perfil` sino en la
+  // lista que vino de Supabase. Están en datosDeUnPerro(), tal cual: la
+  // fórmula no se ha tocado. Copiarla habría sido asegurarse de que
+  // algún día las dos versiones dieran kcal distintas para el mismo
+  // perro, y nadie sabría cuál mira la app.
+  const { edad, especiesExcluidas, alimentosEvitados, pesoAdultoEsperado,
+          etapaCalculada, etapaLabel, derReal } = useMemo(
+    () => datosDeUnPerro(perfil), [perfil]);
   const categoriasDisponibles = useMemo(
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
     [especiesExcluidas]
-  );
-
-  // ⚠️ CORREGIDO (5 agosto, noche): antes esto era directamente la media
-  // de la raza, sin ajustar nunca por la curva de crecimiento real del
-  // cachorro. Ahora, si hay edad y peso actual, se usa su propia
-  // trayectoria (igual que ya hacía der.py en el servidor) -- la media
-  // de la raza queda solo como último recurso, cuando faltan datos.
-  const pesoAdultoMedioRaza = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
-  const pesoAdultoEsperado = pesoAdultoDesdeCurva(
-    Number(perfil.pesoActual), edad?.totalMeses, pesoAdultoMedioRaza,
-    perfil.raza?.pesoMin, perfil.raza?.pesoMax
-  ) || pesoAdultoMedioRaza;
-  const etapaCalculada = useMemo(() => determinarEtapa(edad, pesoAdultoEsperado), [edad, pesoAdultoEsperado]);
-  const ETAPA_LABEL = { cachorro_joven: "Cachorro muy joven", cachorro_crecimiento: "Cachorro en crecimiento", adulto: "Adulto", senior: "Senior" };
-  const etapaLabel = ETAPA_LABEL[etapaCalculada] || "Adulto";
-  const derReal = useMemo(
-    () => calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx,
-        perfil.esterilizado, {
-          pesoAdultoKg: pesoAdultoEsperado,
-          pesoIdealKg: pesoIdealDesdeCondicion(Number(perfil.pesoActual), perfil.condicionIdx),
-          raza: perfil.raza?.nombre,
-          machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
-        }),
-    [perfil.pesoActual, etapaCalculada, perfil.actividadIdx, perfil.esterilizado,
-     pesoAdultoEsperado, perfil.raza?.nombre, perfil.sexo, perfil.condicionIdx]
   );
 
   // ═══ REVALIDACIÓN DEL MENÚ CUANDO CAMBIA EL PERRO ═══════════════════
@@ -4698,6 +5200,7 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
   // menús ni se pinta.
   if (fase === "seccion" && seccionSuelta) {
     return (
+      <>
       <VistaMenus
         soloSeccion={seccionSuelta}
         menus={MENUS_EJEMPLO}
@@ -4724,7 +5227,15 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
         premium={premium}
         onMostrarSuscripcion={() => setMostrarSuscripcion(true)}
         onRegenerarConAlimentos={() => {}}
+        selectorDePerros={selectorDePerros}
+        usuario={usuario}
+        onPerroGuardado={onPerroGuardado}
       />
+      {/* VistaMenus pinta su propio panel lateral, no `drawerLigero`, así
+          que los avisos hay que colgarlos aquí a mano. */}
+      {avisoCambiarDePerro}
+      {avisoBorrarPerro}
+      </>
     );
   }
 
@@ -4936,6 +5447,34 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             ? "Sus datos y lo que necesita al día — toca el lápiz para cambiar algo"
             : "Revisa que todo esté bien — toca el lápiz para cambiar algo"}
         </p>
+        {/* ⚠️ AÑADIDO — CAMBIAR DE PERRO, A LA VISTA.
+            Cuando esto solo vivía dentro del panel lateral, tener varios
+            perros era una función invisible: si no abrías el panel, no
+            existía. Aquí, en la pantalla de inicio, se ve sin buscarla.
+            Con un solo perro no se pinta nada: no hay entre qué elegir. */}
+        {listaDePerros.length > 1 && (
+          <div className="flex gap-2 mt-4 overflow-x-auto pb-1" style={{ justifyContent: "center", flexWrap: "wrap" }}>
+            {listaDePerros.map((p) => (
+              <button
+                key={p.id ?? "__nuevo__"}
+                onClick={() => {
+                  if (p.esElDeAhora) return;
+                  if (!perfil._id && perfil.nombre.trim()) { setPerroAlQueIrmeTrasAvisar(p.id); return; }
+                  onCambiarDePerro(p.id);
+                }}
+                className="px-4 py-2 rounded-full text-sm shrink-0"
+                style={{
+                  background: p.esElDeAhora ? "#FFFFFF" : "rgba(255,255,255,0.14)",
+                  color: p.esElDeAhora ? VIOLETA : "#FFFFFF",
+                  border: "none", fontFamily: fontBody,
+                  fontWeight: p.esElDeAhora ? 700 : 500,
+                }}
+              >
+                {p.nombre}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
@@ -5083,6 +5622,15 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
                 if (perroGuardado?.id && !perfil._id) {
                   setPerfil((p) => ({ ...p, _id: perroGuardado.id }));
                 }
+                // ⚠️ AÑADIDO — avisar arriba de que este perro existe (o
+                // de que cambió de nombre). Sin esto, un perro recién
+                // creado no aparecía en el selector hasta recargar la
+                // página: la lista se leía sólo al iniciar sesión.
+                //
+                // Ojo: esto NO remonta la app a propósito. Aquí la
+                // usuaria acaba de pulsar "ir al generador"; remontar la
+                // devolvería al perfil, deshaciéndolo. Ver AuthGate.
+                if (perroGuardado?.id) onPerroGuardado(perroGuardado);
               }).catch(console.error);
             }
           }}
@@ -5093,10 +5641,230 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             ? "Hacer el menú de la semana →"
             : "Todo bien, ir al generador de menús →"}
         </button>
+        {/* ⚠️ AÑADIDO — LA INVITACIÓN A AÑADIR OTRO PERRO.
+            Pedido expreso: "cuando entras por primera vez tendría que
+            verse algún botón de tengo más de un perro". Tenía razón: la
+            función existía pero solo dentro del panel lateral, o sea que
+            para descubrirla había que saber ya que estaba.
+
+            Se pinta con UN solo perro, incluida LA PRIMERA VEZ: ése es
+            justo el momento en que estás pensando en tus perros y sabes
+            cuántos tienes. Si la ficha todavía no está guardada, se
+            guarda antes de empezar la siguiente (ver
+            anadirOtroPerroGuardandoEste). Con dos o más ya no hace falta
+            invitar a nada — para eso están las pestañas de arriba. */}
+        {listaDePerros.length === 1 && <div className="mt-3">{invitacionAOtroPerro}</div>}
+
+        {/* ⚠️ AÑADIDO — borrar perro. Hasta ahora un perro creado por
+            error se quedaba en la cuenta para siempre: no había forma de
+            quitarlo desde la app. Va aquí abajo, en gris y pequeño, y no
+            en el selector: borrar no es una forma de cambiar de perro.
+            El aviso de confirmación explica que se van también sus menús
+            (ver eliminarPerro en supabase.js). */}
+        {perfil._id && (
+          <button
+            onClick={() => {
+              setErrorAlBorrarPerro(null);
+              setPerroABorrar({ id: perfil._id, nombre: nombreMostrar });
+            }}
+            className="w-full text-center py-3 mt-2"
+            style={{ color: MALVA, fontFamily: fontBody, fontSize: 13, background: "none", border: "none" }}
+          >
+            Borrar a {nombreMostrar} de mi cuenta
+          </button>
+        )}
       </div>
       {drawerLigero}
     </div>
   );
+  }
+
+  // ⚠️ AÑADIDO — LOS MENÚS DE TODA LA CASA.
+  //
+  // Pantalla propia, y no la de siempre con pestañas, porque lo que se
+  // enseña aquí es distinto: no es "tus menús de la semana", es "cómo de
+  // parecidos han salido y qué tienes que comprar". El menú de cada perro
+  // se guarda en SU ficha, así que después se ve donde se ve siempre.
+  if (fase === "casa") {
+    if (cargandoCasa) {
+      return (
+        <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
+          <Fuentes />
+          <Dog size={36} strokeWidth={1.4} style={{ color: VIOLETA }} />
+          <p className="mt-4" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
+            Calculando los menús de {listaDePerros.length} perros...
+          </p>
+          <p className="text-sm mt-3" style={{ color: MALVA, fontFamily: fontBody }}>
+            {paraQuien === "parecidos"
+              ? "Buscando la combinación que le sirva a todos con los menos cambios posibles."
+              : "Cada uno con sus medidas, su etapa y sus necesidades."}
+          </p>
+          <div className="flex items-center gap-2 mt-4 px-4 py-3 rounded-xl" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
+            <span style={{ fontSize: 16 }}>☝️</span>
+            <p className="text-xs text-left" style={{ color: "#7A5C00", fontFamily: fontBody }}>
+              No cierres esta pantalla ni salgas de la app — si lo haces, habrá que empezar de cero.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (errorCasa || !menusDeLaCasa) {
+      return (
+        <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
+          <Fuentes />
+          <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
+          <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
+            No hemos podido hacer los menús de todos
+          </p>
+          <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody, maxWidth: 340 }}>
+            {errorCasa || "Inténtalo otra vez."}
+          </p>
+          {/* Que falle para todos no puede dejarte sin poder hacer el de
+              uno: el camino de siempre sigue ahí, a un toque. */}
+          <button
+            onClick={() => { setParaQuien("solo"); setFase("generador"); setPantalla("elegir"); }}
+            className="py-3 px-6 rounded-xl"
+            style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}
+          >
+            Hacer solo el de {nombreMostrar} →
+          </button>
+          {drawerLigero}
+        </div>
+      );
+    }
+
+    const sonParecidos = menusDeLaCasa.modo_conjunto === "parecidos";
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+        <Fuentes />
+        <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
+          <div className="flex items-center justify-between mb-3">
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
+            <BotonAtras onClick={() => { setFase("generador"); setPantalla("elegir"); }} texto="Volver" />
+          </div>
+          <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+            Los menús de<br />la casa
+          </h1>
+          {sonParecidos && (
+            <p className="text-sm mt-3" style={{ color: MALVA, fontFamily: fontBody }}>
+              {menusDeLaCasa.compra_unica
+                ? "Todos comen lo mismo, en cantidades distintas. Una sola compra."
+                : `Se han hecho lo más parecidos posible: ${menusDeLaCasa.cambios_totales} ` +
+                  `${menusDeLaCasa.cambios_totales === 1 ? "alimento distinto" : "alimentos distintos"} en total.`}
+            </p>
+          )}
+        </div>
+
+        <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
+          {menusDeLaCasa.menus.map((m) => (
+            <div key={m.indice} className="rounded-2xl p-5 mb-4" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Dog size={17} strokeWidth={1.7} style={{ color: VIOLETA }} />
+                <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>{m.nombre}</p>
+                {m.es_la_base && sonParecidos && (
+                  <span className="text-[9px] px-2 py-0.5 rounded-full" style={{ background: PAPEL, color: VIOLETA, fontFamily: "monospace" }}>
+                    de referencia
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] tracking-[0.1em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
+                {Math.round(m.kcal_total || 0)} kcal · {Math.round(m.gramos_total || 0)} g al día
+              </p>
+              {!m.factible ? (
+                <p className="text-sm" style={{ color: ROSA, fontFamily: fontBody }}>
+                  {m.motivo || "No hemos encontrado un menú que cumpla para este perro."}
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-1 mb-3">
+                    {Object.entries(m.menu || {}).map(([alimento, gramos]) => {
+                      const esNuevo = (m.cambios?.anadidos || []).includes(alimento);
+                      return (
+                        <div key={alimento} className="flex items-baseline justify-between gap-3">
+                          <span className="text-sm" style={{ color: esNuevo ? VIOLETA : TINTA, fontFamily: fontBody, fontWeight: esNuevo ? 700 : 400 }}>
+                            {alimento}
+                            {esNuevo && sonParecidos && (
+                              <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>solo suyo</span>
+                            )}
+                          </span>
+                          <span className="text-sm shrink-0" style={{ color: MALVA, fontFamily: fontBody }}>
+                            {gramos < 1 ? gramos.toFixed(2) : Math.round(gramos)} g
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {m.resumen_parecido && (
+                    <p className="text-xs leading-snug pt-3" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid #F0EAF8" }}>
+                      {m.resumen_parecido}
+                    </p>
+                  )}
+                  {m.aviso_composicion && (
+                    <p className="text-xs leading-snug mt-2" style={{ color: "#6B4E9E", fontFamily: fontBody }}>
+                      {m.aviso_composicion}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+
+          {/* La lista de la compra junta. Es el motivo de todo esto: que
+              compres una vez y porciones una vez. */}
+          {compraDeLaCasa.length > 0 && (
+            <div className="rounded-2xl p-5 mb-4" style={{ background: VIOLETA }}>
+              <p className="text-[10px] tracking-[0.18em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
+                La compra de un día, para todos
+              </p>
+              {compraDeLaCasa.map((linea) => (
+                <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1">
+                  <span className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontBody }}>
+                    {linea.alimento}
+                    {linea.deQuien.length < menusDeLaCasa.menus.length && (
+                      <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                        solo {linea.deQuien.join(" y ")}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm shrink-0" style={{ color: ROSA, fontFamily: fontBody, fontWeight: 700 }}>
+                    {linea.gramos < 1 ? linea.gramos.toFixed(2) : Math.round(linea.gramos)} g
+                  </span>
+                </div>
+              ))}
+              <p className="text-[11px] mt-3 pt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
+                Es lo de UN día. Multiplica por los días que vayas a preparar de golpe.
+              </p>
+            </div>
+          )}
+
+          <div className="flex-1" />
+          {usuario && (
+            <button
+              onClick={guardarMenusDeLaCasa}
+              disabled={guardandoCasa || guardadosCasa}
+              className="w-full py-4 rounded-2xl text-base"
+              style={{
+                background: guardadosCasa ? "#E8E0F4" : ROSA,
+                color: guardadosCasa ? VIOLETA : "#FFFFFF",
+                fontFamily: fontBody, fontWeight: 700, border: "none",
+              }}
+            >
+              {guardadosCasa
+                ? "✓ Guardado — cada menú en la ficha de su perro"
+                : guardandoCasa ? "Guardando..." : "Guardar los menús"}
+            </button>
+          )}
+          <button
+            onClick={() => { setFase("generador"); setPantalla("elegir"); }}
+            className="w-full text-center py-3 mt-1"
+            style={{ color: MALVA, fontFamily: fontBody, fontSize: 13, background: "none", border: "none" }}
+          >
+            Volver
+          </button>
+        </div>
+        {drawerLigero}
+      </div>
+    );
   }
 
   if (fase === "generador" && pantalla === "elegir") {
@@ -5109,10 +5877,78 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
           </div>
           <h1 className="text-3xl leading-tight mb-2" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
-            ¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?
+            {paraQuien === "solo"
+              ? <>¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?</>
+              : <>¿Cómo quieres<br />hacer los menús<br />de la casa?</>}
           </h1>
         </div>
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
+          {/* ⚠️ AÑADIDO — ¿PARA QUIÉN ES ESTE MENÚ?
+              Pedido expreso: poder hacer los menús de todos los perros de
+              la casa lo más PARECIDOS posible ("si cuadra cambiando solo
+              las cantidades, perfecto; y si no, los menos cambios de
+              alimento posibles"), o dejar que cada uno tenga el suyo.
+              Con un solo perro esto no se pinta: no hay nada que elegir. */}
+          {listaDePerros.length > 1 && (
+            <>
+              <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+                ¿Para quién?
+              </p>
+              <div className="flex flex-col gap-2 mb-6">
+                {[
+                  { key: "solo", titulo: `Solo para ${nombreMostrar}`,
+                    nota: "Como siempre: su menú, con sus opciones." },
+                  { key: "parecidos", titulo: `Para los ${listaDePerros.length}, lo más parecidos posible`,
+                    nota: "Mismos alimentos siempre que se pueda, cambiando solo las cantidades. Una compra y un porcionado." },
+                  { key: "cada_uno", titulo: `Para los ${listaDePerros.length}, cada uno el suyo`,
+                    nota: "Sin mirarse entre ellos: el mejor menú de cada perro por separado." },
+                ].map((op) => {
+                  const activo = paraQuien === op.key;
+                  return (
+                    <button
+                      key={op.key}
+                      onClick={() => setParaQuien(op.key)}
+                      className="text-left rounded-xl p-4"
+                      style={{ background: activo ? "#F3EDFB" : "#FFFFFF",
+                               border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
+                    >
+                      <p className="text-sm" style={{ color: TINTA, fontFamily: fontBody, fontWeight: activo ? 700 : 600 }}>
+                        {op.titulo}
+                      </p>
+                      <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                        {op.nota}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Para varios perros, de momento solo automático: elegir a mano
+              los alimentos de cada perro por separado es otra pantalla
+              entera, y mezclarla con ésta la volvería ilegible. Se dice,
+              en vez de enseñar opciones que no harían lo que prometen. */}
+          {paraQuien !== "solo" ? (
+            <>
+              <p className="text-sm mb-4 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                Se hará un menú automático para cada perro, con sus kcal, su etapa
+                y lo que no puede comer.
+                {paraQuien === "parecidos"
+                  ? " Si alguno no puede comer algo del resto, ése cambia y los demás no."
+                  : ""}
+              </p>
+              <button
+                onClick={() => generarMenusDeLaCasa(paraQuien)}
+                className="w-full py-4 rounded-2xl text-base"
+                style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}
+              >
+                Hacer los menús de los {listaDePerros.length} →
+              </button>
+              <div className="flex-1" />
+            </>
+          ) : (
+          <>
           <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
             Antes de nada
           </p>
@@ -5180,7 +6016,15 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
               Elige primero qué come {nombreMostrar} ahora
             </p>
           )}
+          {/* ⚠️ AÑADIDO — la misma invitación, aquí. Pedido expreso: que
+              se pueda decir "tengo más de un perro" también en la
+              pantalla en la que te pide lo del menú, no solo en la ficha.
+              Es el otro momento en que se piensa en ello: estás a punto
+              de hacer un menú y te acuerdas de que en casa hay dos. */}
+          {listaDePerros.length === 1 && invitacionAOtroPerro}
           <div className="flex-1" />
+          </>
+          )}
           </div>
         {drawerLigero}
       </div>
@@ -5387,7 +6231,9 @@ function RawkuOnboardingInterna({ usuario, perroInicial }) {
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} />
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} selectorDePerros={selectorDePerros} usuario={usuario} onPerroGuardado={onPerroGuardado} />
+        {avisoCambiarDePerro}
+        {avisoBorrarPerro}
       </>
     );
   }
@@ -5968,9 +6814,53 @@ function Rueda({ valores, valor, onChange, ancho = 72 }) {
   );
 }
 
+// Dónde se recuerda, por cuenta, con qué perro se estaba. Que al volver
+// a abrir la app salga otro perro distinto del que dejaste es
+// desconcertante cuando tienes dos o tres.
+const CLAVE_PERRO_ACTIVO = (userId) => `rawku:perro-activo:${userId}`;
+
+function leerPerroActivoRecordado(userId) {
+  try {
+    return window.localStorage.getItem(CLAVE_PERRO_ACTIVO(userId)) || null;
+  } catch {
+    // Navegador con el almacenamiento capado (modo privado en algunos
+    // iOS). No es motivo para romper el login: se cae al primer perro.
+    return null;
+  }
+}
+
+function recordarPerroActivo(userId, perroId) {
+  try {
+    if (perroId) window.localStorage.setItem(CLAVE_PERRO_ACTIVO(userId), perroId);
+    else window.localStorage.removeItem(CLAVE_PERRO_ACTIVO(userId));
+  } catch {
+    // Igual que arriba: si no se puede recordar, se sigue igual.
+  }
+}
+
 function AuthGate() {
   const [usuario, setUsuario] = useState(undefined);
-  const [perroInicial, setPerroInicial] = useState(undefined); // undefined=cargando, null=no hay, {...}=hay perro
+  // ⚠️ AMPLIADO — antes aquí sólo vivía UN perro (`perroInicial`), porque
+  // la app daba por hecho que cada cuenta tenía uno: getPerros devolvía
+  // la lista entera y se cogía `perros[0]`, tirando el resto. Ahora se
+  // guarda la lista completa y cuál de ellos se está mirando.
+  const [perros, setPerros] = useState(undefined); // undefined=cargando, []=no hay ninguno
+  //
+  // Estos dos van SEPARADOS a propósito:
+  //   · `perroMontadoId` dice qué perro se le pasa al componente de dentro.
+  //   · `montaje` es lo único que entra en su `key`, o sea lo único que
+  //     lo hace montarse de cero.
+  //
+  // Hacen falta separados porque RawkuOnboardingInterna calcula TODOS sus
+  // estados (paso, fase, perfil, menús...) una única vez al montarse. Para
+  // cambiar de perro de verdad hay que remontarlo — de ahí `montaje`.
+  // Pero justo después de CREAR un perro no se puede remontar: en ese
+  // momento la usuaria acaba de pulsar "ir al generador de menús" y un
+  // remonte la devolvería a la pantalla de perfil, deshaciendo lo que
+  // acaba de hacer. Ahí sólo se apunta el id (sin tocar `montaje`), y el
+  // componente sigue vivo exactamente donde estaba.
+  const [perroMontadoId, setPerroMontadoId] = useState(null);
+  const [montaje, setMontaje] = useState(0);
 
   // ⚠️ CORREGIDO — había DOS caminos distintos cargando el perro a la vez
   // y pisándose el uno al otro:
@@ -5978,15 +6868,15 @@ function AuthGate() {
   //   2. onAutenticado, el callback que <Auth> llama tras el login.
   // Se veían literalmente dos GET /rest/v1/perros seguidos por cada
   // login. Además el listener hacía `setUsuario(user)` y sólo DESPUÉS
-  // (tras un await) tocaba perroInicial: en esa rendija, usuario ya
-  // valía "hay sesión" mientras perroInicial seguía valiendo el `null`
+  // (tras un await) tocaba el perro: en esa rendija, usuario ya
+  // valía "hay sesión" mientras el perro seguía valiendo el `null`
   // viejo de "aquí no hay nadie logueado". Si React pintaba justo ahí,
   // el componente principal se montaba creyendo que la usuaria NO tiene
   // perro -- y como sus estados iniciales se calculan una única vez al
   // montar, se quedaba en el onboarding para siempre aunque el perro
   // llegase medio segundo después.
   //
-  // Ahora hay UN solo cargador. Pone usuario y perroInicial JUNTOS y sin
+  // Ahora hay UN solo cargador. Pone usuario y perros JUNTOS y sin
   // ningún await entre medias, así que nunca existe un render con esa
   // pareja de valores incoherente. Y lleva un contador de peticiones,
   // para que una respuesta lenta de una sesión vieja no pise a otra más
@@ -5998,7 +6888,8 @@ function AuthGate() {
       cargaRef.current = { token: cargaRef.current.token + 1, userIdEnCurso: null };
       identificarUsuarioEnSentry(null);
       setUsuario(null);
-      setPerroInicial(null);
+      setPerros([]);
+      setPerroMontadoId(null);
       return;
     }
 
@@ -6018,15 +6909,27 @@ function AuthGate() {
 
     // ── Los dos juntos, sin await de por medio ──
     setUsuario(user);
-    setPerroInicial(undefined);
-    migaDePan("AuthGate: sesión iniciada, cargando perro");
+    setPerros(undefined);
+    migaDePan("AuthGate: sesión iniciada, cargando perros");
 
     getPerros(user.id)
-      .then((perros) => {
+      .then((lista) => {
         if (cargaRef.current.token !== token) return; // respuesta obsoleta
-        const perro = perros && perros.length > 0 ? perros[0] : null;
-        migaDePan("AuthGate: perro cargado", { tienePerro: Boolean(perro) });
-        setPerroInicial(perro);
+        const perrosCargados = lista ?? [];
+        // Se recupera el perro con el que se estaba. Si ese perro ya no
+        // existe (se borró desde otro móvil), se cae al primero en vez
+        // de dejar la app sin perro teniendo perros.
+        const recordado = leerPerroActivoRecordado(user.id);
+        const elegido =
+          perrosCargados.find((p) => p.id === recordado) ??
+          perrosCargados[0] ??
+          null;
+        migaDePan("AuthGate: perros cargados", {
+          cuantos: perrosCargados.length,
+          seRecuperoElRecordado: Boolean(recordado && elegido && elegido.id === recordado),
+        });
+        setPerros(perrosCargados);
+        setPerroMontadoId(elegido ? elegido.id : null);
       })
       .catch((err) => {
         if (cargaRef.current.token !== token) return;
@@ -6034,8 +6937,55 @@ function AuthGate() {
         // usuaria acababa en el onboarding sin que quedara rastro en
         // ningún sitio. Ahora el fallo llega a Sentry.
         capturarError(err, { donde: "AuthGate.getPerros", userId: user.id });
-        setPerroInicial(null);
+        setPerros([]);
+        setPerroMontadoId(null);
       });
+  };
+
+  // ─── Cambiar de perro ──────────────────────────────────────────────
+  // Remonta el componente de dentro (sube `montaje`), que es la única
+  // forma de que recalcule perfil, menús, pantalla de arranque... con
+  // los datos del perro nuevo. Ver el comentario largo de arriba.
+  const cambiarDePerro = (perroId) => {
+    if (!usuario || perroId === perroMontadoId) return;
+    recordarPerroActivo(usuario.id, perroId);
+    setPerroMontadoId(perroId);
+    setMontaje((m) => m + 1);
+  };
+
+  // Empezar un perro nuevo: mismo remonte, pero sin perro de partida, así
+  // que el componente arranca en el paso 1 del asistente.
+  const anadirPerro = () => {
+    if (!usuario) return;
+    recordarPerroActivo(usuario.id, null);
+    setPerroMontadoId(null);
+    setMontaje((m) => m + 1);
+  };
+
+  // Un perro se acaba de guardar (creado o editado). Se refresca la lista
+  // para que el selector enseñe el nombre y el peso al día. NO se remonta:
+  // ver el comentario de `montaje`.
+  const perroGuardado = (perro) => {
+    if (!perro?.id) return;
+    setPerros((prev) => {
+      const lista = prev ?? [];
+      return lista.some((p) => p.id === perro.id)
+        ? lista.map((p) => (p.id === perro.id ? { ...p, ...perro } : p))
+        : [...lista, perro];
+    });
+    if (usuario) recordarPerroActivo(usuario.id, perro.id);
+    setPerroMontadoId(perro.id);
+  };
+
+  // Un perro se acaba de borrar. Aquí SÍ hay que remontar: el perro que
+  // se estaba mirando ya no existe.
+  const perroEliminado = (perroId) => {
+    const restantes = (perros ?? []).filter((p) => p.id !== perroId);
+    const siguiente = restantes[0] ?? null;
+    setPerros(restantes);
+    if (usuario) recordarPerroActivo(usuario.id, siguiente ? siguiente.id : null);
+    setPerroMontadoId(siguiente ? siguiente.id : null);
+    setMontaje((m) => m + 1);
   };
 
   useEffect(() => {
@@ -6043,8 +6993,8 @@ function AuthGate() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Mientras carga usuario O perro
-  if (usuario === undefined || perroInicial === undefined) {
+  // Mientras carga usuario O perros
+  if (usuario === undefined || perros === undefined) {
     return (
       <div style={{ minHeight: '100dvh', background: '#FBF7FC', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <Dog size={32} strokeWidth={1.4} style={{ color: '#5A4088' }} />
@@ -6060,11 +7010,25 @@ function AuthGate() {
     return <Auth onAutenticado={cargarSesion} />;
   }
 
+  const perroMontado = (perros ?? []).find((p) => p.id === perroMontadoId) ?? null;
+
   return (
     <ErrorBoundary>
-      {/* key por cuenta: si se cambia de usuario, el componente se monta
-          de cero en vez de heredar el estado del anterior. */}
-      <RawkuOnboardingInterna key={usuario.id} usuario={usuario} perroInicial={perroInicial} />
+      {/* key por cuenta Y por montaje: si se cambia de usuario o de perro,
+          el componente se monta de cero en vez de heredar el estado del
+          anterior. Sin esto, cambiar de perro dejaría el perfil, los
+          menús y hasta la pantalla en la que estás del perro de antes:
+          todos esos estados se calculan una sola vez, al montar. */}
+      <RawkuOnboardingInterna
+        key={`${usuario.id}:${montaje}`}
+        usuario={usuario}
+        perroInicial={perroMontado}
+        perros={perros ?? []}
+        onCambiarDePerro={cambiarDePerro}
+        onAnadirPerro={anadirPerro}
+        onPerroGuardado={perroGuardado}
+        onPerroEliminado={perroEliminado}
+      />
     </ErrorBoundary>
   );
 }
