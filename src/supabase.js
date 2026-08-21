@@ -137,6 +137,24 @@ export async function guardarPerro(userId, perfil) {
 }
 
 export async function eliminarPerro(perroId) {
+  // ⚠️ Los menús NO se borran solos al borrar su perro: la tabla `menus`
+  // no tiene borrado en cascada sobre `perros`. Cuando esto se hacía a
+  // secas quedaban menús huérfanos, con un `perro_id` que ya no apunta a
+  // nadie — invisibles para la app (getMenus filtra por perro) pero
+  // ocupando sitio para siempre. Lo documentó la propia migración
+  // supabase/migracion-menus-perro-id.sql: "son menús de cuentas que no
+  // tienen ningún perro guardado (se borró el perro pero quedaron sus
+  // menús). Esos no se pueden adoptar automáticamente".
+  //
+  // Se borran ANTES que el perro a propósito: si falla el borrado del
+  // perro, los menús ya no están pero el perro sigue, que es un estado
+  // raro pero recuperable. Al revés sería la basura silenciosa de antes.
+  const { error: errorMenus } = await supabase
+    .from('menus')
+    .delete()
+    .eq('perro_id', perroId)
+  if (errorMenus) throw errorMenus
+
   const { error } = await supabase
     .from('perros')
     .delete()
