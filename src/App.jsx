@@ -2593,7 +2593,12 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 // error se lo comía React. Ahora `usuario` llega como
                 // prop desde arriba.
                 if (usuario && perfil._id) {
-                  guardarPerro(usuario.id, { ...perfil, pesoActual: nuevoPeso, id: perfil._id })
+                  // ⚠️ etapa y peso adulto se recalculan con el peso NUEVO:
+                  // guardar el peso nuevo con la etapa vieja dejaría la
+                  // ficha contradiciéndose a sí misma.
+                  guardarPerro(usuario.id, { ...perfil, pesoActual: nuevoPeso, id: perfil._id },
+                    (() => { const d = datosDeUnPerro({ ...perfil, pesoActual: nuevoPeso });
+                             return { etapa: d.etapaCalculada, pesoAdultoEsperado: d.pesoAdultoEsperado }; })())
                     .then((perroGuardado) => { if (perroGuardado?.id) onPerroGuardado(perroGuardado); })
                     .catch(console.error);
                 }
@@ -3171,7 +3176,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-21 · varios perros desde el inicio
+              build 2026-08-21 · ficha del perro completa
             </p>
           </div>
         </div>
@@ -3257,8 +3262,17 @@ function perfilDesdeSupabase(p) {
     // tamaño y el peso de referencia.
     raza: razaDesdeNombre(nombreDeRaza(p.raza)),
     sexo: p.sexo || null,
-    modoRaza: null,
-    tamanoManual: null,
+    // ⚠️ CORREGIDO (21 agosto) — estos dos volvían SIEMPRE en null, y el
+    // tamaño no es decorativo: para un mestizo (sin raza) es de donde
+    // sale su peso adulto esperado, y de ahí la etapa y las kcal. Ver
+    // datosDeUnPerro: usa PESO_ADULTO_POR_TAMANO[perfil.tamanoManual].
+    // Con null caía al valor por defecto de 25 kg, fuera el perro un Toy
+    // de 3 kg o un Gigante de 55 -- en cada recarga, sin avisar.
+    //
+    // Solo se recupera como "manual" si NO hay raza: con raza, el tamaño
+    // sale de ella y poner las dos cosas se contradiría.
+    modoRaza: razaDesdeNombre(nombreDeRaza(p.raza)) ? "raza" : (p.tamano ? "sin_raza" : null),
+    tamanoManual: razaDesdeNombre(nombreDeRaza(p.raza)) ? null : (p.tamano || null),
   };
 }
 
@@ -3877,7 +3891,7 @@ function RawkuOnboardingInterna({
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-21 · varios perros desde el inicio
+          build 2026-08-21 · ficha del perro completa
         </p>
         {usuario && !premium && (
           <button
@@ -4143,7 +4157,8 @@ function RawkuOnboardingInterna({
     setGuardandoParaAnadirOtro(true);
     setErrorAlAnadirOtro(null);
     try {
-      const guardado = await guardarPerro(usuario.id, { ...perfil, id: perfil._id });
+      const guardado = await guardarPerro(usuario.id, { ...perfil, id: perfil._id },
+        { etapa: etapaCalculada, pesoAdultoEsperado, dietaActual });
       if (!guardado?.id) throw new Error("Supabase no devolvió el perro guardado");
       onPerroGuardado(guardado);
       onAnadirPerro();
@@ -5618,7 +5633,8 @@ function RawkuOnboardingInterna({
             setFase("generador");
             // Guardar/actualizar perfil del perro en Supabase
             if (usuario) {
-              guardarPerro(usuario.id, { ...perfil, id: perfil._id }).then((perroGuardado) => {
+              guardarPerro(usuario.id, { ...perfil, id: perfil._id },
+                           { etapa: etapaCalculada, pesoAdultoEsperado, dietaActual }).then((perroGuardado) => {
                 if (perroGuardado?.id && !perfil._id) {
                   setPerfil((p) => ({ ...p, _id: perroGuardado.id }));
                 }
