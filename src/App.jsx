@@ -3171,7 +3171,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-21 · varios perros
+              build 2026-08-21 · menús de la casa
             </p>
           </div>
         </div>
@@ -3626,6 +3626,17 @@ function RawkuOnboardingInterna({
   // sitio que se puede abrir desde cualquier pantalla. Con un solo perro
   // no se despliega nada: sólo aparece "Añadir otro perro", para que a
   // quien tenga uno no le cambie la app de sitio.
+  // ─── MENÚS DE TODA LA CASA ────────────────────────────────────────
+  // "solo"      → como siempre, el menú de este perro.
+  // "parecidos" → los de todos, amoldados entre sí: misma compra.
+  // "cada_uno"  → los de todos, pero cada uno el mejor suyo.
+  const [paraQuien, setParaQuien] = useState("solo");
+  const [menusDeLaCasa, setMenusDeLaCasa] = useState(null);
+  const [cargandoCasa, setCargandoCasa] = useState(false);
+  const [errorCasa, setErrorCasa] = useState(null);
+  const [guardandoCasa, setGuardandoCasa] = useState(false);
+  const [guardadosCasa, setGuardadosCasa] = useState(false);
+
   const [selectorPerrosAbierto, setSelectorPerrosAbierto] = useState(false);
   // Perro al que se quiere ir teniendo otro a medio crear: se guarda
   // aquí para poder preguntar antes de tirar lo escrito.
@@ -3866,7 +3877,7 @@ function RawkuOnboardingInterna({
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-21 · varios perros
+          build 2026-08-21 · menús de la casa
         </p>
         {usuario && !premium && (
           <button
@@ -4000,6 +4011,115 @@ function RawkuOnboardingInterna({
       {avisoBorrarPerro}
     </>
   );
+
+  // ⚠️ AÑADIDO — GENERAR LOS MENÚS DE TODOS LOS PERROS DE LA CASA.
+  //
+  // Una sola llamada a /menu/varios-perros con la ficha de cada perro.
+  // El reparto de quién manda y cuánto se amolda cada uno lo decide el
+  // servidor, que es donde está el motor -- aquí solo se manda quién es
+  // quién y se enseña lo que vuelve.
+  //
+  // Cada perro va con SUS kcal, SU etapa y SUS alergias: lo único que se
+  // comparte, y solo en modo "parecidos", es la lista de alimentos. Un
+  // menú que no cumpla lo suyo no sale, igual que en el resto de la app.
+  const generarMenusDeLaCasa = async (comoSeQuieren) => {
+    setCargandoCasa(true);
+    setErrorCasa(null);
+    setMenusDeLaCasa(null);
+    setGuardadosCasa(false);
+    setFase("casa");
+
+    // Se manda el perro que se está mirando PRIMERO y con el perfil de
+    // pantalla (que puede llevar cambios sin guardar todavía); los demás,
+    // tal y como están en Supabase.
+    const fichas = [
+      { id: perfil._id, nombre: nombreMostrar, perfil },
+      ...(perros || [])
+        .filter((p) => p.id !== perfil._id)
+        .map((p) => ({ id: p.id, nombre: p.nombre || "Sin nombre", perfil: perfilDesdeSupabase(p) })),
+    ];
+
+    try {
+      const res = await fetchConTimeout(`${API_BASE}/menu/varios-perros`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          perros: fichas.map((f) => cuerpoApiDeUnPerro(f.perfil)),
+          nombres: fichas.map((f) => f.nombre),
+          modo_conjunto: comoSeQuieren === "parecidos" ? "parecidos" : "distintos",
+        }),
+      });
+      let cuerpo;
+      try {
+        cuerpo = await res.json();
+      } catch {
+        cuerpo = { factible: false, motivo: `Respuesta no válida del servidor (HTTP ${res.status}).` };
+      }
+      if (!cuerpo.factible) {
+        setErrorCasa(cuerpo.motivo || "No hemos encontrado menús que cumplan para todos.");
+      } else {
+        // Se guarda junto el id del perro, que la respuesta no lo trae
+        // (el servidor no sabe nada de Supabase) y hace falta para poder
+        // guardar el menú de cada uno en su sitio.
+        setMenusDeLaCasa({
+          ...cuerpo,
+          menus: (cuerpo.menus || []).map((m, i) => ({ ...m, perroId: fichas[i]?.id ?? null })),
+        });
+      }
+    } catch (err) {
+      setErrorCasa(err?.esTimeout
+        ? "El servidor no ha contestado a tiempo. Suele pasar tras un rato sin uso: inténtalo otra vez."
+        : "No hemos podido conectar con el servidor. Comprueba la conexión e inténtalo otra vez.");
+      capturarError(err, { donde: "generarMenusDeLaCasa", cuantos: fichas.length });
+    } finally {
+      setCargandoCasa(false);
+    }
+  };
+
+  const guardarMenusDeLaCasa = async () => {
+    if (!usuario || !menusDeLaCasa || guardandoCasa) return;
+    setGuardandoCasa(true);
+    try {
+      for (const m of menusDeLaCasa.menus) {
+        if (!m.perroId || !m.factible) continue;  // sin dueño no se guarda: sería un menú perdido
+        const fila = await guardarMenu(usuario.id, m.perroId, {
+          modo: "automatico",
+          derReal: m.kcal_total ?? null,
+          etapaLabel: null,
+          menusData: [m],
+          numMenus: 1,
+          nombre: `Menú de casa · ${m.nombre}`,
+        });
+        // Que aparezca ya en "Mis menús" del perro que se está mirando,
+        // sin recargar. Los de los otros perros aparecen al cambiar a ellos.
+        if (fila && m.perroId === perfil._id) setMenusGuardados((previos) => [fila, ...previos]);
+      }
+      setGuardadosCasa(true);
+    } catch (err) {
+      capturarError(err, { donde: "guardarMenusDeLaCasa" });
+      setErrorCasa("Los menús están hechos, pero no se han podido guardar. Inténtalo otra vez.");
+    } finally {
+      setGuardandoCasa(false);
+    }
+  };
+
+  // La compra de la semana, sumando lo de todos los perros. Es el motivo
+  // entero de que los menús se parezcan: si cada perro lleva lo suyo, la
+  // lista es el doble de larga y hay que porcionar dos veces.
+  const compraDeLaCasa = useMemo(() => {
+    if (!menusDeLaCasa) return [];
+    const total = {};
+    for (const m of menusDeLaCasa.menus || []) {
+      for (const [alimento, gramos] of Object.entries(m.menu || {})) {
+        if (!total[alimento]) total[alimento] = { gramos: 0, deQuien: [] };
+        total[alimento].gramos += gramos;
+        total[alimento].deQuien.push(m.nombre);
+      }
+    }
+    return Object.entries(total)
+      .map(([alimento, d]) => ({ alimento, ...d }))
+      .sort((a, b) => b.gramos - a.gramos);
+  }, [menusDeLaCasa]);
 
   const irAModo = (m) => {
     setModo(m);
@@ -5509,6 +5629,194 @@ function RawkuOnboardingInterna({
   );
   }
 
+  // ⚠️ AÑADIDO — LOS MENÚS DE TODA LA CASA.
+  //
+  // Pantalla propia, y no la de siempre con pestañas, porque lo que se
+  // enseña aquí es distinto: no es "tus menús de la semana", es "cómo de
+  // parecidos han salido y qué tienes que comprar". El menú de cada perro
+  // se guarda en SU ficha, así que después se ve donde se ve siempre.
+  if (fase === "casa") {
+    if (cargandoCasa) {
+      return (
+        <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
+          <Fuentes />
+          <Dog size={36} strokeWidth={1.4} style={{ color: VIOLETA }} />
+          <p className="mt-4" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
+            Calculando los menús de {listaDePerros.length} perros...
+          </p>
+          <p className="text-sm mt-3" style={{ color: MALVA, fontFamily: fontBody }}>
+            {paraQuien === "parecidos"
+              ? "Buscando la combinación que le sirva a todos con los menos cambios posibles."
+              : "Cada uno con sus medidas, su etapa y sus necesidades."}
+          </p>
+          <div className="flex items-center gap-2 mt-4 px-4 py-3 rounded-xl" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
+            <span style={{ fontSize: 16 }}>☝️</span>
+            <p className="text-xs text-left" style={{ color: "#7A5C00", fontFamily: fontBody }}>
+              No cierres esta pantalla ni salgas de la app — si lo haces, habrá que empezar de cero.
+            </p>
+          </div>
+        </div>
+      );
+    }
+    if (errorCasa || !menusDeLaCasa) {
+      return (
+        <div className="cnl-pantalla-completa w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: PAPEL }}>
+          <Fuentes />
+          <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
+          <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
+            No hemos podido hacer los menús de todos
+          </p>
+          <p className="text-sm mb-6" style={{ color: MALVA, fontFamily: fontBody, maxWidth: 340 }}>
+            {errorCasa || "Inténtalo otra vez."}
+          </p>
+          {/* Que falle para todos no puede dejarte sin poder hacer el de
+              uno: el camino de siempre sigue ahí, a un toque. */}
+          <button
+            onClick={() => { setParaQuien("solo"); setFase("generador"); setPantalla("elegir"); }}
+            className="py-3 px-6 rounded-xl"
+            style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}
+          >
+            Hacer solo el de {nombreMostrar} →
+          </button>
+          {drawerLigero}
+        </div>
+      );
+    }
+
+    const sonParecidos = menusDeLaCasa.modo_conjunto === "parecidos";
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+        <Fuentes />
+        <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
+          <div className="flex items-center justify-between mb-3">
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
+            <BotonAtras onClick={() => { setFase("generador"); setPantalla("elegir"); }} texto="Volver" />
+          </div>
+          <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+            Los menús de<br />la casa
+          </h1>
+          {sonParecidos && (
+            <p className="text-sm mt-3" style={{ color: MALVA, fontFamily: fontBody }}>
+              {menusDeLaCasa.compra_unica
+                ? "Todos comen lo mismo, en cantidades distintas. Una sola compra."
+                : `Se han hecho lo más parecidos posible: ${menusDeLaCasa.cambios_totales} ` +
+                  `${menusDeLaCasa.cambios_totales === 1 ? "alimento distinto" : "alimentos distintos"} en total.`}
+            </p>
+          )}
+        </div>
+
+        <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
+          {menusDeLaCasa.menus.map((m) => (
+            <div key={m.indice} className="rounded-2xl p-5 mb-4" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+              <div className="flex items-center gap-2 mb-1">
+                <Dog size={17} strokeWidth={1.7} style={{ color: VIOLETA }} />
+                <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>{m.nombre}</p>
+                {m.es_la_base && sonParecidos && (
+                  <span className="text-[9px] px-2 py-0.5 rounded-full" style={{ background: PAPEL, color: VIOLETA, fontFamily: "monospace" }}>
+                    de referencia
+                  </span>
+                )}
+              </div>
+              <p className="text-[10px] tracking-[0.1em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
+                {Math.round(m.kcal_total || 0)} kcal · {Math.round(m.gramos_total || 0)} g al día
+              </p>
+              {!m.factible ? (
+                <p className="text-sm" style={{ color: ROSA, fontFamily: fontBody }}>
+                  {m.motivo || "No hemos encontrado un menú que cumpla para este perro."}
+                </p>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-1 mb-3">
+                    {Object.entries(m.menu || {}).map(([alimento, gramos]) => {
+                      const esNuevo = (m.cambios?.anadidos || []).includes(alimento);
+                      return (
+                        <div key={alimento} className="flex items-baseline justify-between gap-3">
+                          <span className="text-sm" style={{ color: esNuevo ? VIOLETA : TINTA, fontFamily: fontBody, fontWeight: esNuevo ? 700 : 400 }}>
+                            {alimento}
+                            {esNuevo && sonParecidos && (
+                              <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>solo suyo</span>
+                            )}
+                          </span>
+                          <span className="text-sm shrink-0" style={{ color: MALVA, fontFamily: fontBody }}>
+                            {gramos < 1 ? gramos.toFixed(2) : Math.round(gramos)} g
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {m.resumen_parecido && (
+                    <p className="text-xs leading-snug pt-3" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid #F0EAF8" }}>
+                      {m.resumen_parecido}
+                    </p>
+                  )}
+                  {m.aviso_composicion && (
+                    <p className="text-xs leading-snug mt-2" style={{ color: "#6B4E9E", fontFamily: fontBody }}>
+                      {m.aviso_composicion}
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+
+          {/* La lista de la compra junta. Es el motivo de todo esto: que
+              compres una vez y porciones una vez. */}
+          {compraDeLaCasa.length > 0 && (
+            <div className="rounded-2xl p-5 mb-4" style={{ background: VIOLETA }}>
+              <p className="text-[10px] tracking-[0.18em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
+                La compra de un día, para todos
+              </p>
+              {compraDeLaCasa.map((linea) => (
+                <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1">
+                  <span className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontBody }}>
+                    {linea.alimento}
+                    {linea.deQuien.length < menusDeLaCasa.menus.length && (
+                      <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                        solo {linea.deQuien.join(" y ")}
+                      </span>
+                    )}
+                  </span>
+                  <span className="text-sm shrink-0" style={{ color: ROSA, fontFamily: fontBody, fontWeight: 700 }}>
+                    {linea.gramos < 1 ? linea.gramos.toFixed(2) : Math.round(linea.gramos)} g
+                  </span>
+                </div>
+              ))}
+              <p className="text-[11px] mt-3 pt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
+                Es lo de UN día. Multiplica por los días que vayas a preparar de golpe.
+              </p>
+            </div>
+          )}
+
+          <div className="flex-1" />
+          {usuario && (
+            <button
+              onClick={guardarMenusDeLaCasa}
+              disabled={guardandoCasa || guardadosCasa}
+              className="w-full py-4 rounded-2xl text-base"
+              style={{
+                background: guardadosCasa ? "#E8E0F4" : ROSA,
+                color: guardadosCasa ? VIOLETA : "#FFFFFF",
+                fontFamily: fontBody, fontWeight: 700, border: "none",
+              }}
+            >
+              {guardadosCasa
+                ? "✓ Guardado — cada menú en la ficha de su perro"
+                : guardandoCasa ? "Guardando..." : "Guardar los menús"}
+            </button>
+          )}
+          <button
+            onClick={() => { setFase("generador"); setPantalla("elegir"); }}
+            className="w-full text-center py-3 mt-1"
+            style={{ color: MALVA, fontFamily: fontBody, fontSize: 13, background: "none", border: "none" }}
+          >
+            Volver
+          </button>
+        </div>
+        {drawerLigero}
+      </div>
+    );
+  }
+
   if (fase === "generador" && pantalla === "elegir") {
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -5519,10 +5827,78 @@ function RawkuOnboardingInterna({
             <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
           </div>
           <h1 className="text-3xl leading-tight mb-2" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
-            ¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?
+            {paraQuien === "solo"
+              ? <>¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?</>
+              : <>¿Cómo quieres<br />hacer los menús<br />de la casa?</>}
           </h1>
         </div>
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
+          {/* ⚠️ AÑADIDO — ¿PARA QUIÉN ES ESTE MENÚ?
+              Pedido expreso: poder hacer los menús de todos los perros de
+              la casa lo más PARECIDOS posible ("si cuadra cambiando solo
+              las cantidades, perfecto; y si no, los menos cambios de
+              alimento posibles"), o dejar que cada uno tenga el suyo.
+              Con un solo perro esto no se pinta: no hay nada que elegir. */}
+          {listaDePerros.length > 1 && (
+            <>
+              <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+                ¿Para quién?
+              </p>
+              <div className="flex flex-col gap-2 mb-6">
+                {[
+                  { key: "solo", titulo: `Solo para ${nombreMostrar}`,
+                    nota: "Como siempre: su menú, con sus opciones." },
+                  { key: "parecidos", titulo: `Para los ${listaDePerros.length}, lo más parecidos posible`,
+                    nota: "Mismos alimentos siempre que se pueda, cambiando solo las cantidades. Una compra y un porcionado." },
+                  { key: "cada_uno", titulo: `Para los ${listaDePerros.length}, cada uno el suyo`,
+                    nota: "Sin mirarse entre ellos: el mejor menú de cada perro por separado." },
+                ].map((op) => {
+                  const activo = paraQuien === op.key;
+                  return (
+                    <button
+                      key={op.key}
+                      onClick={() => setParaQuien(op.key)}
+                      className="text-left rounded-xl p-4"
+                      style={{ background: activo ? "#F3EDFB" : "#FFFFFF",
+                               border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
+                    >
+                      <p className="text-sm" style={{ color: TINTA, fontFamily: fontBody, fontWeight: activo ? 700 : 600 }}>
+                        {op.titulo}
+                      </p>
+                      <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                        {op.nota}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* Para varios perros, de momento solo automático: elegir a mano
+              los alimentos de cada perro por separado es otra pantalla
+              entera, y mezclarla con ésta la volvería ilegible. Se dice,
+              en vez de enseñar opciones que no harían lo que prometen. */}
+          {paraQuien !== "solo" ? (
+            <>
+              <p className="text-sm mb-4 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                Se hará un menú automático para cada perro, con sus kcal, su etapa
+                y lo que no puede comer.
+                {paraQuien === "parecidos"
+                  ? " Si alguno no puede comer algo del resto, ése cambia y los demás no."
+                  : ""}
+              </p>
+              <button
+                onClick={() => generarMenusDeLaCasa(paraQuien)}
+                className="w-full py-4 rounded-2xl text-base"
+                style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}
+              >
+                Hacer los menús de los {listaDePerros.length} →
+              </button>
+              <div className="flex-1" />
+            </>
+          ) : (
+          <>
           <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
             Antes de nada
           </p>
@@ -5591,6 +5967,8 @@ function RawkuOnboardingInterna({
             </p>
           )}
           <div className="flex-1" />
+          </>
+          )}
           </div>
         {drawerLigero}
       </div>

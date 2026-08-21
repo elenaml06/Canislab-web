@@ -159,6 +159,10 @@ export function crearFakeSupabase(opciones = {}) {
     // con aviso y al editar deja de haberlo.
     avisoComposicion: null,
     avisoComposicionAlEditar: null,
+    // Escenarios de /menu/varios-perros: si la compra sale única (todos
+    // los perros con los mismos alimentos) y si la llamada falla entera.
+    casaCompraUnica: true,
+    casaFalla: false,
   };
 
   const servidor = http.createServer(async (req, res) => {
@@ -206,6 +210,8 @@ export function crearFakeSupabase(opciones = {}) {
       if ("avisoComposicion" in cfg) estado.avisoComposicion = cfg.avisoComposicion;
       if ("avisoComposicionAlEditar" in cfg) estado.avisoComposicionAlEditar = cfg.avisoComposicionAlEditar;
       if (cfg.revalidar) estado.revalidar = cfg.revalidar;
+      if (typeof cfg.casaCompraUnica === "boolean") estado.casaCompraUnica = cfg.casaCompraUnica;
+      if (typeof cfg.casaFalla === "boolean") estado.casaFalla = cfg.casaFalla;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
       // raza guardada "a la antigua" (el objeto entero), para comprobar
       // que esas filas viejas se siguen leyendo bien.
@@ -219,6 +225,14 @@ export function crearFakeSupabase(opciones = {}) {
         retrasoPerrosMs: estado.retrasoPerrosMs,
         perros: estado.perros.length,
         nombresDePerros: estado.perros.map((p) => p.nombre),
+        // Cuántos menús guardados tiene CADA perro. Mirar solo el total
+        // no distingue "un menú para cada uno" de "los dos menús en el
+        // mismo perro", que es justo el fallo que hay que poder cazar.
+        menusPorPerro: estado.menus.reduce((cuenta, m) => {
+          const k = String(m.perro_id);
+          cuenta[k] = (cuenta[k] || 0) + 1;
+          return cuenta;
+        }, {}),
         menus: estado.menus.length,
         ultimoMenuGuardado: estado.ultimoMenuGuardado,
       });
@@ -337,6 +351,47 @@ export function crearFakeSupabase(opciones = {}) {
         ficha: { semaforo: "verde", correctos: 30, total: 30 },
         problemas_seguridad: [],
         aviso_composicion: estado.avisoComposicionAlEditar,
+      });
+    }
+    // ⚠️ AÑADIDO — los menús de todos los perros de la casa en una sola
+    // llamada. No calcula nada (para eso está el backend, con sus propias
+    // pruebas): devuelve una respuesta con la FORMA que la app espera, y
+    // los tests eligen el escenario con estado.casaCompraUnica.
+    if (ruta === "/menu/varios-perros") {
+      const pedido = JSON.parse(cuerpo || "{}");
+      const noms = pedido.nombres || [];
+      const base = { "Carne muscular de pollo": 420, "Hueso carnoso de pollo": 150,
+                     "Hígado de ternera": 40 };
+      const unica = estado.casaCompraUnica;
+      const menus = noms.map((nombre, i) => {
+        // el primero manda; los demás, o iguales, o con uno más
+        const propio = (i > 0 && !unica)
+          ? { ...base, "Sardina": 25 }
+          : { ...base };
+        const anadidos = (i > 0 && !unica) ? ["Sardina"] : [];
+        // las cantidades cambian por perro: es el sentido de "parecidos"
+        const escalado = Object.fromEntries(
+          Object.entries(propio).map(([n, g]) => [n, Math.round(g * (1 - i * 0.4))]));
+        return {
+          indice: i, nombre, es_la_base: i === 0, factible: true,
+          menu: escalado,
+          kcal_total: 1200 - i * 400, gramos_total: 610 - i * 200,
+          cambios: { iguales: Object.keys(base), anadidos, quitados: [],
+                     cuantos_cambios: anadidos.length },
+          resumen_parecido: i === 0 ? null : (anadidos.length === 0
+            ? `El menú de ${nombre} lleva exactamente los mismos alimentos que el de ${noms[0]}: solo cambian las cantidades. Compras una vez y repartes.`
+            : `El menú de ${nombre} comparte 3 alimentos con el de ${noms[0]}, pero lleva además Sardina. Es un cambio respecto a la compra de ${noms[0]}.`),
+        };
+      });
+      const totales = menus.reduce((t, m) => t + m.cambios.cuantos_cambios, 0);
+      return responder(200, {
+        factible: !estado.casaFalla,
+        motivo: estado.casaFalla ? "No hemos encontrado menús que cumplan para todos." : undefined,
+        modo_conjunto: pedido.modo_conjunto,
+        perro_base: noms[0],
+        cambios_totales: totales,
+        compra_unica: totales === 0,
+        menus,
       });
     }
     if (ruta === "/menu/semana") {

@@ -238,3 +238,116 @@ test.describe("varios perros por cuenta", () => {
     await expect(page.getByRole("button", { name: /Añadir otro perro/ })).toBeVisible();
   });
 });
+
+// ─── Los menús de toda la casa ───────────────────────────────────────────────
+//
+// Pedido expreso: "que el usuario tenga la opción de hacer menús totalmente
+// diferentes para cada perro, o generar los menús de todos lo más parecidos
+// posibles — si cuadra cambiando solo las cantidades, perfecto, y si no, los
+// menos cambios de alimento posibles".
+//
+// El reparto lo decide el motor (tiene sus propias pruebas en el backend).
+// Lo que se vigila aquí es la parte de la app:
+//   · que la opción se vea cuando hay más de un perro, y NO cuando hay uno;
+//   · que cada menú se guarde en la ficha de SU perro y no en la del que
+//     estabas mirando (un menú en el perro equivocado son cantidades
+//     equivocadas para un animal de verdad);
+//   · que si falla para todos, no te deje sin poder hacer el de uno.
+test.describe("los menús de toda la casa", () => {
+  test.beforeEach(async ({ request }) => {
+    await configurarBackend(request, {
+      retrasoPerrosMs: 100,
+      perros: [PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA],
+      menus: [], olvidarUltimoMenu: true,
+      casaCompraUnica: true, casaFalla: false,
+    });
+  });
+
+  const irAlGenerador = async (page) => {
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+  };
+
+  test("con un solo perro no se ofrece nada de la casa", async ({ page, request }) => {
+    await configurarBackend(request, { perros: [PERRO_DE_PRUEBA] });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+
+    await expect(page.getByText("¿Para quién?")).toHaveCount(0);
+  });
+
+  test("cuando cuadra, dice que la compra es una sola", async ({ page }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+
+    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Hacer los menús de los 2/ }).click();
+
+    await expect(page.getByText(/Una sola compra/)).toBeVisible();
+    // los dos perros, con sus cantidades distintas
+    await expect(page.getByText(PERRO_DE_PRUEBA.nombre).first()).toBeVisible();
+    await expect(page.getByText(SEGUNDO_PERRO_DE_PRUEBA.nombre).first()).toBeVisible();
+    await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
+  });
+
+  test("cuando NO cuadra, dice cuántos alimentos cambian", async ({ page, request }) => {
+    await configurarBackend(request, { casaCompraUnica: false });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+
+    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Hacer los menús de los 2/ }).click();
+
+    await expect(page.getByText(/1 alimento distinto en total/)).toBeVisible();
+    // y se ve DE QUIÉN es lo que no comparten
+    await expect(page.getByText("solo suyo").first()).toBeVisible();
+  });
+
+  test("cada menú se guarda en la ficha de su perro", async ({ page, request }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Hacer los menús de los 2/ }).click();
+    await page.getByRole("button", { name: "Guardar los menús" }).click();
+    await expect(page.getByRole("button", { name: /Guardado/ })).toBeVisible();
+
+    // ⚠️ Lo importante de esta prueba: UN menú para CADA perro. Guardar
+    // los dos en el perro que estabas mirando le daría a un perro las
+    // cantidades del otro — comida de verdad, mal medida.
+    //
+    // ⚠️ Y se mira lo que hay GUARDADO, no la lista de la pantalla. La
+    // primera versión miraba la pantalla y no servía: esa lista se
+    // actualiza en local y no vuelve a preguntar, así que seguía
+    // enseñando lo correcto aunque se hubiera guardado todo en el mismo
+    // perro. Se comprobó rompiéndolo a propósito: pasaba en verde.
+    const estado = await configurarBackend(request, {});
+    expect(estado.menus).toBe(2);
+    expect(estado.menusPorPerro).toEqual({
+      [PERRO_DE_PRUEBA.id]: 1,
+      [SEGUNDO_PERRO_DE_PRUEBA.id]: 1,
+    });
+
+    // y en la pantalla, cada perro ve el suyo
+    await abrirMenuLateral(page);
+    await page.getByRole("button", { name: /Mis menús/ }).click();
+    await expect(page.getByText(`Menú de casa · ${PERRO_DE_PRUEBA.nombre}`)).toBeVisible();
+    await expect(page.getByText(`Menú de casa · ${SEGUNDO_PERRO_DE_PRUEBA.nombre}`)).toHaveCount(0);
+  });
+
+  test("si falla para todos, se puede hacer el de uno solo", async ({ page, request }) => {
+    await configurarBackend(request, { casaFalla: true });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Hacer los menús de los 2/ }).click();
+
+    await expect(page.getByText("No hemos podido hacer los menús de todos")).toBeVisible();
+    await page.getByRole("button", { name: new RegExp(`Hacer solo el de ${PERRO_DE_PRUEBA.nombre}`) }).click();
+    // vuelve al generador de siempre, con sus modos
+    await expect(page.getByText(/¿Qué come .* ahora mismo\?/)).toBeVisible();
+  });
+});
