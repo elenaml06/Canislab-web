@@ -465,3 +465,95 @@ test.describe("decir que tienes más de un perro desde el principio", () => {
     await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
   });
 });
+
+// ─── La ficha del perro se guarda ENTERA ─────────────────────────────────────
+//
+// CASO REAL (21 de agosto): "añadí a Ruffo y le puse diez años y seis meses;
+// después de hacer el menú me coge la fecha de nacimiento de Cairo otra vez".
+//
+// No copiaba la fecha de nadie: no guardaba NINGUNA. El payload de guardarPerro
+// leía siete campos que en la app no existen con ese nombre
+// (perfil.fechaNacimiento, perfil.castrado, perfil.actividad...), así que se
+// guardaban vacíos, en silencio y sin error. Al releer, sin fecha, se usaba el
+// valor por defecto — el MISMO para todos los perros de la cuenta, que es lo
+// que parece "me ha copiado la del otro".
+//
+// GRAVE, no cosmético: de la fecha de nacimiento sale la ETAPA, y de la etapa
+// salen los 30 requisitos de FEDIAF. Un perro de diez años volvía como cachorro
+// y se le calculaba el menú de cachorro. Lo mismo con la esterilización y la
+// actividad, que entran en las kcal.
+//
+// Se mira lo GUARDADO, no la pantalla: la ficha se pinta desde el estado local,
+// así que puede verse perfecta y estar guardada vacía. Es justo lo que pasaba.
+test.describe("la ficha del perro se guarda entera", () => {
+  const PERRO_MAYOR = {
+    ...PERRO_DE_PRUEBA,
+    nombre: "Ruffo",
+    fecha_nacimiento: "2015-03-10",   // un perro de diez años
+    castrado: true,
+    actividad: "baja",
+    tamano: "Mediano",
+    raza: null,                        // mestizo: su tamaño es el manual
+  };
+
+  test.beforeEach(async ({ request }) => {
+    await configurarBackend(request, {
+      retrasoPerrosMs: 100, perros: [PERRO_MAYOR], menus: [],
+      casaFalla: false, casaCompraUnica: true,
+    });
+  });
+
+  test("generar el menú no borra la fecha de nacimiento", async ({ page, request }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    // Esto es lo que hacía la usuaria: entrar al generador. Ahí se guarda
+    // la ficha, y ahí era donde se vaciaba.
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await expect(page.getByText(/¿Qué come .* ahora mismo\?/)).toBeVisible();
+
+    await expect.poll(async () => {
+      const { perrosGuardados } = await configurarBackend(request, {});
+      return perrosGuardados[0];
+    }).toMatchObject({
+      nombre: "Ruffo",
+      fecha_nacimiento: "2015-03-10",   // ← lo que se perdía
+      castrado: true,                    // ← se guardaba siempre false
+      actividad: "baja",                 // ← se guardaba vacío
+      tamano: "Mediano",                 // ← se guardaba vacío
+    });
+  });
+
+  test("un perro de diez años sigue siendo senior, no cachorro", async ({ page, request }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+
+    // La etapa guardada es la que de verdad tiene, no la del perro
+    // recién nacido que salía al perder la fecha. De aquí salen los 30
+    // requisitos de FEDIAF con los que se le calcula la comida.
+    await expect.poll(async () => {
+      const { perrosGuardados } = await configurarBackend(request, {});
+      return perrosGuardados[0]?.etapa;
+    }).toBe("senior");
+  });
+
+  test("al volver, la ficha sigue diciendo su edad de verdad", async ({ page }) => {
+    await page.goto("/");
+    await iniciarSesion(page);
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await page.reload();
+
+    // Los años se calculan aquí, no se escriben a mano: puesto a mano,
+    // el test caducaría solo al pasar el cumpleaños del perro.
+    const nac = new Date(PERRO_MAYOR.fecha_nacimiento);
+    const hoy = new Date();
+    let anios = hoy.getFullYear() - nac.getFullYear();
+    if (hoy.getMonth() < nac.getMonth() ||
+        (hoy.getMonth() === nac.getMonth() && hoy.getDate() < nac.getDate())) anios--;
+
+    // Su edad de verdad, no el "0 años, 6 meses" del perro recién nacido
+    // que salía al perder la fecha.
+    await expect(page.getByText(new RegExp(`${anios} años`))).toBeVisible();
+  });
+});

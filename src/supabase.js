@@ -83,26 +83,73 @@ export async function getPerros(userId) {
   return data ?? []
 }
 
-export async function guardarPerro(userId, perfil) {
+// ⚠️ CORREGIDO (21 agosto) — FALLO GRAVE: LA FICHA DEL PERRO NO SE
+// GUARDABA ENTERA.
+//
+// CASO REAL: "añadí a Ruffo y le puse diez años y seis meses; después de
+// hacer el menú me coge la fecha de nacimiento de Cairo otra vez".
+//
+// No copiaba la fecha de nadie: es que NO GUARDABA NINGUNA. Este payload
+// leía SIETE campos que en la app no existen con ese nombre --
+// `perfil.fechaNacimiento`, `perfil.castrado`, `perfil.actividad`,
+// `perfil.etapa`, `perfil.tamano`, `perfil.dietaActual`,
+// `perfil.pesoAdultoEsperado`. La app los llama `dia`/`mesIdx`/`anio`,
+// `esterilizado`, `actividadIdx`... Comprobado: cero apariciones de los
+// siete en App.jsx. Así que se guardaban vacíos, en silencio, sin error.
+//
+// Al releer la ficha, sin fecha de nacimiento, se usaba el valor por
+// defecto (15 de febrero del año en curso) — el MISMO para todos los
+// perros de la cuenta, que es lo que parece "me ha copiado la fecha del
+// otro".
+//
+// POR QUÉ ES GRAVE Y NO SOLO FEO: de la fecha de nacimiento sale la
+// ETAPA, y de la etapa salen los 30 requisitos de FEDIAF. Un perro de
+// diez años volvía como cachorro de seis meses, y se le calculaba el
+// menú con los requisitos de un cachorro en crecimiento. Lo mismo con
+// la esterilización y el nivel de actividad, que entran en las kcal.
+//
+// No tiene nada que ver con tener varios perros: pasaba con uno solo,
+// en cada recarga. Con dos se nota porque los ves seguidos y se parecen.
+//
+// A partir de aquí esta función recibe la ficha TAL Y COMO LA TIENE LA
+// APP y hace ella las conversiones. Sigue aceptando la forma antigua
+// (fechaNacimiento, castrado, actividad) por si algún sitio la usa.
+const ACTIVIDAD_POR_INDICE = ['baja', 'media', 'alta']
+
+function fechaNacimientoISO(perfil) {
+  if (perfil.fechaNacimiento) return perfil.fechaNacimiento   // forma antigua
+  const { anio, mesIdx, dia } = perfil
+  if (anio == null || mesIdx == null || dia == null) return null
+  // En UTC a propósito: con la hora local, un 1 de mes en zonas al oeste
+  // de Greenwich se guardaba como el último día del mes anterior.
+  const d = new Date(Date.UTC(Number(anio), Number(mesIdx), Number(dia)))
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
+}
+
+export async function guardarPerro(userId, perfil, extras = {}) {
   const payload = {
     user_id: userId,
     nombre: perfil.nombre,
     peso_actual: perfil.pesoActual ? Number(perfil.pesoActual) : null,
-    peso_adulto_esperado: perfil.pesoAdultoEsperado ? Number(perfil.pesoAdultoEsperado) : null,
+    // etapa y peso adulto los calcula la app (necesitan la curva de
+    // crecimiento), así que los pasa quien llama. Ninguno de los dos se
+    // vuelve a leer para pintar la ficha -- se recalculan al cargar --
+    // pero se guardan bien igualmente, que para eso está la columna.
+    peso_adulto_esperado: extras.pesoAdultoEsperado ?? (perfil.pesoAdultoEsperado ? Number(perfil.pesoAdultoEsperado) : null),
     condicion_idx: perfil.condicionIdx ?? 2,
-    etapa: perfil.etapa,
-    tamano: perfil.tamano,
+    etapa: extras.etapa ?? perfil.etapa ?? null,
+    tamano: perfil.raza?.tamano || perfil.tamanoManual || perfil.tamano || null,
     sexo: perfil.sexo,
-    castrado: perfil.castrado ?? false,
-    actividad: perfil.actividad,
+    castrado: perfil.castrado ?? (perfil.esterilizado === 'si'),
+    actividad: perfil.actividad ?? ACTIVIDAD_POR_INDICE[perfil.actividadIdx ?? 1] ?? 'media',
     // ⚠️ CORREGIDO — aquí se guardaba el OBJETO entero de la raza
     // ({nombre, tamano, pesoMin, pesoMax, pesoMedio}) en una columna que
     // sólo debería llevar el nombre. Al releerlo salía texto ilegible en
     // la ficha del perro. Se acepta cualquiera de las dos formas para no
     // depender de cómo llame quien use esta función.
     raza: typeof perfil.raza === 'string' ? perfil.raza : (perfil.raza?.nombre ?? null),
-    fecha_nacimiento: perfil.fechaNacimiento || null,
-    dieta_actual: perfil.dietaActual,
+    fecha_nacimiento: fechaNacimientoISO(perfil),
+    dieta_actual: extras.dietaActual ?? perfil.dietaActual ?? null,
     alergia_si: perfil.alergiaSi,
     alergias: perfil.alergias ?? [],
     otros_evitar_si: perfil.otrosEvitarSi,

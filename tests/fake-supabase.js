@@ -228,6 +228,16 @@ export function crearFakeSupabase(opciones = {}) {
         // Cuántos menús guardados tiene CADA perro. Mirar solo el total
         // no distingue "un menú para cada uno" de "los dos menús en el
         // mismo perro", que es justo el fallo que hay que poder cazar.
+        // La fila del perro tal y como está guardada AHORA. Hace falta
+        // para poder afirmar sobre lo que de verdad se escribió, y no
+        // sobre lo que la pantalla enseña: la ficha se pinta desde el
+        // estado local, así que puede verse bien y estar guardada mal
+        // (que es exactamente el fallo del 21 de agosto).
+        perrosGuardados: estado.perros.map((p) => ({
+          nombre: p.nombre, fecha_nacimiento: p.fecha_nacimiento,
+          castrado: p.castrado, actividad: p.actividad, tamano: p.tamano,
+          etapa: p.etapa, peso_actual: p.peso_actual,
+        })),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
           const k = String(m.perro_id);
           cuenta[k] = (cuenta[k] || 0) + 1;
