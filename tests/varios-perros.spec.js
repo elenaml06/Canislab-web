@@ -40,6 +40,14 @@ async function iniciarSesion(page) {
   await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
 }
 
+// Sin perro guardado no existe el botón "Hacer el menú de la semana": se
+// aterriza en el paso 1 del asistente.
+async function iniciarSesion2(page) {
+  await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+  await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+}
+
 const abrirMenuLateral = (page) => page.getByRole("button", { name: "Menú", exact: true }).click();
 
 // El panel lateral. Hace falta acotar a él porque desde que el selector de
@@ -349,5 +357,111 @@ test.describe("los menús de toda la casa", () => {
     await page.getByRole("button", { name: new RegExp(`Hacer solo el de ${PERRO_DE_PRUEBA.nombre}`) }).click();
     // vuelve al generador de siempre, con sus modos
     await expect(page.getByText(/¿Qué come .* ahora mismo\?/)).toBeVisible();
+  });
+});
+
+// ─── Decir que tienes más de un perro DESDE EL PRINCIPIO ─────────────────────
+//
+// Pedido expreso: "en la pantalla principal según entras para generar el menú,
+// o sea el perfil del perro por primera vez, ahí puedes poner que tienes más
+// de un perro y poder hacerlo desde ella directamente".
+//
+// El caso delicado es justo ése: la PRIMERA vez. En ese momento la ficha del
+// perro todavía NO está en Supabase (se guarda al entrar al generador), y
+// añadir otro perro remonta la app entera — así que si no se guarda antes, la
+// ficha que se acaba de rellenar entera se pierde. Eso es lo que vigila esto.
+
+// Rellena el asistente de 6 pasos con un perro cualquiera y lo deja en la
+// pantalla de su ficha, SIN guardar todavía (no se ha ido al generador).
+async function completarAsistente(page, nombre) {
+  await page.getByText("1 / 6").waitFor();
+  await page.getByPlaceholder("Nombre de tu perro").fill(nombre);
+  await page.getByRole("button", { name: "Hembra", exact: true }).click();
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  await page.getByText("2 / 6").waitFor();
+  await page.getByRole("button", { name: /Es mestizo/ }).click();
+  await page.getByRole("button", { name: /^Mediano/ }).click();
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  await page.getByText("3 / 6").waitFor();          // fecha: valen los valores por defecto
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  await page.getByText("4 / 6").waitFor();
+  await page.getByPlaceholder("0").fill("20");
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  await page.getByText("5 / 6").waitFor();
+  await page.getByRole("button", { name: "No", exact: true }).click();  // sin esterilizar
+  await page.getByRole("button", { name: "Continuar" }).click();
+
+  // El paso 6 son cuatro preguntas (alergias, otras cosas a evitar,
+  // categorías fuera, patologías): hay que contestarlas TODAS para que
+  // "Terminar" se active. Se dice "No" a las cuatro.
+  await page.getByText("6 / 6").waitFor();
+  const noes = page.getByRole("button", { name: "No", exact: true });
+  for (let i = 0; i < 4; i++) await noes.nth(i).click();
+  await page.getByRole("button", { name: "Terminar" }).click();
+}
+
+test.describe("decir que tienes más de un perro desde el principio", () => {
+  test.beforeEach(async ({ request }) => {
+    // ⚠️ casaFalla/casaCompraUnica se ponen explícitamente aunque este
+    // bloque no vaya de eso: el servidor de mentira es UNO para toda la
+    // tanda, así que un escenario dejado por el bloque anterior (que
+    // prueba justo el fallo) se colaba aquí. Pasaba en verde por
+    // separado y fallaba en la tanda completa, que es la peor forma de
+    // fallar: parece cosa del azar y no lo es.
+    await configurarBackend(request, {
+      sinPerro: true, retrasoPerrosMs: 100, menus: [],
+      casaFalla: false, casaCompraUnica: true,
+    });
+  });
+
+  test("la primera vez, la ficha ya ofrece añadir otro perro", async ({ page }) => {
+    await page.goto("/");
+    await iniciarSesion2(page);
+    await completarAsistente(page, "Nala");
+
+    // Estamos en su ficha, recién rellenada y todavía sin guardar.
+    await expect(page.getByRole("button", { name: /¿Tienes más perros\?/ })).toBeVisible();
+  });
+
+  test("añadir el segundo NO pierde el primero, aunque no estuviera guardado", async ({ page, request }) => {
+    await page.goto("/");
+    await iniciarSesion2(page);
+    await completarAsistente(page, "Nala");
+
+    // Todavía no hay NINGÚN perro en la base de datos: es lo que hace que
+    // esta prueba sirva de algo.
+    expect((await configurarBackend(request, {})).perros).toBe(0);
+
+    await page.getByRole("button", { name: /¿Tienes más perros\?/ }).click();
+
+    // Nala se ha guardado antes de empezar con el siguiente. Si no, se
+    // habría perdido: añadir perro vuelve a montar la app de cero.
+    await expect.poll(async () => (await configurarBackend(request, {})).nombresDePerros)
+      .toEqual(["Nala"]);
+
+    // y se empieza el segundo desde el paso 1, en blanco
+    await expect(page.getByText("1 / 6")).toBeVisible();
+    await expect(page.getByPlaceholder("Nombre de tu perro")).toHaveValue("");
+  });
+
+  test("con los dos hechos, se pueden pedir sus menús a la vez", async ({ page, request }) => {
+    await page.goto("/");
+    await iniciarSesion2(page);
+    await completarAsistente(page, "Nala");
+    await page.getByRole("button", { name: /¿Tienes más perros\?/ }).click();
+    await completarAsistente(page, "Cairo");
+
+    // Desde la ficha del segundo, al generador: ahí tiene que poder
+    // pedirse el menú de los dos.
+    await page.getByRole("button", { name: /ir al generador de menús|Hacer el menú de la semana/ }).click();
+    await expect(page.getByText("¿Para quién?")).toBeVisible();
+    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Hacer los menús de los 2/ }).click();
+
+    await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
   });
 });

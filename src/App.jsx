@@ -3171,7 +3171,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-21 · menús de la casa
+              build 2026-08-21 · varios perros desde el inicio
             </p>
           </div>
         </div>
@@ -3877,7 +3877,7 @@ function RawkuOnboardingInterna({
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-21 · menús de la casa
+          build 2026-08-21 · varios perros desde el inicio
         </p>
         {usuario && !premium && (
           <button
@@ -4120,6 +4120,75 @@ function RawkuOnboardingInterna({
       .map(([alimento, d]) => ({ alimento, ...d }))
       .sort((a, b) => b.gramos - a.gramos);
   }, [menusDeLaCasa]);
+
+  // ⚠️ AÑADIDO — AÑADIR OTRO PERRO DESDE LA PRIMERA VEZ.
+  //
+  // Pedido expreso: poder decir "tengo más de un perro" ya en la primera
+  // pantalla, la de la ficha del perro antes de hacer el menú. Antes la
+  // invitación solo salía con la ficha YA guardada, o sea nunca la
+  // primera vez -- que es justo cuando la persona está pensando en sus
+  // perros y sabe cuántos tiene.
+  //
+  // La primera vez la ficha todavía no está en Supabase (se guarda al
+  // entrar al generador), así que hay que guardarla ANTES de empezar la
+  // siguiente: empezar otra sin guardar ésta se la llevaría por delante,
+  // porque añadir perro remonta la app entera.
+  const [guardandoParaAnadirOtro, setGuardandoParaAnadirOtro] = useState(false);
+  const [errorAlAnadirOtro, setErrorAlAnadirOtro] = useState(null);
+
+  const anadirOtroPerroGuardandoEste = async () => {
+    if (guardandoParaAnadirOtro) return;
+    // Ya guardado (o sin sesión donde guardar): directo.
+    if (perfil._id || !usuario) { onAnadirPerro(); return; }
+    setGuardandoParaAnadirOtro(true);
+    setErrorAlAnadirOtro(null);
+    try {
+      const guardado = await guardarPerro(usuario.id, { ...perfil, id: perfil._id });
+      if (!guardado?.id) throw new Error("Supabase no devolvió el perro guardado");
+      onPerroGuardado(guardado);
+      onAnadirPerro();
+    } catch (err) {
+      // Si no se ha podido guardar NO se navega: irse ahora perdería la
+      // ficha que se acaba de rellenar entera.
+      capturarError(err, { donde: "anadirOtroPerroGuardandoEste" });
+      setErrorAlAnadirOtro(`No hemos podido guardar la ficha de ${nombreMostrar}. ` +
+                           "Inténtalo otra vez antes de añadir otro perro.");
+    } finally {
+      setGuardandoParaAnadirOtro(false);
+    }
+  };
+
+  // La tarjeta de "¿tienes más perros?", que se usa en dos sitios: en la
+  // ficha del perro y en la pantalla de hacer el menú.
+  const invitacionAOtroPerro = (
+    <>
+      <button
+        onClick={anadirOtroPerroGuardandoEste}
+        disabled={guardandoParaAnadirOtro}
+        className="w-full flex items-center gap-3 p-4 rounded-2xl"
+        style={{ background: "#FFFFFF", border: `1.5px dashed #D8CFEC` }}
+      >
+        <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
+          <Plus size={18} strokeWidth={2} style={{ color: VIOLETA }} />
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <p style={{ color: TINTA, fontFamily: fontBody, fontSize: 14, fontWeight: 700 }}>
+            {guardandoParaAnadirOtro ? `Guardando a ${nombreMostrar}...` : "¿Tienes más perros?"}
+          </p>
+          <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+            Añade a otro y podréis hacer sus menús lo más parecidos posible:
+            una sola compra para los dos.
+          </p>
+        </div>
+        <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+      </button>
+      {errorAlAnadirOtro && (
+        <p className="text-xs mt-2 leading-snug" style={{ color: "#B4436C", fontFamily: fontBody }}>
+          {errorAlAnadirOtro}
+        </p>
+      )}
+    </>
+  );
 
   const irAModo = (m) => {
     setModo(m);
@@ -5578,32 +5647,13 @@ function RawkuOnboardingInterna({
             función existía pero solo dentro del panel lateral, o sea que
             para descubrirla había que saber ya que estaba.
 
-            Se pinta solo con UN perro y con su ficha ya guardada: antes
-            de eso estás a medio rellenar la primera y ofrecerte una
-            segunda no viene a cuento. Con dos o más ya no hace falta
-            invitar a nada — para eso están las pestañas de arriba y el
-            panel. */}
-        {perfil._id && listaDePerros.length === 1 && (
-          <button
-            onClick={onAnadirPerro}
-            className="w-full flex items-center gap-3 p-4 rounded-2xl mt-3"
-            style={{ background: "#FFFFFF", border: `1.5px dashed #D8CFEC` }}
-          >
-            <div className="shrink-0 w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: PAPEL }}>
-              <Plus size={18} strokeWidth={2} style={{ color: VIOLETA }} />
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p style={{ color: TINTA, fontFamily: fontBody, fontSize: 14, fontWeight: 700 }}>
-                ¿Tienes más perros?
-              </p>
-              <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-                Añade a otro y podrás hacerles menús lo más parecidos posible:
-                una sola compra para los dos.
-              </p>
-            </div>
-            <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-          </button>
-        )}
+            Se pinta con UN solo perro, incluida LA PRIMERA VEZ: ése es
+            justo el momento en que estás pensando en tus perros y sabes
+            cuántos tienes. Si la ficha todavía no está guardada, se
+            guarda antes de empezar la siguiente (ver
+            anadirOtroPerroGuardandoEste). Con dos o más ya no hace falta
+            invitar a nada — para eso están las pestañas de arriba. */}
+        {listaDePerros.length === 1 && <div className="mt-3">{invitacionAOtroPerro}</div>}
 
         {/* ⚠️ AÑADIDO — borrar perro. Hasta ahora un perro creado por
             error se quedaba en la cuenta para siempre: no había forma de
@@ -5966,6 +6016,12 @@ function RawkuOnboardingInterna({
               Elige primero qué come {nombreMostrar} ahora
             </p>
           )}
+          {/* ⚠️ AÑADIDO — la misma invitación, aquí. Pedido expreso: que
+              se pueda decir "tengo más de un perro" también en la
+              pantalla en la que te pide lo del menú, no solo en la ficha.
+              Es el otro momento en que se piensa en ello: estás a punto
+              de hacer un menú y te acuerdas de que en casa hay dos. */}
+          {listaDePerros.length === 1 && invitacionAOtroPerro}
           <div className="flex-1" />
           </>
           )}
