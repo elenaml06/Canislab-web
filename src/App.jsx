@@ -10,7 +10,7 @@ import { API_BASE, fetchConTimeout } from "./api.js";
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
 //
-//   "demo"  (por defecto ahora) — Premium se ve y se puede activar, pero
+//   "demo"  — Premium se ve y se puede activar, pero
 //           SIN pago: el botón lo enciende al momento. Sirve para probar
 //           cómo se ve la app como Premium y como no-Premium, sin
 //           depender de que Stripe funcione. La activación se guarda
@@ -18,12 +18,28 @@ import { API_BASE, fetchConTimeout } from "./api.js";
 //           así no deja plan="premium" en cuentas de verdad que luego
 //           haya que limpiar a mano.
 //
-//   "off"   — nada bloqueado y Premium no se ofrece por ningún lado.
+//   "off"   (POR DEFECTO AHORA) — nada bloqueado y Premium no se ofrece
+//           por ningún lado.
 //
 //   "on"    — el de verdad: se consulta el plan en Supabase y se paga
 //           por Stripe. Antes de poner esto hay que comprobar que
 //           /stripe/checkout responde de verdad en canislab-api.
-const PAYWALL_MODO = import.meta.env.VITE_PAYWALL || "demo";
+//
+// ⚠️ CAMBIADO A "off" (22 agosto) — PEDIDO EXPRESO: "necesito hacer
+// pruebas de todo y si hay cosas a las que no puedo acceder, jodido".
+// Tenía sentido: el muro estaba tapando funciones (varios menús en la
+// semana, evolución, analizar) mientras se está probando la app entera,
+// y ahora mismo no protege ningún ingreso -- Stripe está en modo prueba
+// con precios de sandbox, así que nadie puede pagar aunque quiera.
+//
+// NO se ha tocado nada de Stripe: el checkout, el webhook y la pantalla
+// de suscripción siguen enteros y probados (BLOQUE 10 del backend). Lo
+// único que cambia es que no se ofrece ni bloquea nada.
+//
+// PARA VOLVER A ENCENDERLO no hace falta tocar código: variable
+// VITE_PAYWALL en Vercel ("on" para el de verdad, "demo" para probar sin
+// pagar) y redesplegar.
+const PAYWALL_MODO = import.meta.env.VITE_PAYWALL || "off";
 const PAYWALL_ACTIVO = PAYWALL_MODO !== "off";
 const PAYWALL_ES_DEMO = PAYWALL_MODO === "demo";
 
@@ -3204,7 +3220,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-22 · sin undefined en cómo preparar
+              build 2026-08-22 · sin muro de pago
             </p>
           </div>
         </div>
@@ -3933,7 +3949,7 @@ function RawkuOnboardingInterna({
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-22 · sin undefined en cómo preparar
+          build 2026-08-22 · sin muro de pago
         </p>
         {usuario && !premium && (
           <button

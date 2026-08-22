@@ -1,11 +1,20 @@
-// ─── Muro de pago en modo "prueba" ───────────────────────────────────────────
+// ─── Muro de pago APAGADO: nada bloqueado ────────────────────────────────────
 //
-// Decisión de producto: el cobro de verdad todavía no está montado
-// (/stripe/checkout no responde), pero Premium no se quita de la app. Modo
-// "demo": se ve, se puede encender y apagar al momento, y no se cobra nada.
+// PEDIDO EXPRESO (22 de agosto): "necesito hacer pruebas de todo y si hay
+// cosas a las que no puedo acceder, jodido". Tenía sentido: el muro tapaba
+// funciones (varios menús en la semana, evolución, analizar) mientras se está
+// probando la app entera, y ahora mismo no protege ningún ingreso — Stripe
+// está en modo prueba con precios de sandbox, así que nadie puede pagar.
 //
-// El interruptor es VITE_PAYWALL en Vercel: "demo" (por defecto), "off"
-// (nada bloqueado, Premium oculto) y "on" (el de verdad, con Stripe).
+// El interruptor sigue siendo VITE_PAYWALL en Vercel, pero el valor POR
+// DEFECTO ha pasado de "demo" a "off". Nada de Stripe se ha tocado: el
+// checkout, el webhook y la pantalla de suscripción siguen enteros (el
+// BLOQUE 10 del backend los prueba). Lo único que cambia es que no se ofrece
+// ni se bloquea nada.
+//
+// Lo que vigila este archivo es que NO QUEDE NINGÚN CANDADO SUELTO. Un muro
+// se quita en un sitio y se olvida en otro con mucha facilidad: basta una
+// pantalla que siga mirando `premium` por su cuenta.
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA } from "./fake-supabase.js";
@@ -26,78 +35,66 @@ async function iniciarSesion(page) {
 
 const abrirMenuLateral = (page) => page.getByRole("button", { name: "Menú", exact: true }).click();
 
-test.describe("muro de pago en modo prueba", () => {
+test.describe("con el muro apagado no hay nada bloqueado", () => {
   test.beforeEach(async ({ request }) => {
     await configurarBackend(request, {
-      sinPerro: false, retrasoPerrosMs: 100, menus: [], colgarGenerador: false, perro: {},
+      sinPerro: false, retrasoPerrosMs: 100, menus: [], colgarGenerador: false,
+      perro: {}, premium: false,   // cuenta SIN premium: es el caso que importa
     });
   });
 
-  test("se puede activar Premium sin pagar, y se queda activado", async ({ page }) => {
-    await page.goto("/");
-    await iniciarSesion(page);
-
-    await abrirMenuLateral(page);
-    await page.getByRole("button", { name: /Ver Rawku Premium/ }).click();
-
-    // Queda claro que no se cobra nada.
-    await expect(page.getByText(/el pago todavía no está activo/)).toBeVisible();
-    await page.getByRole("button", { name: /Activar Premium \(sin pago\)/ }).click();
-
-    // Ya es Premium: la oferta desaparece y aparece el interruptor.
-    await abrirMenuLateral(page);
-    await expect(page.getByText(/Premium de prueba activo/)).toBeVisible();
-    await expect(page.getByRole("button", { name: /Ver Rawku Premium/ })).toHaveCount(0);
-  });
-
-  test("Premium de prueba sobrevive a recargar la página", async ({ page }) => {
+  test("no se ofrece Premium por ningún lado", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
     await abrirMenuLateral(page);
-    await page.getByRole("button", { name: /Ver Rawku Premium/ }).click();
-    await page.getByRole("button", { name: /Activar Premium \(sin pago\)/ }).click();
 
-    await page.reload();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
-    await abrirMenuLateral(page);
-    await expect(page.getByText(/Premium de prueba activo/)).toBeVisible();
+    await expect(page.getByRole("button", { name: /Premium/ })).toHaveCount(0);
+    await expect(page.getByText(/Hazte Premium|Ver Rawku Premium/)).toHaveCount(0);
   });
 
-  test("se puede volver a apagar, para ver la app como quien no es Premium", async ({ page }) => {
-    // Sin esto, en cuanto lo enciendes una vez ya no hay forma de
-    // comprobar cómo se ve la app sin Premium.
+  test("Evolución y Analizar se abren enteras, sin difuminar", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await abrirMenuLateral(page);
-    await page.getByRole("button", { name: /Ver Rawku Premium/ }).click();
-    await page.getByRole("button", { name: /Activar Premium \(sin pago\)/ }).click();
 
-    await abrirMenuLateral(page);
-    await page.getByRole("button", { name: /Premium de prueba activo/ }).click();
-
-    await abrirMenuLateral(page);
-    await expect(page.getByRole("button", { name: /Ver Rawku Premium/ })).toBeVisible();
-    await expect(page.getByText(/Premium de prueba activo/)).toHaveCount(0);
+    for (const seccion of [/Evolución y crecimiento/, /Analizar la dieta actual/]) {
+      await abrirMenuLateral(page);
+      await page.getByRole("button", { name: seccion }).click();
+      // el candado del PremiumGate: si estuviera, saldría esta llamada a pagar
+      await expect(page.getByText(/Esto es de Rawku Premium|Hazte Premium/)).toHaveCount(0);
+      await expect(page.locator("[style*='blur']")).toHaveCount(0);
+    }
   });
 
-  test("activar Premium de prueba NO llama a Stripe ni toca la cuenta", async ({ page }) => {
-    // El modo prueba se guarda sólo en este navegador: si escribiera el
-    // plan en Supabase, dejaría cuentas de verdad marcadas como premium
-    // que luego habría que limpiar a mano.
+  test("se pueden pedir varios menús para la semana sin pagar", async ({ page }) => {
+    // Esto era lo más molesto de probar: el "+" abría el muro en cuanto
+    // pasabas de un menú.
+    await page.goto("/");
+    await iniciarSesion(page);
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await page.getByRole("button", { name: "Pienso", exact: true }).click();
+    await page.getByRole("button", { name: /^Automático/ }).click();
+
+    await page.getByRole("button", { name: "+", exact: true }).click();
+    await page.getByRole("button", { name: "+", exact: true }).click();
+
+    // Que el contador vaya por 3 se comprueba en el botón, que lo dice
+    // con todas las letras: buscar el texto "3" a secas encuentra
+    // cualquier 3 de la pantalla (gramos, días...) y no prueba nada.
+    await expect(page.getByRole("button", { name: /^Generar los 3 menús/ })).toBeVisible();
+    await expect(page.getByText(/Premium/)).toHaveCount(0);
+  });
+
+  test("nada llama a Stripe", async ({ page }) => {
     const llamadas = [];
     page.on("request", (req) => {
-      const u = req.url();
-      if (u.includes("stripe") || (u.includes("/rest/v1/profiles") && req.method() !== "GET")) {
-        llamadas.push(`${req.method()} ${u}`);
-      }
+      if (req.url().includes("stripe")) llamadas.push(`${req.method()} ${req.url()}`);
     });
 
     await page.goto("/");
     await iniciarSesion(page);
     await abrirMenuLateral(page);
-    await page.getByRole("button", { name: /Ver Rawku Premium/ }).click();
-    await page.getByRole("button", { name: /Activar Premium \(sin pago\)/ }).click();
-    await page.waitForTimeout(1000);
+    await page.getByRole("button", { name: /Evolución y crecimiento/ }).click();
+    await page.waitForTimeout(800);
 
     expect(llamadas, `no debería haber llamado a: ${llamadas.join(", ")}`).toEqual([]);
   });
