@@ -649,7 +649,12 @@ test.describe("para varios perros, el recorrido completo", () => {
     await expect(aviso).not.toContainText(SEGUNDO_PERRO_DE_PRUEBA.nombre);
   });
 
-  test("con cuenta gratis, pedir más de un menú ofrece Premium", async ({ page }) => {
+  // ⚠️ PARADO (22 agosto) — igual que el bloque del candado en
+  // secciones-desde-perfil: el muro está apagado por defecto, así que
+  // pedir varios menús ya no ofrece nada. Se conserva porque el día que
+  // se encienda hay que comprobar que la casa NO es un agujero por el que
+  // colarse al muro. Apuntado en PENDIENTE.
+  test.skip("con cuenta gratis, pedir más de un menú ofrece Premium", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
     await irAlGenerador(page);

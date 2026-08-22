@@ -69,13 +69,9 @@ test.describe("secciones desde el perfil", () => {
     await page.goto("/");
     await iniciarSesion(page);
 
-    // Primero Premium (modo prueba, sin pago), para ver la sección de
-    // verdad y no el candado.
-    await abrirMenuLateral(page);
-    await page.getByRole("button", { name: /Ver Rawku Premium/ }).click();
-    await page.getByRole("button", { name: /Activar Premium \(sin pago\)/ }).click();
-    await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
-
+    // ⚠️ Antes hacía falta activar Premium de prueba para ver la sección
+    // en vez del candado. Con el muro apagado (VITE_PAYWALL="off" por
+    // defecto desde el 22 de agosto) no hay candado que esquivar.
     await abrirMenuLateral(page);
     await page.getByRole("button", { name: /Analizar la dieta actual/ }).click();
     await expect(page.getByText(/Dinos qué le estás dando/)).toBeVisible();
@@ -88,7 +84,16 @@ test.describe("secciones desde el perfil", () => {
   });
 });
 
+// ⚠️ PARADO (22 agosto) — este bloque prueba el CANDADO, y el muro está
+// apagado por defecto (VITE_PAYWALL="off"): no hay candado que probar, así
+// que estas pruebas no pueden pasar tal cual.
+//
+// NO se borran: lo que vigilan es un fallo real y grave -- el overlay del
+// muro tapaba la pantalla entera y dejaba a la usuaria encerrada sin poder
+// salir sin pagar. El día que el muro se vuelva a encender, esto tiene que
+// volver a correr ANTES de desplegarlo. Está apuntado en PENDIENTE.
 test.describe("el muro de pago nunca encierra", () => {
+  test.skip(true, "el muro está apagado (VITE_PAYWALL=off): reactivar junto con él");
   test.beforeEach(async ({ request }) => {
     await configurarBackend(request, {
       sinPerro: false, retrasoPerrosMs: 100, menus: [],
