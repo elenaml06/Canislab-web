@@ -2300,7 +2300,9 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                       </button>
                     )}
                     {INSTRUCCIONES_POR_CATEGORIA[item.categoria] && (
-                      <button onClick={() => { setComoAbierto(comoAbierto === i ? null : i); setPorqueAbierto(null); setEditorAbierto(null); }}>
+                      <button
+                        aria-label={`Cómo preparar ${item.alimento}`}
+                        onClick={() => { setComoAbierto(comoAbierto === i ? null : i); setPorqueAbierto(null); setEditorAbierto(null); }}>
                         <UtensilsCrossed size={15} style={{ color: comoAbierto === i ? ROSA : "#C9BEDD" }} />
                       </button>
                     )}
@@ -2401,11 +2403,35 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                         <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
                           {COMO_DAR_ALIMENTO[item.alimento].como}
                         </p>
-                        <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
-                          {COMO_DAR_ALIMENTO[item.alimento].esComprimido
-                            ? `${COMO_DAR_ALIMENTO[item.alimento].pieza} — se puede partir para dosis más pequeñas.`
-                            : `Como referencia, ${COMO_DAR_ALIMENTO[item.alimento].pieza} — con los ${formatearGramos(item.gramos)} de hoy te haces una idea de cuánto es.`}
-                        </p>
+                        {/* ⚠️ CORREGIDO (22 agosto) — CASO REAL: en la
+                            zanahoria ponía "Como referencia, undefined —
+                            con los 15g de hoy...". 34 de las 77 entradas
+                            de COMO_DAR_ALIMENTO (todas las verduras y
+                            frutas) tienen instrucción pero NO tienen
+                            `pieza`, y la plantilla lo pintaba tal cual.
+                            Sin `pieza` no hay referencia que dar, así que
+                            no se pinta la línea. Los pesos de referencia
+                            que faltan son un dato, no código: se añaden a
+                            mano cuando los haya, y entonces aparecen
+                            solas.
+
+                            ⚠️ Y el número tampoco cuadraba: la fila de
+                            arriba enseña el total para los días que se
+                            preparan de golpe (item.gramos x multiplicador)
+                            y esto enseñaba la ración de UN día. Los dos
+                            eran correctos, pero juntos parecían
+                            contradecirse: 105 g arriba y "los 15g de hoy"
+                            debajo. Ahora se dicen las dos cosas y de dónde
+                            sale cada una. */}
+                        {COMO_DAR_ALIMENTO[item.alimento].pieza && (
+                          <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                            {COMO_DAR_ALIMENTO[item.alimento].esComprimido
+                              ? `${COMO_DAR_ALIMENTO[item.alimento].pieza} — se puede partir para dosis más pequeñas.`
+                              : multiplicador > 1
+                                ? `Como referencia, ${COMO_DAR_ALIMENTO[item.alimento].pieza} — los ${formatearGramos(item.gramos * multiplicador)} de arriba son para ${diasSeleccionados} días: ${formatearGramos(item.gramos)} al día.`
+                                : `Como referencia, ${COMO_DAR_ALIMENTO[item.alimento].pieza} — con los ${formatearGramos(item.gramos)} de hoy te haces una idea de cuánto es.`}
+                          </p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -3178,7 +3204,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-22 · kcal explicadas y alimentos nuevos
+              build 2026-08-22 · sin undefined en cómo preparar
             </p>
           </div>
         </div>
@@ -3907,7 +3933,7 @@ function RawkuOnboardingInterna({
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-22 · kcal explicadas y alimentos nuevos
+          build 2026-08-22 · sin undefined en cómo preparar
         </p>
         {usuario && !premium && (
           <button
