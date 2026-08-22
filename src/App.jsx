@@ -552,7 +552,7 @@ const CATEGORIAS_ALIMENTO = {
     "Cordero": ["Corazón de cordero", "Lengua de cordero"],
     "Gallina": ["Gallina (carne sin hueso)"],
     "Pato": ["Pato (carne sin hueso)"],
-    "Pavo": ["Molleja de pavo", "Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
+    "Pavo": ["Corazón de pavo", "Molleja de pavo", "Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
     "Pollo": ["Corazón de pollo", "Molleja de pollo", "Pollo ala con piel (sin hueso)", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo sin piel", "Pollo pechuga con piel", "Pollo pechuga sin piel"],
     "Ternera": ["Lomo de ternera con grasa", "Lengua de ternera", "Ternera con grasa", "Ternera solomillo sin grasa"],
     "Buey": ["Lengua de buey"],
@@ -629,6 +629,8 @@ const CATEGORIAS_ALIMENTO = {
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
     "Cordero": ["Hígado de cordero"],
+    "Pato": ["Hígado de pato"],
+    "Pavo": ["Hígado de pavo"],
     "Pollo": ["Hígado de pollo"],
     "Vaca": ["Hígado de vaca"],
   },
@@ -3176,7 +3178,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 "Redeploy" desde el panel de Vercel, o revisa que el
                 último commit sea el que está en producción. */}
             <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-21 · recorrido completo para varios perros
+              build 2026-08-22 · kcal explicadas y alimentos nuevos
             </p>
           </div>
         </div>
@@ -3905,7 +3907,7 @@ function RawkuOnboardingInterna({
             confirmar si Vercel está sirviendo de verdad la última
             versión, dado el patrón repetido de despliegues viejos. */}
         <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-          build 2026-08-21 · recorrido completo para varios perros
+          build 2026-08-22 · kcal explicadas y alimentos nuevos
         </p>
         {usuario && !premium && (
           <button
@@ -4112,6 +4114,14 @@ function RawkuOnboardingInterna({
             ...p,
             perroId: fichas[i]?.id ?? null,
             dietaActual: dietasDeLaCasa[fichas[i]?.id] ?? null,
+            // ⚠️ Lo que ese perro NECESITA al día. Hace falta para poder
+            // enseñarlo AL LADO de lo que aporta el menú: el motor admite
+            // un 3% arriba o abajo (tolerancia_kcal), así que un perro de
+            // 1602 kcal puede recibir un menú de 1555 y estar bien. Sin
+            // las dos cifras, esa diferencia parece un error de cálculo
+            // -- y es exactamente lo que pasó: "Cairo necesita 1602 pero
+            // me genera un menú de 1555, no sé por qué".
+            necesitaKcal: fichas[i] ? Math.round(datosDeUnPerro(fichas[i].perfil).derReal) : null,
           })),
         });
       }
@@ -5839,10 +5849,25 @@ function RawkuOnboardingInterna({
                 </p>
               ) : (
                 <>
-                  <p className="text-[10px] tracking-[0.1em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
-                    {p.menus.length === 1
-                      ? `${Math.round(p.menus[0].kcal_total || 0)} kcal · ${Math.round(p.menus[0].gramos_total || 0)} g al día`
-                      : `${p.menus.length} menús · ${Math.round(p.menus[0].kcal_total || 0)} kcal al día`}
+                  <p className="text-[10px] tracking-[0.1em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                    {p.necesitaKcal ? `Necesita ${p.necesitaKcal} kcal al día` : "Su ración diaria"}
+                    {p.menus.length > 1 ? ` · ${p.menus.length} menús` : ""}
+                  </p>
+                  {/* ⚠️ Las DOS cifras, con la diferencia explicada. El
+                      motor admite un 3% arriba o abajo, así que el menú
+                      casi nunca da la cifra exacta; enseñar solo el total
+                      del menú hacía que pareciera un fallo. */}
+                  <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
+                    Este menú aporta <b style={{ color: TINTA }}>{Math.round(p.menus[0].kcal_total || 0)} kcal</b>
+                    {" "}en {Math.round(p.menus[0].gramos_total || 0)} g
+                    {p.necesitaKcal && Math.abs(Math.round(p.menus[0].kcal_total || 0) - p.necesitaKcal) >= 1 ? (
+                      <>{" — "}
+                        {Math.abs(Math.round(100 * ((p.menus[0].kcal_total || 0) - p.necesitaKcal) / p.necesitaKcal))}
+                        {"% "}
+                        {(p.menus[0].kcal_total || 0) < p.necesitaKcal ? "menos" : "más"}
+                        {" de lo justo, dentro del margen normal."}
+                      </>
+                    ) : null}
                   </p>
 
                   {/* ⚠️ AÑADIDO — la transición, POR PERRO. Uno puede venir
