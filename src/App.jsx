@@ -3756,7 +3756,19 @@ function RawkuOnboardingInterna({
   // "solo"      → como siempre, el menú de este perro.
   // "parecidos" → los de todos, amoldados entre sí: misma compra.
   // "cada_uno"  → los de todos, pero cada uno el mejor suyo.
-  const [paraQuien, setParaQuien] = useState("solo");
+  // ⚠️ QUITADA LA OPCIÓN "Solo para X" de la pantalla (23 agosto) —
+  // pedido expreso: "si metes otro perro es porque también quieres
+  // hacerle un menú, si no, no lo meterías". Era una tercera opción que
+  // había que leer y descartar cada vez, para un caso que no se da.
+  //
+  // Por eso el valor de partida pasa de "solo" a "parecidos": con varios
+  // perros se hacen siempre los de todos, y lo único que se elige es CÓMO.
+  //
+  // "solo" NO desaparece del estado: es a donde salta el botón de rescate
+  // cuando la generación de la casa falla entera ("Hacer solo el de X").
+  // Sin ese valor, ese botón devolvería a la misma pantalla que acaba de
+  // fallar. Se puede llegar, pero ya no se elige.
+  const [paraQuien, setParaQuien] = useState("parecidos");
   // ⚠️ Qué come AHORA cada perro, por separado: uno puede venir de pienso
   // y el otro llevar años en BARF, y de ahí sale si cada uno necesita
   // transición. Arranca con lo que tenga guardado cada ficha.
@@ -3782,6 +3794,16 @@ function RawkuOnboardingInterna({
   // (perfil.nombre), no con el guardado: durante el asistente aún no hay
   // fila en Supabase, y verse a uno mismo como "Sin nombre" mientras
   // acabas de teclear el nombre es raro.
+  // "Cairo y Lola" en vez de "2 perros". Pedido expreso: mientras esperas
+  // quieres leer los nombres de TUS perros, no una cuenta. Con tres o más
+  // se enumera como en español: "Cairo, Lola y Ruffo".
+  const nombresDeLosPerros = (lista) => {
+    const nombres = lista.map((p) => p.nombre);
+    if (nombres.length === 0) return "";
+    if (nombres.length === 1) return nombres[0];
+    return `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`;
+  };
+
   const listaDePerros = (() => {
     const guardados = (perros ?? []).map((p) => ({
       id: p.id,
@@ -5928,7 +5950,7 @@ function RawkuOnboardingInterna({
           <Fuentes />
           <Dog size={36} strokeWidth={1.4} style={{ color: VIOLETA }} />
           <p className="mt-4" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
-            Calculando los menús de {listaDePerros.length} perros...
+            Calculando los menús de {nombresDeLosPerros(listaDePerros)}...
           </p>
           <p className="text-sm mt-3" style={{ color: MALVA, fontFamily: fontBody }}>
             {paraQuien === "parecidos"
@@ -6185,9 +6207,15 @@ function RawkuOnboardingInterna({
             <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
           </div>
           <h1 className="text-3xl leading-tight mb-2" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
-            {paraQuien === "solo"
-              ? <>¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?</>
-              : <>¿Cómo quieres<br />hacer los menús<br />de la casa?</>}
+            {/* ⚠️ CASO REAL (23 agosto): con UN solo perro esto pasó a
+                decir "los menús de la casa". El título miraba la opción
+                elegida, y al quitar "Solo para X" el valor de partida dejó
+                de ser "solo" -- así que con un perro, que ni siquiera ve
+                esa elección, salía el texto de varios. Lo que decide el
+                título es cuántos perros hay, no qué se haya elegido. */}
+            {listaDePerros.length > 1 && paraQuien !== "solo"
+              ? <>¿Cómo quieres<br />hacer los menús<br />de la casa?</>
+              : <>¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?</>}
           </h1>
         </div>
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
@@ -6199,17 +6227,25 @@ function RawkuOnboardingInterna({
               Con un solo perro esto no se pinta: no hay nada que elegir. */}
           {listaDePerros.length > 1 && (
             <>
-              <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
-                ¿Para quién?
+              <p className="text-[11px] tracking-[0.14em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                ¿Cómo?
+              </p>
+              {/* ⚠️ AÑADIDO — pedido expreso: "creo que tendrías que
+                  explicar mejor la diferencia". Los títulos solos no la
+                  explicaban: "lo más parecidos posible" y "cada uno el
+                  suyo" suenan a mejor y peor, y no es eso. Ninguna de las
+                  dos da un menú peor -- las dos cumplen los 30 requisitos
+                  igual. Lo que cambia es la COMPRA, y eso es lo primero
+                  que hay que decir, antes de los dos botones. */}
+              <p className="text-xs mb-3 leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Los dos cumplen igual los 30 requisitos de cada perro. Lo que cambia es <b>la compra</b>.
               </p>
               <div className="flex flex-col gap-2 mb-6">
                 {[
-                  { key: "solo", titulo: `Solo para ${nombreMostrar}`,
-                    nota: "Como siempre: su menú, con sus opciones." },
-                  { key: "parecidos", titulo: `Para los ${listaDePerros.length}, lo más parecidos posible`,
-                    nota: "Mismos alimentos siempre que se pueda, cambiando solo las cantidades. Una compra y un porcionado." },
-                  { key: "cada_uno", titulo: `Para los ${listaDePerros.length}, cada uno el suyo`,
-                    nota: "Sin mirarse entre ellos: el mejor menú de cada perro por separado." },
+                  { key: "parecidos", titulo: "Los mismos alimentos para todos",
+                    nota: `Compras una vez y pesas ${listaDePerros.length}: lo mismo para ${nombresDeLosPerros(listaDePerros)}, cambiando solo las cantidades. Si con los mismos no le cuadran a alguno, Rawku cambia los menos alimentos posibles.` },
+                  { key: "cada_uno", titulo: "Cada uno con lo suyo",
+                    nota: `${listaDePerros.length} menús independientes, con los alimentos que mejor le van a cada perro. Comen más variado, y la lista de la compra es más larga.` },
                 ].map((op) => {
                   const activo = paraQuien === op.key;
                   return (
