@@ -166,6 +166,17 @@ export function crearFakeSupabase(opciones = {}) {
     // Última petición recibida en /menu/varios-perros, para poder
     // comprobar que la app manda lo que dice mandar.
     ultimaPeticionCasa: null,
+    // TODAS las de /menu/varios-perros, en orden: con varios menús puede
+    // haber una llamada por menú, y guardar sólo la última no distingue
+    // "todos con lo mismo" de "cada uno con lo suyo".
+    peticionesCasa: [],
+    // ⚠️ AÑADIDO — TODAS las peticiones a /menu/v2, en orden.
+    // Con varios menús se hace una llamada por menú, y hasta ahora no
+    // había forma de comprobar QUÉ se pidió en cada una. Eso dejaba sin
+    // vigilancia justo lo de "cada menú lleva lo que elegiste para él":
+    // guardar sólo la última no distingue "los dos con lo mismo" de "cada
+    // uno con lo suyo".
+    peticionesMenu: [],
     // Si la cuenta de prueba es Premium. Hace falta para probar lo que
     // está detrás del muro de pago (varios menús en la semana), sin tener
     // que tocar Stripe ni nada real.
@@ -229,6 +240,7 @@ export function crearFakeSupabase(opciones = {}) {
       // la lista completa.
       if (Array.isArray(cfg.perros)) estado.perros = cfg.perros.map((p) => ({ ...PERRO_DE_PRUEBA, ...p }));
       if (cfg.olvidarUltimoMenu) estado.ultimoMenuGuardado = null;
+      if (cfg.olvidarPeticionesMenu !== false) { estado.peticionesMenu = []; estado.peticionesCasa = []; }
       return responder(200, {
         retrasoPerrosMs: estado.retrasoPerrosMs,
         perros: estado.perros.length,
@@ -247,6 +259,8 @@ export function crearFakeSupabase(opciones = {}) {
         // el momento en que hace falta.
         perrosGuardados: estado.perros.map((p) => ({ ...p })),
         ultimaPeticionCasa: estado.ultimaPeticionCasa,
+        peticionesCasa: estado.peticionesCasa.map((p) => JSON.parse(JSON.stringify(p))),
+        peticionesMenu: estado.peticionesMenu.map((p) => ({ ...p })),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
           const k = String(m.perro_id);
           cuenta[k] = (cuenta[k] || 0) + 1;
@@ -359,6 +373,7 @@ export function crearFakeSupabase(opciones = {}) {
     }
 
     if (ruta === "/menu/v2") {
+      estado.peticionesMenu.push(JSON.parse(cuerpo || "{}"));
       return responder(200, { ...MENU_FALSO, aviso_composicion: estado.avisoComposicion });
     }
     // Los tres caminos de edición devuelven el menú en "gramos", no en
@@ -423,7 +438,7 @@ export function crearFakeSupabase(opciones = {}) {
         perros,
         // Se guarda lo que pidió la app, para poder afirmar sobre ello: que
         // el número de menús y lo elegido en Personalizar llegan de verdad.
-        ...(estado.ultimaPeticionCasa = pedido, {}),
+        ...(estado.ultimaPeticionCasa = pedido, estado.peticionesCasa.push(pedido), {}),
       });
     }
     if (ruta === "/menu/semana") {
