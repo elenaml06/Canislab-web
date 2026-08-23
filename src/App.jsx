@@ -4247,7 +4247,18 @@ function RawkuOnboardingInterna({
       .map((p) => ({ id: p.id, nombre: p.nombre || "Sin nombre", perfil: perfilDesdeSupabase(p) })),
   ];
 
-  const generarMenusDeLaCasa = async (comoSeQuieren, cuantos = 1, configDelMenu = null) => {
+  // `configsDelMenu` es un ARRAY: la configuración de Personalizar de cada
+  // menú, en orden. Antes era una sola para toda la semana, y de ahí el
+  // fallo que encontró la usuaria: "en el menú 1 puse conejo y en el 2
+  // pollo, y me los ha dado los dos de pollo" -- se mandaba la del menú
+  // que estuvieras editando al pulsar Generar, y valía para todos.
+  //
+  // No se parte en una llamada por menú a propósito: el reparto del
+  // presupuesto semanal de seguridad crónica (vitamina D, yodo, selenio,
+  // mercurio) lo lleva el endpoint, y una llamada por menú le daría a cada
+  // uno el presupuesto de la semana entera cubriendo solo 3 o 4 días. Va
+  // todo en la misma petición, en `personalizacion_por_menu`.
+  const generarMenusDeLaCasa = async (comoSeQuieren, cuantos = 1, configsDelMenu = null) => {
     setCargandoCasa(true);
     setErrorCasa(null);
     setMenusDeLaCasa(null);
@@ -4255,13 +4266,36 @@ function RawkuOnboardingInterna({
     setFase("casa");
 
     const fichas = fichasDeLaCasa();
+    const configs = Array.isArray(configsDelMenu) ? configsDelMenu : null;
+
+    // Uno por menú, en el orden en que se pidieron. El servidor aplica
+    // cada uno al menú que le toca y deja que los demás perros se amolden
+    // a ese menú, no al de otro.
+    const porMenu = configs
+      ? Array.from({ length: cuantos }, (_, i) => {
+          const c = configs[i] || null;
+          return {
+            forzar_presencia: c ? eleccionesDelUsuario("personalizar", c) : [],
+            nombres_alimentos: c ? eleccionesDelUsuario("personalizar", c) : [],
+            restringir_especie: c ? restriccionesDeEspecie("personalizar", c) : null,
+          };
+        })
+      : null;
+
     // Lo elegido a mano en Personalizar. Se manda a TODOS los perros: al
     // que mande se le fuerza, y los demás se amoldan a su menú, así que
     // acaba en la casa entera -- que es lo que se pide al personalizar
     // para varios.
-    const elegidos = configDelMenu ? eleccionesDelUsuario("personalizar", configDelMenu) : [];
-    const especiePorCategoria = configDelMenu
-      ? restriccionesDeEspecie("personalizar", configDelMenu) : null;
+    //
+    // Con varios menús esto es solo el punto de partida: manda
+    // `personalizacion_por_menu`, que va menú a menú. Se sigue mandando
+    // para que un servidor viejo (Render sirviendo una versión anterior)
+    // no se quede sin NADA de lo elegido -- daría el fallo de antes, que
+    // es feo, pero no dejaría a nadie sin menú.
+    const primero = configs ? configs[0] : null;
+    const elegidos = primero ? eleccionesDelUsuario("personalizar", primero) : [];
+    const especiePorCategoria = primero
+      ? restriccionesDeEspecie("personalizar", primero) : null;
 
     try {
       const res = await fetchConTimeout(`${API_BASE}/menu/varios-perros`, {
@@ -4278,6 +4312,7 @@ function RawkuOnboardingInterna({
           nombres: fichas.map((f) => f.nombre),
           modo_conjunto: comoSeQuieren === "parecidos" ? "parecidos" : "distintos",
           numero_de_menus: cuantos,
+          ...(porMenu ? { personalizacion_por_menu: porMenu } : {}),
         }),
       });
       let cuerpo;
@@ -6711,10 +6746,12 @@ function RawkuOnboardingInterna({
                     {cat.nombre === "Suplementos comerciales" ? (
                       <div className="flex rounded-full p-0.5" style={{ background: PAPEL }}>
                         <button onClick={() => setModoCat(cat.nombre, "no")} className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs"
+                          aria-label={`${cat.nombre}: no usar`}
                           style={{ background: c.modo === "no" ? VIOLETA : "transparent", color: c.modo === "no" ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600 }}>
                           No usar
                         </button>
                         <button onClick={() => setModoCat(cat.nombre, "manual")} className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs"
+                          aria-label={`${cat.nombre}: elijo yo`}
                           style={{ background: c.modo === "manual" ? VIOLETA : "transparent", color: c.modo === "manual" ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600 }}>
                           <Hand size={11} /> Elegir uno
                         </button>
@@ -6722,10 +6759,12 @@ function RawkuOnboardingInterna({
                     ) : (
                     <div className="flex rounded-full p-0.5" style={{ background: PAPEL }}>
                       <button onClick={() => setModoCat(cat.nombre, "auto")} className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs"
+                        aria-label={`${cat.nombre}: que elija Rawku`}
                         style={{ background: c.modo === "auto" ? VIOLETA : "transparent", color: c.modo === "auto" ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600 }}>
                         <Sparkles size={11} /> Auto
                       </button>
                       <button onClick={() => setModoCat(cat.nombre, "manual")} className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs"
+                        aria-label={`${cat.nombre}: elijo yo`}
                         style={{ background: c.modo === "manual" ? VIOLETA : "transparent", color: c.modo === "manual" ? "#FFFFFF" : MALVA, fontFamily: fontBody, fontWeight: 600 }}>
                         <Hand size={11} /> Manual
                       </button>
@@ -6748,6 +6787,7 @@ function RawkuOnboardingInterna({
                       )}
                       {!categoriaAbierta && (
                         <button onClick={() => setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie: null })}
+                          aria-label={`${cat.nombre}: elegir alimento`}
                           className="px-3 py-2 rounded-lg text-sm" style={{ background: PAPEL, color: MALVA, fontFamily: fontBody, border: "1.5px dashed #C9BEDD" }}>
                           {c.elegido.length > 0 ? "+ Añadir otro" : "Elegir alimento"}
                         </button>
@@ -6834,7 +6874,7 @@ function RawkuOnboardingInterna({
                 // acaba en todos. Elegirlo perro por perro sería otra cosa
                 // -- y pelearía con que los menús se parezcan, que es justo
                 // lo que se ha pedido al entrar por aquí.
-                generarMenusDeLaCasa(paraQuien, numMenus, configPersonalizar);
+                generarMenusDeLaCasa(paraQuien, numMenus, configsPorMenu.slice(0, numMenus));
               } else {
                 setPantalla("resultado");
               }
