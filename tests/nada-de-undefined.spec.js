@@ -93,3 +93,55 @@ test.describe("ninguna pantalla enseña datos que no existen", () => {
     }
   });
 });
+
+// ─── Y ninguna palabra pegada a la siguiente ─────────────────────────────────
+//
+// CASO REAL (23 de agosto), encontrado otra vez por la usuaria:
+//
+//     "carne, vísceras, hígado y hueso al menos 1 semanacongelados a -18/-20°C"
+//
+// En JSX, cuando una línea TERMINA en una etiqueta y la siguiente empieza con
+// texto, el salto de línea NO se convierte en espacio: se come. Y al revés
+// igual. El espacio de dentro de una misma línea sí se respeta, así que el
+// mismo texto está bien o mal según por dónde se haya partido — y partirlo es
+// lo primero que hace cualquiera al editarlo.
+//
+// No da error, compila igual, y sólo se ve leyendo esa frase concreta en esa
+// pantalla concreta. Misma familia que el "undefined" de arriba.
+//
+// Esto no se puede vigilar mirando la pantalla: haría falta que el menú de
+// pruebas pasara por todos los textos de la app. Se vigila en el CÓDIGO, que
+// sí está entero aquí.
+
+import fs from "node:fs";
+import path from "node:path";
+
+test("ningún texto pega dos palabras al partir la línea", () => {
+  const ETIQUETA_FIN = /<\/(b|i|em|strong|span|a)>\s*$/;
+  const ETIQUETA_INI = /^\s*<(b|i|em|strong|span|a)[\s>]/;
+  const LETRA_INI = /^\s*[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9¿¡]/;
+  const LETRA_FIN = /[A-Za-zÁÉÍÓÚÜÑáéíóúüñ0-9,;:.]\s*$/;
+
+  const dir = path.join(process.cwd(), "src");
+  const archivos = fs.readdirSync(dir).filter((f) => f.endsWith(".jsx") || f.endsWith(".js"));
+
+  const pegados = [];
+  for (const archivo of archivos) {
+    const lineas = fs.readFileSync(path.join(dir, archivo), "utf8").split("\n");
+    for (let i = 0; i < lineas.length - 1; i++) {
+      const a = lineas[i];
+      const b = lineas[i + 1];
+      const cierra = ETIQUETA_FIN.test(a) && LETRA_INI.test(b);
+      // En la forma b) se descarta la etiqueta que abre con atributos: ésa
+      // no es texto en línea, es un elemento con su propio hueco.
+      const abre = LETRA_FIN.test(a) && ETIQUETA_INI.test(b) && !b.split(">")[0].slice(2).includes("=");
+      if (cierra || abre) {
+        pegados.push(`${archivo}:${i + 1} → «...${a.trim().slice(-40)}» + «${b.trim().slice(0, 34)}...»`);
+      }
+    }
+  }
+
+  expect(pegados,
+    "aquí el salto de línea se come el espacio y las dos palabras salen pegadas en pantalla")
+    .toEqual([]);
+});

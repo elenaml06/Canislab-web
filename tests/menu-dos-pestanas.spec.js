@@ -202,9 +202,14 @@ test.describe("el resultado se lee en dos pestañas", () => {
     await generarMenu(page);
     await page.getByRole("button", { name: "Cómo darlo" }).click();
     const congelacion = page.getByText(/Si preparas este menú con antelación/);
-    await expect(congelacion).toContainText("al menos 1 semana");
-    await expect(congelacion).toContainText("al menos 2 semanas");
-    await expect(congelacion).toContainText("dentro de 3 días");
+    // ⚠️ CASO REAL ENCONTRADO POR LA USUARIA (23 agosto): decía
+    // "al menos 1 semanacongelados", sin espacio. En JSX, una línea que
+    // termina en etiqueta se pega a la siguiente. Por eso no se comprueba
+    // "al menos 1 semana" a secas -- eso pasaba EN VERDE con el fallo
+    // puesto -- sino la frase entera con la palabra de después.
+    await expect(congelacion).toContainText("al menos 1 semana congelados");
+    await expect(congelacion).toContainText("al menos 2 semanas —");
+    await expect(congelacion).toContainText("dentro de 3 días guardándolo");
   });
 
   test("lo que SÍ es de cada alimento sigue estando", async () => {
