@@ -21,6 +21,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "../src/instrucciones.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -165,6 +166,57 @@ test.describe("el resultado se lee en dos pestañas", () => {
       .map(({ quien, texto }) => `${quien} — falta «${texto.slice(0, 50)}...»`);
 
     expect(perdidas, "alimentos del menú cuya preparación no está en «Cómo darlo»").toEqual([]);
+  });
+
+  test("los tiempos de congelación se dicen en UN solo sitio", async ({ page }) => {
+    // Pedido expreso: "ya tenemos una parte que te dice cuándo congelar
+    // las cosas y cuánto tiempo, no necesitamos que en cada alimento esté
+    // ahí". Cada categoría lo repetía con sus propias palabras: ocho
+    // sitios donde equivocarse y ocho donde contradecirse.
+    //
+    // ⚠️ La primera versión de esta prueba NO servía: abría el panel de
+    // cada alimento EN PANTALLA, que sólo alcanza a los que traiga ese
+    // menú. Comprobado — volviendo a meter la congelación a mano en
+    // "Carne muscular" pasaba en verde, porque el menú de prueba no lleva
+    // carne. Por eso los textos se sacaron a src/instrucciones.js: aquí
+    // se recorren TODOS, las 8 categorías y los 77 alimentos, sin
+    // depender de lo que devuelva el motor ese día.
+    const PLAZOS = /al menos \d+ semanas?|-1[89]\/-20\s*°?C|dentro de \d+ días/i;
+
+    const repiten = [];
+    for (const [categoria, texto] of Object.entries(INSTRUCCIONES_POR_CATEGORIA)) {
+      const m = texto.match(PLAZOS);
+      if (m) repiten.push(`categoría «${categoria}»: «${m[0]}»`);
+    }
+    for (const [alimento, info] of Object.entries(COMO_DAR_ALIMENTO)) {
+      const m = Object.values(info).join(" ").match(PLAZOS);
+      if (m) repiten.push(`alimento «${alimento}»: «${m[0]}»`);
+    }
+    expect(repiten,
+      "los tiempos de congelación van sólo en el panel de «Congelación», no repetidos aquí")
+      .toEqual([]);
+
+    // Y comprobado que no se han perdido por el camino: el panel los tiene
+    // los tres, incluido el plazo tras descongelar, que antes SÓLO existía
+    // dentro de los textos que se acaban de limpiar.
+    await generarMenu(page);
+    await page.getByRole("button", { name: "Cómo darlo" }).click();
+    const congelacion = page.getByText(/Si preparas este menú con antelación/);
+    await expect(congelacion).toContainText("al menos 1 semana");
+    await expect(congelacion).toContainText("al menos 2 semanas");
+    await expect(congelacion).toContainText("dentro de 3 días");
+  });
+
+  test("lo que SÍ es de cada alimento sigue estando", async () => {
+    // El riesgo de limpiar textos es pasarse. Estas tres frases no son de
+    // congelación: son de ese alimento, y quitarlas sería quitar
+    // seguridad, no repetición.
+    expect(INSTRUCCIONES_POR_CATEGORIA["Hueso carnoso"],
+      "el hueso cocinado se astilla: eso no se puede perder").toMatch(/nunca cocinado/i);
+    expect(INSTRUCCIONES_POR_CATEGORIA["Pescados y mariscos"],
+      "crudo sólo si se ha congelado antes: eso es de este alimento").toMatch(/congelado/i);
+    expect(COMO_DAR_ALIMENTO["Cuello de pollo"].como,
+      "dárselo semicongelado a un tragón es una técnica, no un plazo").toMatch(/semicongelado/i);
   });
 
   // Primer índice en que dos textos dejan de coincidir. Sirve para saber
