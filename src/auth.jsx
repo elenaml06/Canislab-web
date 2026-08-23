@@ -10,7 +10,7 @@ const MALVA = '#9A8CB8'
 const fontDisplay = '"Georgia", serif'
 const fontBody = '"DM Sans", sans-serif'
 
-export default function Auth({ onAutenticado }) {
+export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCuenta = false }) {
   const [modo, setModo] = useState('login') // login | registro | recuperar
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -196,6 +196,35 @@ export default function Auth({ onAutenticado }) {
             </button>
           )}
         </div>
+
+        {/* ⚠️ AÑADIDO — ENTRAR SIN CUENTA. Pedido expreso: "necesito poder
+            entrar a la aplicación sin que me pidan iniciar sesión".
+
+            Va debajo y separado por una línea, no como un tercer botón
+            más: quien ya tiene cuenta no debería tropezarse con esto. Y
+            dice lo que va a pasar de verdad -- que los datos se quedan
+            en este móvil -- porque descubrirlo después, al cambiar de
+            teléfono y no encontrar nada, es la peor forma de enterarse. */}
+        {onSinCuenta && (
+          <div style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid #E3DAF0`, textAlign: 'center' }}>
+            <button
+              onClick={onSinCuenta}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 14,
+                background: 'transparent', color: VIOLETA,
+                border: `1.5px solid ${VIOLETA}`,
+                fontFamily: fontBody, fontWeight: 700, fontSize: 15, cursor: 'pointer',
+              }}
+            >
+              {hayDatosSinCuenta ? 'Seguir sin cuenta' : 'Probar sin crear cuenta'}
+            </button>
+            <p style={{ margin: '10px 4px 0', color: MALVA, fontFamily: fontBody, fontSize: 12, lineHeight: 1.5 }}>
+              {hayDatosSinCuenta
+                ? 'Lo que ya tienes sigue aquí, no se ha borrado. Si creas la cuenta con este mismo móvil, sube solo.'
+                : 'Funciona todo igual. Los datos se guardan en este móvil, así que no los verás desde otro — cuando quieras, creas la cuenta y se suben solos.'}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   )

@@ -2,7 +2,16 @@ import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
-import { onAuthChange, logout, guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, eliminarPerro } from "./supabase";
+import { onAuthChange, logout } from "./supabase";
+// ⚠️ Los datos NO se piden a Supabase directamente: pasan por el almacén,
+// que los manda a Supabase o al navegador según haya cuenta o no. Ver el
+// comentario de cabecera de almacen.js — ahí está decidido cuándo se da
+// de alta el usuario y por qué.
+import {
+  guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, eliminarPerro,
+  USUARIO_LOCAL, estaSinCuenta, entrarSinCuenta, salirDeSinCuenta,
+  hayDatosLocales, migrarLocalACuenta, vaciarLocal,
+} from "./almacen";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import { API_BASE, fetchConTimeout } from "./api.js";
@@ -1279,8 +1288,20 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
-function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, selectorDePerros = null, usuario = null, onPerroGuardado = () => {} }) {
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, selectorDePerros = null, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {} }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
+  // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
+  // pantalla del menú era un scroll larguísimo donde el plan de
+  // transición y la congelación quedaban enterrados a mitad de
+  // camino, y cómo preparar cada alimento estaba escondido detrás
+  // del icono de cubiertos de cada fila -- para verlo todo antes de
+  // ponerte a cocinar había que ir abriéndolos de uno en uno.
+  //
+  // "El menú" = qué le doy. "Cómo darlo" = cómo se lo doy.
+  //
+  // OJO: no confundir con `tabActiva`, que es OTRA cosa -- ésa elige
+  // entre Menú 1 / Menú 2 / ... cuando se piden varios.
+  const [vistaActiva, setVistaActiva] = useState("menu");
   // ⚠️ AÑADIDO (5 agosto, madrugada): estado LOCAL para poder cerrar
   // este aviso -- se inicializa a partir de la prop, pero una vez
   // cerrado no debe volver a aparecer solo porque el componente se
@@ -1453,7 +1474,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // la pantalla de menús, no solo enterrado dentro del texto de "cómo
   // dar" de cada categoría (donde antes solo se veía si se pulsaba a
   // ver el detalle del hueso carnoso en concreto).
-  const [avisoCongelacionVisible, setAvisoCongelacionVisible] = useState(true);
   const [avisoPatologiaVisible, setAvisoPatologiaVisible] = useState(true);
   const [diagnosticoPersonalizarVisible, setDiagnosticoPersonalizarVisible] = useState(true);
   useEffect(() => { setDiagnosticoPersonalizarVisible(true); }, [JSON.stringify(diagnosticoPersonalizar)]);
@@ -1772,40 +1792,171 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         )}
       </div>
 
+      {/* ⚠️ AÑADIDO — LAS DOS PESTAÑAS. Van FUERA de la cabecera morada
+          y pegadas a ella, para que se lean como parte de la pantalla
+          del menú y no como otra navegación más. Sin scroll horizontal:
+          son dos y caben siempre. */}
+      <div className="flex" style={{ background: "#FFFFFF", borderBottom: "1.5px solid #E3DAF0" }}>
+        {[
+          { key: "menu", label: "El menú" },
+          { key: "comoDarlo", label: "Cómo darlo" },
+        ].map((v) => {
+          const activo = vistaActiva === v.key;
+          return (
+            <button
+              key={v.key}
+              onClick={() => setVistaActiva(v.key)}
+              aria-current={activo ? "page" : undefined}
+              className="flex-1 text-center py-3.5"
+              style={{
+                background: "transparent",
+                border: "none",
+                borderBottom: activo ? `2.5px solid ${VIOLETA}` : "2.5px solid transparent",
+                color: activo ? VIOLETA : MALVA,
+                fontFamily: fontBody,
+                fontSize: 13,
+                fontWeight: activo ? 700 : 400,
+              }}
+            >
+              {v.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
+        {/* ⚠️ PESTAÑA "CÓMO DARLO". Lo que hay aquí no es nuevo: estaba
+            todo en esta misma pantalla, pero repartido -- la transición
+            arriba del todo pegada a las tarjetas, la congelación en
+            medio de la pila de avisos (y con una X para cerrarla, o sea
+            que se podía perder de vista para siempre), y la preparación
+            de cada alimento detrás de su icono. */}
+        {vistaActiva === "comoDarlo" && (
+          <div className="flex flex-col gap-3 mb-4">
+          {necesitaTransicion && (
+            <div className="rounded-xl p-3" style={{ background: "#F0ECF7" }}>
+              <p className="text-sm mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+                Plan de transición ({dietaActual === "pienso" ? "pienso" : "comida cocinada"} → BARF)
+              </p>
+              <div className="flex flex-col gap-1">
+                {[
+                  { dias: "Días 1-3", barf: 25 },
+                  { dias: "Días 4-6", barf: 50 },
+                  { dias: "Días 7-9", barf: 75 },
+                  { dias: "Día 10 en adelante", barf: 100 },
+                ].map((tramo, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs" style={{ fontFamily: fontBody, color: TINTA }}>
+                    <span>{tramo.dias}</span>
+                    <span style={{ fontFamily: "monospace", color: VIOLETA, fontWeight: 700 }}>
+                      {tramo.barf}% BARF / {100 - tramo.barf}% {dietaActual === "pienso" ? "pienso" : "cocinado"}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                Dáselo en tomas separadas, no mezclado en el mismo plato — se digieren a ritmos distintos.
+              </p>
+            </div>
+          )}
+          {necesitaTransicion && menus.length > 1 && (
+            <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
+              <Lock size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                Empiezas solo con el Menú 1 toda la semana. La semana que viene se cambia por completo al Menú 2
+                (no se mezclan), y así con cada uno — hasta que {nombrePerro} haya probado todos por separado.
+                Solo entonces empiezan a rotar de verdad entre ellos.
+              </p>
+            </div>
+          )}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle size={14} style={{ color: VIOLETA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  Congelación
+                </p>
+              </div>
+              <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Si preparas este menú con antelación: carne, vísceras e hígado <b>al menos 1 semana</b> congelados
+                a -18/-20°C antes de dar; pescado, <b>al menos 2 semanas</b> (más riesgo de parásitos). Los
+                suplementos, aceites, huevo y semillas se añaden CRUDOS al final, sobre la comida ya
+                descongelada — nunca se congelan junto con el resto.
+              </p>
+            </div>
+          {/* ⚠️ AÑADIDO — CÓMO PREPARAR CADA ALIMENTO, TODO JUNTO.
+              Esto mismo sigue estando detrás del icono de cubiertos de
+              cada fila, y no es un descuido: ahí sirve para mirar UN
+              alimento mientras lees la lista, y aquí para leerlo todo
+              seguido antes de ponerte a cocinar. Son dos momentos
+              distintos.
+
+              Se agrupa por categoría, no por alimento: la instrucción
+              larga (crudo, troceado, congelado...) es de la categoría,
+              y repetirla en cada fila llenaría la pantalla de lo
+              mismo. Debajo de cada una van solo los alimentos de este
+              menú que tienen algo propio que decir. */}
+          {(() => {
+            const porCategoria = [];
+            for (const item of itemsMostrados) {
+              if (!INSTRUCCIONES_POR_CATEGORIA[item.categoria]) continue;
+              let grupo = porCategoria.find((g) => g.categoria === item.categoria);
+              if (!grupo) { grupo = { categoria: item.categoria, items: [] }; porCategoria.push(grupo); }
+              grupo.items.push(item);
+            }
+            if (porCategoria.length === 0) return null;
+            return (
+              <>
+                <p className="text-[11px] tracking-[0.1em] uppercase mt-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+                  Alimento por alimento
+                </p>
+                {porCategoria.map((grupo) => (
+                  <div key={grupo.categoria} className="rounded-xl p-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                    <div className="flex gap-2 items-start">
+                      <UtensilsCrossed size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+                      <div className="flex-1">
+                        <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+                          {grupo.categoria}
+                        </p>
+                        <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                          {INSTRUCCIONES_POR_CATEGORIA[grupo.categoria]}
+                        </p>
+                      </div>
+                    </div>
+                    {grupo.items.filter((it) => COMO_DAR_ALIMENTO[it.alimento]).map((it) => (
+                      <div key={it.alimento} className="mt-2.5 p-2.5 rounded-xl" style={{ background: PAPEL }}>
+                        <div className="flex items-baseline justify-between gap-2 mb-1">
+                          <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>{it.alimento}</p>
+                          <span className="text-xs shrink-0" style={{ color: VIOLETA, fontFamily: fontDisplay }}>
+                            {formatearGramos(it.gramos * multiplicador)}
+                          </span>
+                        </div>
+                        <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                          {COMO_DAR_ALIMENTO[it.alimento].como}
+                        </p>
+                        {/* Sin `pieza` no hay referencia que dar -- si se
+                            pinta igual sale "Como referencia, undefined".
+                            Mismo motivo que en el panel de los cubiertos. */}
+                        {COMO_DAR_ALIMENTO[it.alimento].pieza && (
+                          <p className="text-xs mt-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                            Como referencia, {COMO_DAR_ALIMENTO[it.alimento].pieza}.
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </>
+            );
+          })()}
+          </div>
+        )}
+        {vistaActiva === "menu" && (<>
         {/* ⚠️ REORGANIZADO (5 agosto, madrugada) — pedido expreso: en
             pantallas anchas, el plan de transición y las tres tarjetas
             (ración/kcal/semáforo) van lado a lado, aprovechando el
             espacio -- en móvil siguen apiladas como antes, no hay sitio
             para ponerlas al lado. Si no hay transición, las tres
             tarjetas ocupan el ancho entero, como siempre hicieron. */}
-        <div className={necesitaTransicion ? "flex flex-col md:flex-row gap-3 mb-3 md:items-stretch" : ""}>
-        {necesitaTransicion && (
-          <div className="rounded-xl p-3 md:flex-1" style={{ background: "#F0ECF7" }}>
-            <p className="text-sm mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
-              Plan de transición ({dietaActual === "pienso" ? "pienso" : "comida cocinada"} → BARF)
-            </p>
-            <div className="flex flex-col gap-1">
-              {[
-                { dias: "Días 1-3", barf: 25 },
-                { dias: "Días 4-6", barf: 50 },
-                { dias: "Días 7-9", barf: 75 },
-                { dias: "Día 10 en adelante", barf: 100 },
-              ].map((tramo, i) => (
-                <div key={i} className="flex items-center justify-between text-xs" style={{ fontFamily: fontBody, color: TINTA }}>
-                  <span>{tramo.dias}</span>
-                  <span style={{ fontFamily: "monospace", color: VIOLETA, fontWeight: 700 }}>
-                    {tramo.barf}% BARF / {100 - tramo.barf}% {dietaActual === "pienso" ? "pienso" : "cocinado"}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
-              Dáselo en tomas separadas, no mezclado en el mismo plato — se digieren a ritmos distintos.
-            </p>
-          </div>
-        )}
-        <div className={necesitaTransicion ? "md:flex-1" : "flex-1"}>
+        <div className="flex-1">
           <div className="flex gap-3 mb-3">
             <div className="flex-1 rounded-2xl p-4 text-center" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
               <p style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 22 }}>{totalGramos}g</p>
@@ -1836,17 +1987,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             })()}
           </div>
         </div>
-        </div>
-        {necesitaTransicion && menus.length > 1 && (
-          <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
-            <Lock size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
-            <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
-              Empiezas solo con el Menú 1 toda la semana. La semana que viene se cambia por completo al Menú 2
-              (no se mezclan), y así con cada uno — hasta que {nombrePerro} haya probado todos por separado.
-              Solo entonces empiezan a rotar de verdad entre ellos.
-            </p>
-          </div>
-        )}
         {viendoBloqueado && (
           <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: "#FFF7E8" }}>
             <Info size={14} style={{ color: "#B8860B", flexShrink: 0, marginTop: 2 }} />
@@ -2055,27 +2195,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             sitio. A diferencia del semáforo (que dice si faltan
             nutrientes), esto avisa de si HAY DEMASIADO de algo
             concreto -- son cosas distintas, y las dos importan. */}
-        {avisoCongelacionVisible && (
-          <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
-            <div className="flex items-center justify-between mb-1">
-              <div className="flex items-center gap-1.5">
-                <AlertCircle size={14} style={{ color: VIOLETA }} />
-                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
-                  Congelación
-                </p>
-              </div>
-              <button onClick={() => setAvisoCongelacionVisible(false)} aria-label="Cerrar">
-                <X size={14} style={{ color: VIOLETA }} />
-              </button>
-            </div>
-            <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-              Si preparas este menú con antelación: carne, vísceras e hígado <b>al menos 1 semana</b> congelados
-              a -18/-20°C antes de dar; pescado, <b>al menos 2 semanas</b> (más riesgo de parásitos). Los
-              suplementos, aceites, huevo y semillas se añaden CRUDOS al final, sobre la comida ya
-              descongelada — nunca se congelan junto con el resto.
-            </p>
-          </div>
-        )}
         {avisoComposicion && avisoComposicionVisible && (
           // ⚠️ AÑADIDO — por qué este menú no se parece a los demás.
           //
@@ -2506,6 +2625,8 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           </div>
         )}
 
+        </>)}
+
         <div className="flex-1" />
         {/* ⚠️ MOVIDO (5 agosto, madrugada) — pedido expreso: este texto
             estaba arriba del todo, compitiendo en importancia visual
@@ -2520,6 +2641,29 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             veterinario — y consúltale también si notas cualquier cambio en su digestión, su
             peso o su ánimo.
           </p>
+        )}
+        {/* ⚠️ AÑADIDO — LA INVITACIÓN A CREAR LA CUENTA.
+            Aquí y no antes: éste es el primer momento en que existe algo
+            que perder. Pedir la cuenta en la primera pantalla es pedirla
+            a cambio de nada, y por eso echa para atrás.
+            Se puede ignorar -- no tapa el botón de abajo ni bloquea nada. */}
+        {usuario?.local && (
+          <div className="rounded-2xl p-4 mb-3" style={{ background: "#F0ECF7", border: `1.5px solid ${VIOLETA}` }}>
+            <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+              Este menú sólo está en este móvil
+            </p>
+            <p className="text-xs leading-snug mb-3" style={{ color: TINTA, fontFamily: fontBody }}>
+              Estás usando Rawku sin cuenta. Si creas una, {nombrePerro} y sus menús
+              suben solos y los tendrás desde cualquier sitio. No hace falta ahora.
+            </p>
+            <button
+              onClick={onCrearCuenta}
+              className="w-full py-3 rounded-xl"
+              style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none", cursor: "pointer" }}
+            >
+              Crear cuenta y guardarlo
+            </button>
+          </div>
         )}
         <button
           onClick={() => setSemanaConfirmada(true)}
@@ -3384,7 +3528,14 @@ function RawkuOnboardingInterna({
   onAnadirPerro = () => {},
   onPerroGuardado = () => {},
   onPerroEliminado = () => {},
+  onCrearCuenta = () => {},
+  onDescartarLocal = () => {},
 }) {
+  // Sin cuenta: `usuario` existe (USUARIO_LOCAL) para que todos los
+  // `usuario && ...` de esta pantalla sigan valiendo, pero no hay sesión
+  // de Supabase detrás. Lo que cambia es dónde se guardan las cosas y
+  // qué se le ofrece: crear cuenta en vez de cerrar sesión.
+  const sinCuenta = Boolean(usuario?.local);
   // ─── AUTH — recibido como prop desde AuthGate ─────────────
   // ⚠️ AÑADIDO — interruptor único del muro de pago.
   //
@@ -3714,6 +3865,7 @@ function RawkuOnboardingInterna({
   // aquí para poder preguntar antes de tirar lo escrito.
   const [perroAlQueIrmeTrasAvisar, setPerroAlQueIrmeTrasAvisar] = useState(null);
   // Perro que se está a punto de borrar (con sus menús).
+  const [confirmarDescartarLocal, setConfirmarDescartarLocal] = useState(false);
   const [perroABorrar, setPerroABorrar] = useState(null);
   const [borrandoPerro, setBorrandoPerro] = useState(false);
   const [errorAlBorrarPerro, setErrorAlBorrarPerro] = useState(null);
@@ -3972,7 +4124,28 @@ function RawkuOnboardingInterna({
             Premium de prueba activo · apagar
           </button>
         )}
-        {usuario && (
+        {/* ⚠️ Sin cuenta no hay sesión que cerrar. Lo que se ofrece es
+            crearla — y "salir" borra lo de este móvil, así que lo dice
+            claro y va en gris pequeño, lejos del otro botón. */}
+        {sinCuenta && (
+          <>
+            <button
+              onClick={() => { setMenuLigeroAbierto(false); onCrearCuenta(); }}
+              className="w-full text-center py-3 mx-auto mb-2 rounded-xl"
+              style={{ color: '#FFFFFF', background: VIOLETA, fontFamily: fontBody, fontSize: 14, fontWeight: 700, border: 'none', cursor: 'pointer' }}
+            >
+              Crear una cuenta
+            </button>
+            <button
+              onClick={() => { setMenuLigeroAbierto(false); setConfirmarDescartarLocal(true); }}
+              className="w-full text-center pb-4"
+              style={{ color: MALVA, fontFamily: fontBody, fontSize: 13, background: 'none', border: 'none', cursor: 'pointer' }}
+            >
+              Salir y borrar lo de este móvil
+            </button>
+          </>
+        )}
+        {usuario && !sinCuenta && (
           <button
             onClick={() => { setMenuLigeroAbierto(false); logout(); }}
             className="w-full text-center pb-4"
@@ -4018,6 +4191,45 @@ function RawkuOnboardingInterna({
           style={{ background: "none", color: MALVA, fontFamily: fontBody, border: "none" }}
         >
           Seguir con esta ficha
+        </button>
+      </div>
+    </div>
+  );
+
+  // ⚠️ Salir de "sin cuenta" borra lo que hay en este móvil, y no hay
+  // copia en ningún sitio: sin confirmación, un toque despistado se lleva
+  // los perros y los menús para siempre. Mismo patrón que borrar perro.
+  const avisoDescartarLocal = confirmarDescartarLocal && (
+    <div className="fixed inset-0 z-[80] flex items-center justify-center px-6" style={{ background: "rgba(35,21,57,0.55)" }}>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: "#FFFFFF" }}>
+        <p className="text-lg mb-2" style={{ color: TINTA, fontFamily: fontDisplay }}>
+          ¿Salir y borrar lo de este móvil?
+        </p>
+        <p className="text-sm mb-5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+          Estás usando Rawku sin cuenta, así que {perros.length === 1 ? "el perro" : `los ${perros.length} perros`} y
+          {menusGuardados.length > 0 ? ` sus ${menusGuardados.length} menús` : " sus menús"} sólo existen aquí.
+          Si sales, se pierden. Si prefieres conservarlos, crea una cuenta y suben solos.
+        </p>
+        <button
+          onClick={() => { setConfirmarDescartarLocal(false); onCrearCuenta(); }}
+          className="w-full py-3 rounded-xl mb-2"
+          style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none", cursor: "pointer" }}
+        >
+          Mejor creo la cuenta
+        </button>
+        <button
+          onClick={() => { setConfirmarDescartarLocal(false); onDescartarLocal(); }}
+          className="w-full py-3 rounded-xl mb-2"
+          style={{ background: "transparent", color: "#B4436C", fontFamily: fontBody, fontWeight: 700, border: "1.5px solid #B4436C", cursor: "pointer" }}
+        >
+          Sí, salir y borrarlo
+        </button>
+        <button
+          onClick={() => setConfirmarDescartarLocal(false)}
+          className="w-full py-3"
+          style={{ background: "none", border: "none", color: MALVA, fontFamily: fontBody, cursor: "pointer" }}
+        >
+          Cancelar
         </button>
       </div>
     </div>
@@ -4081,6 +4293,7 @@ function RawkuOnboardingInterna({
       {panelLigero}
       {avisoCambiarDePerro}
       {avisoBorrarPerro}
+      {avisoDescartarLocal}
     </>
   );
 
@@ -5348,6 +5561,7 @@ function RawkuOnboardingInterna({
           que los avisos hay que colgarlos aquí a mano. */}
       {avisoCambiarDePerro}
       {avisoBorrarPerro}
+      {avisoDescartarLocal}
       </>
     );
   }
@@ -6469,9 +6683,10 @@ function RawkuOnboardingInterna({
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} selectorDePerros={selectorDePerros} usuario={usuario} onPerroGuardado={onPerroGuardado} />
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} selectorDePerros={selectorDePerros} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} />
         {avisoCambiarDePerro}
         {avisoBorrarPerro}
+      {avisoDescartarLocal}
       </>
     );
   }
@@ -7108,6 +7323,20 @@ function AuthGate() {
   const [perroMontadoId, setPerroMontadoId] = useState(null);
   const [montaje, setMontaje] = useState(0);
 
+  // ⚠️ AÑADIDO — ENTRAR SIN CUENTA. Pedido expreso: "necesito poder
+  // entrar a la aplicación sin que me pidan iniciar sesión".
+  //
+  // Se lee de localStorage al arrancar, no se empieza en false: si no,
+  // recargar la página devolvería a la pantalla de login y el "entrar
+  // sin cuenta" no serviría para nada más que para esa sesión.
+  //
+  // Va SEPARADO de `usuario` a propósito. Mientras es true, `usuario`
+  // sigue siendo null (no hay sesión de Supabase, y eso es verdad); lo
+  // que se le pasa al componente de dentro es USUARIO_LOCAL. Mezclarlos
+  // haría creer al resto de la app que hay sesión donde no la hay.
+  const [sinCuenta, setSinCuenta] = useState(() => estaSinCuenta());
+  const [migrando, setMigrando] = useState(false);
+
   // ⚠️ CORREGIDO — había DOS caminos distintos cargando el perro a la vez
   // y pisándose el uno al otro:
   //   1. el listener de onAuthChange (se dispara solo al hacer login), y
@@ -7134,6 +7363,21 @@ function AuthGate() {
       cargaRef.current = { token: cargaRef.current.token + 1, userIdEnCurso: null };
       identificarUsuarioEnSentry(null);
       setUsuario(null);
+      // ⚠️ CASO REAL ENCONTRADO (23 agosto): al entrar sin cuenta salía
+      // "PERFIL NUEVO" aunque el perro estuviera guardado en el navegador.
+      //
+      // No es que no se cargara: se cargaba y esta línea lo borraba medio
+      // segundo después. onAuthChange avisa de "no hay sesión" al arrancar
+      // SIEMPRE -- que es verdad, sin cuenta no hay sesión -- y esto lo
+      // traducía a "no hay perros", que sin cuenta es falso.
+      //
+      // Se lee de localStorage y no del estado `sinCuenta` a propósito:
+      // esta función la llama un listener registrado en el primer render,
+      // así que su clausura ve el valor viejo.
+      if (estaSinCuenta()) {
+        setPerros(undefined);          // los carga el efecto de los locales
+        return;
+      }
       setPerros([]);
       setPerroMontadoId(null);
       return;
@@ -7153,12 +7397,36 @@ function AuthGate() {
     const token = cargaRef.current.token + 1;
     cargaRef.current = { token, userIdEnCurso: user.id };
 
+    // ⚠️ MIGRACIÓN — lo que se usó SIN cuenta sube a la cuenta.
+    //
+    // Sin esto, registrarse después de una semana usando la app borraría
+    // esa semana: la app pasaría a mirar Supabase, que está vacío, y lo
+    // del navegador se quedaría ahí sin que nada lo lea. Ningún error,
+    // ningún aviso -- justo la clase de fallo de CLAUDE.md.
+    //
+    // Va ANTES de getPerros y no en paralelo: si no, la lista se leería
+    // antes de que los perros hayan subido y saldría vacía.
+    const traerLoLocal = hayDatosLocales()
+      ? (setMigrando(true), migrarLocalACuenta(user.id).catch((err) => {
+          // Que falle no puede dejar a nadie fuera de su cuenta. Lo local
+          // NO se borra (vaciarLocal sólo corre si todo subió), así que
+          // se puede reintentar entrando otra vez.
+          capturarError(err, { donde: "migrarLocalACuenta", userId: user.id });
+        }))
+      : Promise.resolve();
+
     // ── Los dos juntos, sin await de por medio ──
     setUsuario(user);
     setPerros(undefined);
     migaDePan("AuthGate: sesión iniciada, cargando perros");
 
-    getPerros(user.id)
+    traerLoLocal
+      .then(() => {
+        setMigrando(false);
+        setSinCuenta(false);
+        salirDeSinCuenta();
+        return getPerros(user.id);
+      })
       .then((lista) => {
         if (cargaRef.current.token !== token) return; // respuesta obsoleta
         const perrosCargados = lista ?? [];
@@ -7183,18 +7451,27 @@ function AuthGate() {
         // usuaria acababa en el onboarding sin que quedara rastro en
         // ningún sitio. Ahora el fallo llega a Sentry.
         capturarError(err, { donde: "AuthGate.getPerros", userId: user.id });
+        setMigrando(false);
         setPerros([]);
         setPerroMontadoId(null);
       });
   };
+
+  // La cuenta con la que trabaja el resto de la app: la de verdad si hay
+  // sesión, y la local (USUARIO_LOCAL) si se entró sin cuenta. Vale null
+  // sólo mientras no se ha decidido ninguna de las dos cosas.
+  const cuentaEfectiva = usuario ?? (sinCuenta ? USUARIO_LOCAL : null);
 
   // ─── Cambiar de perro ──────────────────────────────────────────────
   // Remonta el componente de dentro (sube `montaje`), que es la única
   // forma de que recalcule perfil, menús, pantalla de arranque... con
   // los datos del perro nuevo. Ver el comentario largo de arriba.
   const cambiarDePerro = (perroId) => {
-    if (!usuario || perroId === perroMontadoId) return;
-    recordarPerroActivo(usuario.id, perroId);
+    // ⚠️ Antes esto era `if (!usuario ...)`: sin cuenta no se podía
+    // cambiar de perro, aunque los perros existieran en el navegador.
+    // `cuentaEfectiva` es la cuenta de verdad si la hay y la local si no.
+    if (!cuentaEfectiva || perroId === perroMontadoId) return;
+    recordarPerroActivo(cuentaEfectiva.id, perroId);
     setPerroMontadoId(perroId);
     setMontaje((m) => m + 1);
   };
@@ -7202,8 +7479,8 @@ function AuthGate() {
   // Empezar un perro nuevo: mismo remonte, pero sin perro de partida, así
   // que el componente arranca en el paso 1 del asistente.
   const anadirPerro = () => {
-    if (!usuario) return;
-    recordarPerroActivo(usuario.id, null);
+    if (!cuentaEfectiva) return;
+    recordarPerroActivo(cuentaEfectiva.id, null);
     setPerroMontadoId(null);
     setMontaje((m) => m + 1);
   };
@@ -7219,7 +7496,7 @@ function AuthGate() {
         ? lista.map((p) => (p.id === perro.id ? { ...p, ...perro } : p))
         : [...lista, perro];
     });
-    if (usuario) recordarPerroActivo(usuario.id, perro.id);
+    if (cuentaEfectiva) recordarPerroActivo(cuentaEfectiva.id, perro.id);
     setPerroMontadoId(perro.id);
   };
 
@@ -7229,7 +7506,7 @@ function AuthGate() {
     const restantes = (perros ?? []).filter((p) => p.id !== perroId);
     const siguiente = restantes[0] ?? null;
     setPerros(restantes);
-    if (usuario) recordarPerroActivo(usuario.id, siguiente ? siguiente.id : null);
+    if (cuentaEfectiva) recordarPerroActivo(cuentaEfectiva.id, siguiente ? siguiente.id : null);
     setPerroMontadoId(siguiente ? siguiente.id : null);
     setMontaje((m) => m + 1);
   };
@@ -7239,8 +7516,37 @@ function AuthGate() {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Mientras carga usuario O perros
-  if (usuario === undefined || perros === undefined) {
+  // Sin cuenta los perros están en el navegador. Se cargan igual que los
+  // de Supabase — misma forma de fila, mismo estado — para que de aquí
+  // hacia dentro no haya dos caminos distintos.
+  useEffect(() => {
+    if (!sinCuenta || usuario) return;
+    let vivo = true;
+    getPerros(USUARIO_LOCAL.id)
+      .then((lista) => {
+        if (!vivo) return;
+        const perrosLocales = lista ?? [];
+        setPerros(perrosLocales);
+        setPerroMontadoId(perrosLocales[0]?.id ?? null);
+      })
+      .catch((err) => {
+        if (!vivo) return;
+        capturarError(err, { donde: "AuthGate.getPerros(local)" });
+        setPerros([]);
+        setPerroMontadoId(null);
+      });
+    return () => { vivo = false; };
+  }, [sinCuenta, usuario, montaje]);
+
+  const empezarSinCuenta = () => {
+    entrarSinCuenta();
+    setPerros(undefined);       // que el efecto de arriba los cargue
+    setSinCuenta(true);
+  };
+
+  // Mientras carga usuario O perros (o se está subiendo lo local a una
+  // cuenta recién creada, que puede tardar unos segundos)
+  if (usuario === undefined || perros === undefined || migrando) {
     return (
       <div style={{ minHeight: '100dvh', background: '#FBF7FC', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
         <Dog size={32} strokeWidth={1.4} style={{ color: '#5A4088' }} />
@@ -7249,11 +7555,13 @@ function AuthGate() {
     );
   }
 
-  if (usuario === null) {
+  // ⚠️ Sin sesión ya NO se acaba siempre en el login: sólo si tampoco se
+  // ha elegido entrar sin cuenta. Ése era el muro que pedía quitar.
+  if (usuario === null && !sinCuenta) {
     // Pasa por el MISMO cargador que el listener. Es idempotente: si el
     // listener de onAuthChange ya arrancó la carga de este usuario (que
     // es lo normal), esto no lanza una segunda petición.
-    return <Auth onAutenticado={cargarSesion} />;
+    return <Auth onAutenticado={cargarSesion} onSinCuenta={empezarSinCuenta} hayDatosSinCuenta={hayDatosLocales()} />;
   }
 
   const perroMontado = (perros ?? []).find((p) => p.id === perroMontadoId) ?? null;
@@ -7266,8 +7574,10 @@ function AuthGate() {
           menús y hasta la pantalla en la que estás del perro de antes:
           todos esos estados se calculan una sola vez, al montar. */}
       <RawkuOnboardingInterna
-        key={`${usuario.id}:${montaje}`}
-        usuario={usuario}
+        key={`${cuentaEfectiva.id}:${montaje}`}
+        usuario={cuentaEfectiva}
+        onCrearCuenta={() => { salirDeSinCuenta(); setSinCuenta(false); }}
+        onDescartarLocal={() => { vaciarLocal(); salirDeSinCuenta(); setSinCuenta(false); }}
         perroInicial={perroMontado}
         perros={perros ?? []}
         onCambiarDePerro={cambiarDePerro}
