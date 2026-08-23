@@ -1775,10 +1775,15 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 </p>
               </div>
               <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-                Si preparas este menú con antelación: carne, vísceras, hígado y hueso <b>al menos 1 semana</b>
-                congelados a -18/-20°C antes de dar; pescado, <b>al menos 2 semanas</b> — el anisakis aguanta
-                más. Los suplementos, aceites, huevo y semillas se añaden CRUDOS al final, sobre la comida ya
-                descongelada — nunca se congelan junto con el resto.
+                {/* ⚠️ CASO REAL (23 agosto): salía "al menos 1 semanacongelados".
+                    En JSX, la línea que TERMINA en etiqueta se pega a la
+                    siguiente sin espacio -- y lo mismo la que EMPIEZA con una.
+                    El espacio de dentro de la línea sí se respeta, así que
+                    cada <b> va pegado a sus palabras en su propia línea. */}
+                Si preparas este menú con antelación: carne, vísceras, hígado y hueso, <b>al menos 1 semana</b> congelados
+                a -18/-20°C antes de dar; pescado, <b>al menos 2 semanas</b> — el anisakis aguanta más. Los suplementos,
+                aceites, huevo y semillas se añaden CRUDOS al final, sobre la comida ya descongelada — nunca se congelan
+                junto con el resto.
                 <br /><br />
                 Una vez descongelado, dáselo <b>dentro de 3 días</b> guardándolo en la nevera; pasado ese
                 tiempo, mejor no. El pescado se estropea antes que la carne: si huele mal, descártalo aunque
