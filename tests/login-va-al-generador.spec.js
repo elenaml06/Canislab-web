@@ -65,9 +65,14 @@ test.describe("login → generador", () => {
     await perfilDelPerro(page).click();
 
     await expect(generador(page)).toBeVisible();
+    // ⚠️ ESTA LÍNEA CAZÓ UN FALLO (23 agosto): al quitar la opción "Solo
+    // para X" de la pantalla de varios perros, con UN solo perro el título
+    // pasó a decir "los menús de la casa". Miraba la opción elegida en vez
+    // de cuántos perros hay, y con uno esa opción ni se ve.
     await expect(
       page.getByRole("heading", { name: new RegExp(PERRO_DE_PRUEBA.nombre) })
     ).toBeVisible();
+    await expect(page.getByText(/de la casa/)).toHaveCount(0);
   });
 
   test("el perfil tiene menú lateral para ir a otro sitio", async ({ page }) => {

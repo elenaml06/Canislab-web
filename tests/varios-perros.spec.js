@@ -86,7 +86,7 @@ const menuDeEjemplo = (perroId, extra = {}) => ({
 // todo eso y por eso no se podía ni elegir ni editar nada.
 async function generarParaLaCasa(page, { cuantos = 1, personalizar = false,
                                          nombres = [PERRO_DE_PRUEBA.nombre, SEGUNDO_PERRO_DE_PRUEBA.nombre] } = {}) {
-  await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+  await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
 
   // qué come cada perro, por separado
   for (const nombre of nombres) {
@@ -367,7 +367,34 @@ test.describe("los menús de toda la casa", () => {
     await expect(page.getByText(`Menú de casa · ${SEGUNDO_PERRO_DE_PRUEBA.nombre}`)).toHaveCount(0);
   });
 
+  test("ya no se puede pedir el menú de uno solo teniendo dos", async ({ page }) => {
+    // Pedido expreso: "creo que tendrías que quitar el de solo para Cairo
+    // porque no tiene sentido — si metes otro perro es porque también
+    // quieres hacerle un menú, si no, no lo meterías".
+    //
+    // Lo que queda son las DOS formas de hacerlos, y la pantalla dice cuál
+    // es la diferencia antes de los botones, que era lo otro que faltaba.
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+
+    await expect(page.getByRole("button", { name: new RegExp(`^Solo para ${PERRO_DE_PRUEBA.nombre}`) }))
+      .toHaveCount(0);
+    await expect(page.getByRole("button", { name: /Los mismos alimentos para todos/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Cada uno con lo suyo/ })).toBeVisible();
+    // y la diferencia dicha, no sólo insinuada en los títulos
+    await expect(page.getByText(/Lo que cambia es la compra/)).toBeVisible();
+  });
+
   test("si falla para todos, se puede hacer el de uno solo", async ({ page, request }) => {
+    // ⚠️ ESTA PRUEBA SALVÓ UN FALLO (23 agosto). Al quitar "Solo para X"
+    // de la pantalla, la primera versión del cambio quitó también el valor
+    // "solo" del estado y simplificó las condiciones que lo miraban. Este
+    // botón dejó de funcionar: devolvía a la pantalla de la casa, la misma
+    // que acababa de fallar, y no había forma de hacer NINGÚN menú.
+    //
+    // "solo" ya no se puede ELEGIR, pero se sigue pudiendo LLEGAR. Son
+    // cosas distintas y ésta es la que no se puede perder.
     await configurarBackend(request, { casaFalla: true });
     await page.goto("/");
     await iniciarSesion(page);
@@ -479,7 +506,10 @@ test.describe("decir que tienes más de un perro desde el principio", () => {
     // Desde la ficha del segundo, al generador: ahí tiene que poder
     // pedirse el menú de los dos.
     await page.getByRole("button", { name: /ir al generador de menús|Hacer el menú de la semana/ }).click();
-    await expect(page.getByText("¿Para quién?")).toBeVisible();
+    // El rótulo dice "¿Cómo?" y no "¿Para quién?" desde que se quitó la
+    // opción de hacer el de uno solo: para quién ya no se elige — son
+    // todos —, lo que se elige es cómo.
+    await expect(page.getByRole("button", { name: /Los mismos alimentos para todos/ })).toBeVisible();
     await generarParaLaCasa(page);
 
     await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
@@ -605,7 +635,7 @@ test.describe("para varios perros, el recorrido completo", () => {
     await page.goto("/");
     await iniciarSesion(page);
     await irAlGenerador(page);
-    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
 
     // Uno puede venir de pienso y el otro llevar años en BARF: la
     // transición depende de lo que come cada animal.
@@ -617,7 +647,7 @@ test.describe("para varios perros, el recorrido completo", () => {
     await page.goto("/");
     await iniciarSesion(page);
     await irAlGenerador(page);
-    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
 
     await expect(page.getByText("Elige primero qué come cada perro ahora")).toBeVisible();
     await expect(page.getByRole("button", { name: /^Automático/ })).toBeDisabled();
@@ -637,7 +667,7 @@ test.describe("para varios perros, el recorrido completo", () => {
     await page.goto("/");
     await iniciarSesion(page);
     await irAlGenerador(page);
-    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
     await page.getByRole("group", { name: `Qué come ${PERRO_DE_PRUEBA.nombre}` })
               .getByRole("button", { name: "Pienso", exact: true }).click();
     await page.getByRole("group", { name: `Qué come ${SEGUNDO_PERRO_DE_PRUEBA.nombre}` })
@@ -658,7 +688,7 @@ test.describe("para varios perros, el recorrido completo", () => {
     await page.goto("/");
     await iniciarSesion(page);
     await irAlGenerador(page);
-    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
     for (const nombre of [PERRO_DE_PRUEBA.nombre, SEGUNDO_PERRO_DE_PRUEBA.nombre]) {
       await page.getByRole("group", { name: `Qué come ${nombre}` })
                 .getByRole("button", { name: "BARF", exact: true }).click();
@@ -694,7 +724,7 @@ test.describe("para varios perros, el recorrido completo", () => {
     await page.goto("/");
     await iniciarSesion(page);
     await irAlGenerador(page);
-    await page.getByRole("button", { name: /lo más parecidos posible/ }).click();
+    await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
     for (const nombre of [PERRO_DE_PRUEBA.nombre, SEGUNDO_PERRO_DE_PRUEBA.nombre]) {
       await page.getByRole("group", { name: `Qué come ${nombre}` })
                 .getByRole("button", { name: "BARF", exact: true }).click();
