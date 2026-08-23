@@ -126,8 +126,14 @@ function fechaNacimientoISO(perfil) {
   return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10)
 }
 
-export async function guardarPerro(userId, perfil, extras = {}) {
-  const payload = {
+// ⚠️ SACADO A FUNCIÓN APARTE (23 agosto) — la construye también el
+// almacén local (almacen.js), para que una ficha guardada SIN cuenta
+// tenga exactamente la misma forma que una guardada con cuenta. Si las
+// dos formas se separan, al crear la cuenta la migración perdería
+// campos en silencio: justo la familia de fallos que no da error, no se
+// ve en pantalla y aparece días después (ver CLAUDE.md).
+export function filaDePerro(userId, perfil, extras = {}) {
+  return {
     user_id: userId,
     nombre: perfil.nombre,
     peso_actual: perfil.pesoActual ? Number(perfil.pesoActual) : null,
@@ -160,6 +166,10 @@ export async function guardarPerro(userId, perfil, extras = {}) {
     patologias: perfil.patologias ?? [],
     updated_at: new Date().toISOString(),
   }
+}
+
+export async function guardarPerro(userId, perfil, extras = {}) {
+  const payload = filaDePerro(userId, perfil, extras)
 
   if (perfil.id) {
     // actualizar perro existente
