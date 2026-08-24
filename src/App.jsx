@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import { onAuthChange, logout, cambiarPassword, cambiarCorreo } from "./supabase";
@@ -3678,6 +3678,88 @@ function RawkuOnboardingInterna({
   // no volvían a salir: cerrabas la app y los perdías de vista para
   // siempre. Esto los recupera y los enseña.
   const [menusGuardados, setMenusGuardados] = useState([]);
+
+  // ⚠️ AÑADIDO (24 agosto) — LA COMPRA, DESDE EL PANEL LATERAL.
+  //
+  // La lista de la compra no se mira al generar el menú: se mira EN LA
+  // TIENDA, dos días después. Estando solo al final de "El menú" había que
+  // volver a entrar en el menú para verla, y desde el perfil o desde Mis
+  // menús no se llegaba.
+  //
+  // DECISIÓN SUYA: con varios perros enseña la de TODA LA CASA, sumando el
+  // último menú guardado de cada uno. Es lo que de verdad se compra -- vas
+  // a la tienda una vez, no una por perro -- y arriba se puede filtrar por
+  // uno concreto si hace falta.
+  //
+  // Se carga AL ABRIRLA y no antes: son una petición por perro, y la
+  // inmensa mayoría de las veces nadie la abre.
+  const [compraAbierta, setCompraAbierta] = useState(false);
+  const [compraDeQuien, setCompraDeQuien] = useState(null);   // null = toda la casa
+  // ⚠️ PEDIDO EXPRESO: "y para cuántos días". La cesta sale de UNA SEMANA
+  // porque es lo que cubren los menús, pero nadie compra siempre para
+  // siete días: se preparan tandas de tres para la nevera o de dos semanas
+  // para congelar (el panel de congelación ya cuenta cómo).
+  //
+  // Se escala en proporción a la semana (dias/7), que es exacto para los
+  // múltiplos y proporcional para el resto. No se intenta adivinar "para 3
+  // días te toca el menú 1": la rotación está pensada por semanas, y
+  // repartirla a ojo daría cantidades que no cuadran con ningún menú.
+  const [compraDias, setCompraDias] = useState(7);
+  const [compraGuardada, setCompraGuardada] = useState(null); // [{nombre, menus}]
+  const [cargandoCompra, setCargandoCompra] = useState(false);
+  const [errorCompra, setErrorCompra] = useState(null);
+
+  const abrirLaCompra = async () => {
+    setCompraAbierta(true);
+    setCompraDeQuien(null);
+    setCompraDias(7);
+    setErrorCompra(null);
+    setCargandoCompra(true);
+    try {
+      const conMenu = [];
+      for (const p of (perros ?? [])) {
+        const filas = await getMenus(p.id);
+        // getMenus ya los devuelve del más nuevo al más viejo.
+        const ultima = (filas || [])[0];
+        if (!ultima) continue;
+        // ⚠️ Un menú guardado puede no traer los días de cada tanda: los
+        // primeros que se guardaron no los llevaban. Sin días, cesta.js
+        // contaría cada menú como UN día y la compra saldría corta, que es
+        // justo el fallo que la cesta viene a arreglar. Así que si faltan,
+        // se reparte la semana igual que hace el generador.
+        const trozos = ultima.menus_data || [];
+        const dias = repartirDiasSemana(Math.max(1, trozos.length));
+        conMenu.push({
+          nombre: p.nombre || "Sin nombre",
+          menus: trozos.map((m, i) => ({
+            gramos: m.menu || m.gramos || {},
+            dias: m.dias > 0 ? m.dias : dias[i],
+          })),
+        });
+      }
+      setCompraGuardada(conMenu);
+    } catch (err) {
+      capturarError(err, { donde: "abrirLaCompra" });
+      setErrorCompra("No hemos podido cargar tus menús guardados. Inténtalo otra vez.");
+      setCompraGuardada([]);
+    } finally {
+      setCargandoCompra(false);
+    }
+  };
+
+  const cestaDelPanel = useMemo(() => {
+    if (!compraGuardada) return [];
+    const elegidos = compraDeQuien
+      ? compraGuardada.filter((p) => p.nombre === compraDeQuien)
+      : compraGuardada;
+    const semanas = (compraDias || 7) / 7;
+    const cesta = cestaDeLaCompra(elegidos, categoriaDeAlimento);
+    if (semanas === 1) return cesta;
+    return cesta.map((z) => ({
+      ...z,
+      lineas: z.lineas.map((l) => ({ ...l, gramos: l.gramos * semanas })),
+    }));
+  }, [compraGuardada, compraDeQuien, compraDias]);
   const [cargandoMenusGuardados, setCargandoMenusGuardados] = useState(false);
   // Fila de Supabase que se está viendo ahora mismo, si se ha abierto uno
   // guardado. Sirve para dos cosas: saber que NO hay que regenerar nada, y
@@ -4355,6 +4437,22 @@ function RawkuOnboardingInterna({
               <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
             </button>
           )}
+          {/* ⚠️ AÑADIDO (24 agosto) — LA COMPRA.
+              Se mira en la tienda, no al generar el menú: tiene que estar a
+              un toque desde cualquier pantalla. Solo aparece si hay algún
+              menú guardado del que sacarla. */}
+          {menusGuardados.length > 0 && !(paso >= 1 && paso <= TOTAL_PASOS) && (
+            <button
+              onClick={() => { setMenuLigeroAbierto(false); abrirLaCompra(); }}
+              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
+            >
+              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
+                <ShoppingBasket size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
+              </div>
+              <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>La compra</span>
+              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+            </button>
+          )}
           {/* ⚠️ AÑADIDO — Evolución y Analizar dejan de estar en gris. No
               es que faltaran: estaban programadas dentro de VistaMenus, que
               sólo existe con un menú recién generado, así que desde el
@@ -4586,8 +4684,134 @@ function RawkuOnboardingInterna({
     </div>
   );
 
+  // ⚠️ LA PANTALLA DE LA COMPRA. Cuelga de `drawerLigero`, que es lo que
+  // la hace alcanzable desde las ~16 pantallas donde está el panel: si
+  // viviera dentro de VistaMenus solo existiría con un menú recién
+  // generado, que es justo lo contrario de para lo que sirve.
+  const pantallaDeLaCompra = compraAbierta ? (
+    <div className="fixed inset-0 z-[60] flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-2xl" style={{ color: TINTA, fontFamily: fontDisplay }}>La compra</p>
+        <button onClick={() => setCompraAbierta(false)} aria-label="Cerrar"
+                style={{ background: "none", border: "none" }}>
+          <X size={22} style={{ color: MALVA }} />
+        </button>
+      </div>
+
+      {cargandoCompra && (
+        <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>Sumando tus menús...</p>
+      )}
+
+      {!cargandoCompra && errorCompra && (
+        <p className="text-sm" style={{ color: ROSA, fontFamily: fontBody }}>{errorCompra}</p>
+      )}
+
+      {!cargandoCompra && !errorCompra && cestaDelPanel.length === 0 && (
+        <p className="text-sm leading-relaxed" style={{ color: MALVA, fontFamily: fontBody }}>
+          Todavía no hay ningún menú guardado del que sacar la compra. Haz uno y
+          guárdalo, y aquí tendrás la lista.
+        </p>
+      )}
+
+      {!cargandoCompra && cestaDelPanel.length > 0 && (
+        <>
+          {/* El filtro solo tiene sentido con más de un perro. Con uno,
+              "toda la casa" y "solo Ruffo" son lo mismo. */}
+          {(compraGuardada || []).length > 1 && (
+            <div className="flex gap-2 flex-wrap mb-4">
+              {[{ clave: null, texto: "Toda la casa" },
+                ...(compraGuardada || []).map((p) => ({ clave: p.nombre, texto: p.nombre }))
+              ].map((op) => {
+                const activo = compraDeQuien === op.clave;
+                return (
+                  <button key={op.texto} onClick={() => setCompraDeQuien(op.clave)}
+                    aria-pressed={activo}
+                    className="px-3 py-1.5 rounded-full text-xs"
+                    style={{ background: activo ? VIOLETA : "#FFFFFF",
+                             color: activo ? "#FFFFFF" : VIOLETA,
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                             fontFamily: fontBody, fontWeight: activo ? 700 : 400 }}>
+                    {op.texto}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* ⚠️ PEDIDO EXPRESO: "y para cuántos días". Tres días es una
+              tanda de nevera; dos semanas o un mes, una de congelador. */}
+          <p className="text-[10px] tracking-[0.14em] uppercase mb-1.5" style={{ color: MALVA, fontFamily: "monospace" }}>
+            ¿Para cuántos días?
+          </p>
+          <div className="flex gap-2 flex-wrap mb-4">
+            {[{ dias: 3, texto: "3 días" }, { dias: 7, texto: "1 semana" },
+              { dias: 14, texto: "2 semanas" }, { dias: 30, texto: "1 mes" }].map((op) => {
+              const activo = compraDias === op.dias;
+              return (
+                <button key={op.dias} onClick={() => setCompraDias(op.dias)}
+                  aria-pressed={activo}
+                  className="px-3 py-1.5 rounded-full text-xs"
+                  style={{ background: activo ? VIOLETA : "#FFFFFF",
+                           color: activo ? "#FFFFFF" : VIOLETA,
+                           border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                           fontFamily: fontBody, fontWeight: activo ? 700 : 400 }}>
+                  {op.texto}
+                </button>
+              );
+            })}
+          </div>
+
+          <p className="text-xs mb-4 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+            {compraDeQuien
+              ? `Para ${compraDeQuien}, de su último menú guardado.`
+              : (compraGuardada || []).length > 1
+                ? `Para ${nombresDeLosPerros(compraGuardada || [])} juntos, del último menú guardado de cada uno.`
+                : "De tu último menú guardado."}
+            {compraDias !== 7 && (
+              <> Los menús cubren una semana, así que esto es esa semana
+              {" "}{compraDias > 7 ? "multiplicada" : "en proporción"} a {compraDias} días.</>
+            )}
+          </p>
+
+          {cestaDelPanel.map((zona) => (
+            <div key={zona.clave} className="rounded-2xl p-4 mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+              <p className="text-[10px] tracking-[0.14em] uppercase mb-2" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                {zona.titulo}
+              </p>
+              {zona.lineas.map((linea) => {
+                const deQuien = deQuienEs(linea.deQuien,
+                  compraDeQuien ? 1 : (compraGuardada || []).length);
+                return (
+                  <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1.5">
+                    <span className="text-sm" style={{ color: TINTA, fontFamily: fontBody }}>
+                      {linea.alimento}
+                      {deQuien && (
+                        <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          {deQuien}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-sm shrink-0" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700 }}>
+                      {formatearCompra(linea.gramos)}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+
+          <p className="text-[11px] leading-snug mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+            Compra un poco de más en lo fresco: al deshuesar y limpiar se pierde
+            parte, y estas cifras son de comida ya lista para pesar.
+          </p>
+        </>
+      )}
+    </div>
+  ) : null;
+
   const drawerLigero = (
     <>
+      {pantallaDeLaCompra}
       {panelLigero}
       {avisoCambiarDePerro}
       {avisoBorrarPerro}
