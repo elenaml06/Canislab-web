@@ -28,33 +28,6 @@ export async function login(email, password) {
   return data
 }
 
-// ⚠️ AÑADIDO (24 agosto) — ENTRAR CON GOOGLE.
-//
-// Es el paso donde más gente abandona: pedir un correo y una contraseña
-// nuevos para ver si la app le sirve. Con Google es un toque.
-//
-// NO ES SOLO ESTO: hace falta activar el proveedor Google en el panel de
-// Supabase (Authentication -> Providers -> Google) y pegar ahí el ID y el
-// secreto de un cliente OAuth de Google Cloud. Sin eso, Supabase responde
-// "Unsupported provider" y el botón no hace nada -- por eso quien llame a
-// esto tiene que enseñar ese error tal cual y no un "algo ha fallado".
-//
-// `redirectTo` vuelve a la raíz de la app. La sesión la recoge
-// onAuthChange, igual que con la contraseña: no hay que tratar el
-// callback a mano.
-export async function entrarConGoogle() {
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: 'google',
-    options: {
-      redirectTo: window.location.origin + '/',
-      // Para que ofrezca elegir cuenta en vez de entrar con la última
-      // usada sin preguntar: en un móvil compartido eso importa.
-      queryParams: { prompt: 'select_account' },
-    },
-  })
-  if (error) throw error
-}
-
 export async function logout() {
   const { error } = await supabase.auth.signOut()
   if (error) throw error
