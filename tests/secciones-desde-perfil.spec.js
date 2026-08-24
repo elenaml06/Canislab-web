@@ -77,9 +77,20 @@ test.describe("secciones desde el perfil", () => {
     await expect(page.getByText(/Dinos qué le estás dando/)).toBeVisible();
     await expect(page.getByText("🔒")).toHaveCount(0);
 
-    // El botón dice "volver al perfil", no "volver a los menús": aquí no
-    // hay ninguna vista de menús detrás.
-    await page.getByRole("button", { name: /Volver/ }).first().click();
+    // ⚠️ CAMBIADO (24 agosto) — pedido expreso: "lo de volver y volver al
+    // menú en las pantallas que se eligen desde el menú lateral, FUERA.
+    // Para algo hay una pestaña de menú para elegir a dónde te quieres
+    // mover". Ya no hay botón de volver aquí: se sale por el panel.
+    //
+    // Lo que esta prueba vigila NO ha cambiado, y es lo importante: que la
+    // salida lleve a un sitio que EXISTE. Antes el botón decía "volver a
+    // los menús" y detrás no había ninguna vista de menús. Ahora el panel,
+    // en este modo, ofrece "Hacer el menú de la semana" -- que es
+    // justamente lo que hay: no un menú hecho, sino el generador.
+    await expect(page.getByRole("button", { name: /^← Volver/ })).toHaveCount(0);
+
+    await abrirMenuLateral(page);
+    await page.getByRole("button", { name: "Hacer el menú de la semana", exact: true }).click();
     await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
   });
 });

@@ -106,6 +106,27 @@ test.describe("la compra desde el panel", () => {
     await expect(page.getByText("350 g")).toBeVisible();
   });
 
+  test("tiene hamburguesa y burbuja, como todas las demás", async ({ page, request }) => {
+    // ⚠️ CASO REAL: "en la pantalla de la compra no aparece la hamburguesa
+    // del menú lateral ni lo del perfil". Se quedó fuera porque no es una
+    // sección del menú: es una pantalla propia, con su propia cabecera.
+    await configurar(request, {
+      retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA],
+      menus: [menuGuardado(PERRO_DE_PRUEBA.id, [{ menu: { Conejo: 100 }, dias: 7 }])],
+      olvidarUltimoMenu: true,
+    });
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+
+    await expect(page.getByRole("button", { name: /Perro actual/ }).last()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ajustes" }).last()).toBeVisible();
+
+    // Y la hamburguesa abre el panel de verdad, no es un dibujo.
+    await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+    await expect(page.getByRole("dialog", { name: "Panel lateral" })).toBeVisible();
+  });
+
   test("con un perro no se pregunta de quién: sobra", async ({ page, request }) => {
     await configurar(request, {
       retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA],

@@ -38,8 +38,11 @@ async function entrarYGenerar(page) {
   await page.getByRole("button", { name: /Perro actual/ }).waitFor();
 }
 
+// ⚠️ UNA SOLA burbuja (24 agosto). Antes eran dos botones pegados: el
+// perro y un engranaje aparte. Pedido expreso: "NO QUIERO DOS, QUIERO UNA
+// SOLA BURBUJITA PARA CONFIGURACIÓN Y LOS PERROS". Los ajustes viven ahora
+// dentro de la hoja que abre la burbuja.
 const laBurbuja = (page) => page.getByRole("button", { name: /Perro actual/ });
-const elEngranaje = (page) => page.getByRole("button", { name: "Ajustes" });
 
 // Las pantallas que abre el panel del menú. Va escrita a mano Y contrastada
 // con lo que el panel tiene de verdad (última prueba): si alguien añade una
@@ -47,6 +50,11 @@ const elEngranaje = (page) => page.getByRole("button", { name: "Ajustes" });
 // su pantalla tiene burbuja. Escribirla sola no valía: el bucle se enredaba
 // con las pantallas que se abren encima.
 const PANTALLAS_DEL_PANEL = [
+  // ⚠️ "El menú de la semana" NO va aquí: no es una sección, es volver a la
+  // pantalla de debajo. Se añadió al panel el 24 de agosto porque al quitar
+  // los "← Volver" de estas pantallas había que poder salir de ellas por
+  // algún sitio, y el sitio es el panel -- pedido expreso: "para algo hay
+  // una pestaña de menú para elegir a dónde te quieres mover".
   "Perfil de Nala",
   "Evolución y crecimiento",
   "Mis menús",
@@ -67,7 +75,7 @@ test.describe("la burbuja y el engranaje, en todas", () => {
     await entrarYGenerar(page);
 
     for (const etiqueta of PANTALLAS_DEL_PANEL) {
-      await page.getByRole("button", { name: "Menú", exact: true }).click();
+      await page.getByRole("button", { name: "Menú", exact: true }).last().click();
       await page.getByRole("dialog", { name: "Panel lateral" })
                 .getByRole("button", { name: etiqueta, exact: true }).click();
 
@@ -80,16 +88,23 @@ test.describe("la burbuja y el engranaje, en todas", () => {
       // hoja de perros. Si la única burbuja está detrás de la sección, el
       // toque no llega y esto se cae, que es lo que tiene que pasar.
       await laBurbuja(page).last().click({ timeout: 5000 });
-      await expect(page.getByRole("dialog", { name: "Tus perros" }),
-                   `la burbuja de «${etiqueta}» no abre nada`).toBeVisible();
-      await page.getByRole("dialog", { name: "Tus perros" })
-                .getByRole("button", { name: "Cerrar" }).click()
-                .catch(() => page.keyboard.press("Escape"));
-      await expect(page.getByRole("dialog", { name: "Tus perros" })).toHaveCount(0);
+      const hoja = page.getByRole("dialog", { name: "Tus perros" });
+      await expect(hoja, `la burbuja de «${etiqueta}» no abre nada`).toBeVisible();
+      // Y los ajustes están AHÍ DENTRO, que es lo que hace que baste una
+      // sola burbuja.
+      await expect(hoja.getByRole("button", { name: "Ajustes", exact: true }),
+                   `en «${etiqueta}» la hoja no lleva los ajustes`).toBeVisible();
+      await hoja.getByRole("button", { name: "Cerrar" }).click();
+      await expect(hoja).toHaveCount(0);
 
-      await expect(elEngranaje(page).last(), `sin engranaje en «${etiqueta}»`).toBeVisible();
-
-      await page.getByRole("button", { name: /^← Volver/ }).first().click();
+      // ⚠️ Para salir se usa el PANEL, no un "← Volver": esas pantallas ya
+      // no lo tienen. Pedido expreso -- "para algo hay una pestaña de menú
+      // para elegir a dónde te quieres mover". Si el panel dejara de tener
+      // salida, esto se cae, que es exactamente lo que hay que vigilar:
+      // sin volver Y sin salida en el panel, te quedas encerrada.
+      await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+      await page.getByRole("dialog", { name: "Panel lateral" })
+                .getByRole("button", { name: "El menú de la semana", exact: true }).click();
     }
   });
 
@@ -113,12 +128,68 @@ test.describe("la burbuja y el engranaje, en todas", () => {
     // "La compra" se comprueba en compra-en-el-panel.spec.js: abre una
     // pantalla propia, no una sección de ésta.
     const sinCubrir = etiquetas.filter(
-      (t) => !PANTALLAS_DEL_PANEL.includes(t) && t !== "La compra" && t !== "Cerrar sesión");
+      (t) => !PANTALLAS_DEL_PANEL.includes(t) && t !== "La compra"
+             && t !== "Cerrar sesión" && t !== "El menú de la semana");
 
     expect(sinCubrir,
       `El panel tiene entradas que la prueba de la burbuja no mira: ${JSON.stringify(sinCubrir)}. ` +
       `Si has añadido una pantalla, añádela a PANTALLAS_DEL_PANEL y comprueba que lleva burbuja.`)
       .toEqual([]);
+  });
+
+  test("y siempre en la misma esquina, no en medio", async ({ page, request }) => {
+    // ⚠️ CASO REAL: "se ve raro lo del engranaje y el perfil en varias
+    // pantallas, se ve como arriba centrado, debería estar siempre en el
+    // mismo sitio".
+    //
+    // La regla de toda la app es: hamburguesa IZQUIERDA, burbuja DERECHA.
+    // Al meter el "← Volver" como tercer hijo del `justify-between`, el
+    // reparto dejaba la burbuja en medio. Se veía, funcionaba, y estaba
+    // mal puesta -- ninguna prueba de "existe" lo iba a cazar.
+    //
+    // Por eso esto mide POSICIONES, no presencia: la burbuja tiene que
+    // estar a la derecha de la hamburguesa y pegada al borde derecho.
+    await configurar(request, {
+      retrasoPerrosMs: 50,
+      perros: [{ ...PERRO_DE_PRUEBA, dieta_actual: "barf" }],
+      menus: [], olvidarUltimoMenu: true,
+    });
+    await page.goto("/");
+    await entrarYGenerar(page);
+
+    const ancho = page.viewportSize().width;
+
+    for (const etiqueta of PANTALLAS_DEL_PANEL) {
+      await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+      await page.getByRole("dialog", { name: "Panel lateral" })
+                .getByRole("button", { name: etiqueta, exact: true }).click();
+
+      // ⚠️ TODAS las burbujas, no `.last()`. La pantalla de debajo sigue
+      // en el DOM con la suya BIEN puesta, así que mirar una sola podía
+      // medir la de abajo y dar por buena la de arriba estando en medio.
+      // Comprobado: con esa versión, el sabotaje pasaba.
+      const cuantas = await laBurbuja(page).count();
+      expect(cuantas, `no hay ninguna burbuja en «${etiqueta}»`).toBeGreaterThan(0);
+
+      for (let i = 0; i < cuantas; i++) {
+        const caja = await laBurbuja(page).nth(i).boundingBox();
+        if (!caja) continue;   // fuera de pantalla
+        const distanciaAlBorde = ancho - (caja.x + caja.width);
+        expect(distanciaAlBorde,
+          `en «${etiqueta}» hay una burbuja a ${Math.round(distanciaAlBorde)}px del borde ` +
+          `derecho (pantalla de ${ancho}px): se ha ido al centro`)
+          .toBeLessThan(ancho / 3);
+      }
+
+      // ⚠️ Para salir se usa el PANEL, no un "← Volver": esas pantallas ya
+      // no lo tienen. Pedido expreso -- "para algo hay una pestaña de menú
+      // para elegir a dónde te quieres mover". Si el panel dejara de tener
+      // salida, esto se cae, que es exactamente lo que hay que vigilar:
+      // sin volver Y sin salida en el panel, te quedas encerrada.
+      await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+      await page.getByRole("dialog", { name: "Panel lateral" })
+                .getByRole("button", { name: "El menú de la semana", exact: true }).click();
+    }
   });
 
   test("y desde ahí se puede cambiar de perro sin volver atrás", async ({ page, request }) => {

@@ -28,7 +28,15 @@ async function entrar(page) {
   await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
 }
 
-const abrirAjustes = (page) => page.getByRole("button", { name: "Ajustes" }).click();
+// ⚠️ CAMBIADO (24 agosto) — ya no hay engranaje suelto. Pedido expreso:
+// "NO QUIERO DOS, QUIERO UNA SOLA BURBUJITA PARA CONFIGURACIÓN Y LOS
+// PERROS". Eran dos botones pegados en la esquina donde solo cabe una
+// idea. Ahora la burbuja es una y los ajustes viven dentro de su hoja.
+const abrirAjustes = async (page) => {
+  await page.getByRole("button", { name: /Perro actual/ }).last().click();
+  await page.getByRole("dialog", { name: "Tus perros" })
+            .getByRole("button", { name: "Ajustes", exact: true }).click();
+};
 
 test.describe("el engranaje", () => {
   test.beforeEach(async ({ request }) => {
@@ -37,9 +45,15 @@ test.describe("el engranaje", () => {
     });
   });
 
-  test("está a la vista y lleva a los ajustes", async ({ page }) => {
+  test("la burbuja es UNA sola y desde ella se llega a los ajustes", async ({ page }) => {
     await entrar(page);
-    await expect(page.getByRole("button", { name: "Ajustes" })).toBeVisible();
+    // Una, no dos: el engranaje ya no va suelto al lado.
+    // ⚠️ `exact: true` a propósito. Sin él, el propio aria-label de la
+    // burbuja ("Perro actual: Nala. Tus perros y ajustes") cuenta como
+    // coincidencia y la prueba se cae sola sin haber ningún engranaje.
+    await expect(page.getByRole("button", { name: /Perro actual/ })).toHaveCount(1);
+    await expect(page.getByRole("button", { name: "Ajustes", exact: true })).toHaveCount(0);
+
     await abrirAjustes(page);
     await expect(page.getByRole("heading", { name: /Tu cuenta/ })).toBeVisible();
   });
@@ -123,7 +137,7 @@ test.describe("el engranaje sin cuenta", () => {
       window.localStorage.setItem("rawku.local.menus", "[]");
     });
     await page.goto("/");
-    await page.getByRole("button", { name: "Ajustes" }).click();
+    await abrirAjustes(page);
 
     await expect(page.getByRole("button", { name: /Crear una cuenta/ })).toBeVisible();
     await expect(page.getByRole("button", { name: /Cerrar sesión/ })).toHaveCount(0);
