@@ -1,8 +1,8 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
-import { onAuthChange, logout } from "./supabase";
+import { onAuthChange, logout, cambiarPassword, cambiarCorreo } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -1187,7 +1187,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
-function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, selectorDePerros = null, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {} }) {
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
   // pantalla del menú era un scroll larguísimo donde el plan de
@@ -1627,7 +1627,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             funcional todavía (era solo una maqueta). */}
         <div className="flex items-center justify-between mb-4">
           <BotonMenu onClick={() => setMenuLateralAbierto(true)} color="#FFFFFF" className="p-1" />
-          <p className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>Rawku</p>
+          {burbuja || <p className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>Rawku</p>}
         </div>
         {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: una vez
             entrado en "tus menús" no había forma de volver a la
@@ -3240,7 +3240,10 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             {/* El mismo selector de perros que el panel ligero. Se pasa ya
                 montado desde fuera porque toda la información de perros
                 vive en RawkuOnboardingInterna, no aquí. */}
-            {selectorDePerros}
+            {/* ⚠️ QUITADO DE AQUÍ (24 agosto) — pedido expreso: "que cambiar
+            de perro esté metido en una pestaña del panel es esconderlo".
+            Vive en la burbuja de la cabecera, que se ve sin abrir nada.
+            El panel se queda con lo que es: navegación. */}
             <div className="flex-1 px-3 pt-4">
               {[
                 { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}`, isPremium: false },
@@ -3780,7 +3783,6 @@ function RawkuOnboardingInterna({
   const [guardandoCasa, setGuardandoCasa] = useState(false);
   const [guardadosCasa, setGuardadosCasa] = useState(false);
 
-  const [selectorPerrosAbierto, setSelectorPerrosAbierto] = useState(false);
   // Perro al que se quiere ir teniendo otro a medio crear: se guarda
   // aquí para poder preguntar antes de tirar lo escrito.
   const [perroAlQueIrmeTrasAvisar, setPerroAlQueIrmeTrasAvisar] = useState(null);
@@ -3824,39 +3826,105 @@ function RawkuOnboardingInterna({
     return guardados;
   })();
 
-  const cerrarPaneles = () => {
-    setSelectorPerrosAbierto(false);
-    setMenuLigeroAbierto(false);
+  // ⚠️ AÑADIDO (24 agosto) — LA BURBUJA DE PERFIL Y EL ENGRANAJE.
+  //
+  // Pedido expreso: "que cambiar de perro esté metido en una pestaña del
+  // panel es esconderlo; va como burbuja de perfil bien visible, y de ahí
+  // cuelga una rueda de engranaje con la configuración de la cuenta y de
+  // las mascotas".
+  //
+  // Tenía razón en lo de esconderlo: para cambiar de perro había que
+  // saber que existía un panel, abrirlo, y encontrar dentro una fila
+  // plegada que ponía "2 perros". Tres pasos y ninguno se ve desde fuera.
+  //
+  // `hojaDePerros` es lo que se abre al tocar la burbuja, y `ajustes` la
+  // pantalla del engranaje.
+  const [hojaDePerrosAbierta, setHojaDePerrosAbierta] = useState(false);
+  const [ajustesAbiertos, setAjustesAbiertos] = useState(false);
+
+  // La burbuja: quién es el perro de ahora, y el engranaje al lado. Va en
+  // la cabecera de las pantallas principales, siempre en el mismo sitio,
+  // para que se lea como "estás en Cairo" y no como un botón más.
+  //
+  // `sobreOscuro` porque hay dos cabeceras: la morada (menú, perfil) y la
+  // clara (generador). El mismo componente en las dos, con los colores
+  // dados la vuelta.
+  const burbujaDePerfil = (sobreOscuro = true) => {
+    const varios = listaDePerros.length > 1;
+    const inicial = (nombreMostrar || "?").trim().charAt(0).toUpperCase();
+    return (
+      <div className="flex items-center gap-1.5">
+        <button
+          // Abre la hoja SIEMPRE, también con un perro: ahí es donde vive
+          // ahora "Añadir otro perro", y desde el panel lateral ya no se
+          // llega. Con uno solo la hoja enseña ese perro y el botón de
+          // añadir -- que es justo lo que hace falta para pasar a dos.
+          onClick={() => setHojaDePerrosAbierta(true)}
+          aria-label={varios
+            ? `Perro actual: ${nombreMostrar}. Cambiar de perro`
+            : `Perro actual: ${nombreMostrar}. Tus perros`}
+          className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full"
+          style={{
+            background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
+            border: sobreOscuro ? "none" : "1.5px solid #E3DAF0",
+            cursor: "pointer",
+          }}
+        >
+          <span
+            aria-hidden="true"
+            className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+            style={{ background: sobreOscuro ? "#FFFFFF" : VIOLETA,
+                     color: sobreOscuro ? VIOLETA : "#FFFFFF",
+                     fontFamily: fontDisplay, fontSize: 12, fontWeight: 700 }}
+          >
+            {inicial}
+          </span>
+          <span className="truncate" style={{ maxWidth: 92, color: sobreOscuro ? "#FFFFFF" : TINTA,
+                                              fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
+            {nombreMostrar}
+          </span>
+          {varios && <ChevronRight size={13} style={{ color: sobreOscuro ? "#D8CFEC" : MALVA,
+                                                      transform: "rotate(90deg)" }} />}
+        </button>
+        <button
+          onClick={() => setAjustesAbiertos(true)}
+          aria-label="Ajustes"
+          className="p-1.5 rounded-full"
+          style={{ background: "none", border: "none", cursor: "pointer" }}
+        >
+          <Settings size={18} strokeWidth={1.8} style={{ color: sobreOscuro ? "#FFFFFF" : VIOLETA }} />
+        </button>
+      </div>
+    );
   };
 
-  const selectorDePerros = (
-    <div style={{ borderBottom: "1px solid #F0EAF8" }} className="px-3 pt-3 pb-2">
-      {listaDePerros.length > 1 && (
-        <button
-          onClick={() => setSelectorPerrosAbierto((v) => !v)}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-xl"
-          style={{ background: "none", border: "none" }}
-        >
-          <span className="text-[10px] tracking-[0.14em] uppercase flex-1 text-left" style={{ color: MALVA, fontFamily: "monospace" }}>
-            {listaDePerros.length} perros
-          </span>
-          <ChevronRight
-            size={14}
-            style={{ color: MALVA, transform: selectorPerrosAbierto ? "rotate(90deg)" : "none", transition: "transform .15s" }}
-          />
-        </button>
-      )}
-      {(selectorPerrosAbierto || listaDePerros.length <= 1) && (
-        <>
-          {listaDePerros.length > 1 && listaDePerros.map((p) => (
+  // La hoja que sale al tocar la burbuja: los perros de la casa y añadir
+  // otro. Es lo mismo que había escondido en el panel, pero a un toque y
+  // desde cualquier pantalla.
+  const hojaDePerros = hojaDePerrosAbierta && (
+    <div className="fixed inset-0 z-[70] flex items-end" style={{ background: "rgba(35,21,57,0.45)" }}
+         onClick={() => setHojaDePerrosAbierta(false)}>
+      <div role="dialog" aria-label="Tus perros" className="w-full rounded-t-3xl px-5 pt-5 pb-8"
+           style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-4">
+          <p className="text-[11px] tracking-[0.14em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
+            Tus perros
+          </p>
+          <button onClick={() => setHojaDePerrosAbierta(false)} aria-label="Cerrar"
+                  style={{ background: "none", border: "none", cursor: "pointer" }}>
+            <X size={20} style={{ color: MALVA }} />
+          </button>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          {listaDePerros.map((p) => (
             <button
               key={p.id ?? "__nuevo__"}
               onClick={() => {
-                if (p.esElDeAhora) { cerrarPaneles(); return; }
-                // ⚠️ Cambiar de perro remonta la app entera con los datos
-                // del otro (ver AuthGate). Si se está a medio crear un
-                // perro sin guardar, ese perro se pierde — por eso se
-                // avisa antes en vez de hacerlo a la brava.
+                if (p.esElDeAhora) { setHojaDePerrosAbierta(false); return; }
+                // ⚠️ Cambiar de perro remonta la app entera (ver AuthGate).
+                // Si se está a medio crear uno sin guardar, ese perro se
+                // pierde -- por eso se avisa antes en vez de hacerlo a la
+                // brava. Mismo aviso que tenía el panel de antes.
                 if (!perfil._id && perfil.nombre.trim()) {
                   setPerroAlQueIrmeTrasAvisar(p.id);
                   return;
@@ -3864,19 +3932,24 @@ function RawkuOnboardingInterna({
                 cerrarPaneles();
                 onCambiarDePerro(p.id);
               }}
-              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl"
-              style={{ background: p.esElDeAhora ? PAPEL : "none", border: "none" }}
+              aria-label={p.nombre}
+              className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl"
+              style={{ background: p.esElDeAhora ? "#F3EDFB" : "#FBF7FC",
+                       border: `1.5px solid ${p.esElDeAhora ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}
             >
-              <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: p.esElDeAhora ? VIOLETA : "#F0EAF8" }}>
-                <Dog size={15} strokeWidth={1.7} style={{ color: p.esElDeAhora ? "#FFFFFF" : MALVA }} />
-              </div>
-              <span className="flex-1 text-left truncate" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>
+              <span aria-hidden="true" className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                    style={{ background: p.esElDeAhora ? VIOLETA : "#E3DAF0",
+                             color: p.esElDeAhora ? "#FFFFFF" : VIOLETA,
+                             fontFamily: fontDisplay, fontSize: 15, fontWeight: 700 }}>
+                {(p.nombre || "?").trim().charAt(0).toUpperCase()}
+              </span>
+              <span className="flex-1 text-left truncate" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
                 {p.nombre}
               </span>
               {p.sinGuardar
                 ? <span className="text-[9px]" style={{ color: MALVA, fontFamily: "monospace" }}>sin guardar</span>
                 : p.esElDeAhora
-                  ? <Check size={15} style={{ color: VIOLETA }} />
+                  ? <Check size={17} style={{ color: VIOLETA }} />
                   : null}
             </button>
           ))}
@@ -3893,20 +3966,251 @@ function RawkuOnboardingInterna({
               cerrarPaneles();
               onAnadirPerro();
             }}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl"
-            style={{ background: "none", border: "none" }}
+            className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl mt-1"
+            style={{ background: "none", border: "1.5px dashed #C9BEDD", cursor: "pointer" }}
           >
-            <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style={{ background: "#F0EAF8" }}>
-              <Plus size={15} strokeWidth={2} style={{ color: VIOLETA }} />
-            </div>
-            <span className="flex-1 text-left" style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 15 }}>
+            <span className="w-9 h-9 rounded-full flex items-center justify-center shrink-0" style={{ background: "#F0EAF8" }}>
+              <Plus size={17} strokeWidth={2} style={{ color: VIOLETA }} />
+            </span>
+            <span className="flex-1 text-left" style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 16 }}>
               Añadir otro perro
             </span>
           </button>
-        </>
-      )}
+        </div>
+      </div>
     </div>
   );
+
+  // ⚠️ AJUSTES — lo que cuelga del engranaje. Junta las dos cosas que
+  // estaban pendientes y sueltas: la cuenta (correo, contraseña, sesión) y
+  // las mascotas. Antes no había NINGÚN sitio donde cambiar la contraseña
+  // estando dentro: la única forma era salir, pedir el enlace de "olvidé
+  // mi contraseña" y abrir el correo.
+  const [ajusteCampo, setAjusteCampo] = useState(null);   // "password" | "correo"
+  const [ajusteValor, setAjusteValor] = useState("");
+  const [ajusteValor2, setAjusteValor2] = useState("");
+  const [ajusteEstado, setAjusteEstado] = useState(null); // {tipo:"ok"|"error", texto}
+  const [ajusteGuardando, setAjusteGuardando] = useState(false);
+
+  const cerrarAjustes = () => {
+    setAjustesAbiertos(false);
+    setAjusteCampo(null); setAjusteValor(""); setAjusteValor2("");
+    setAjusteEstado(null);
+  };
+
+  const guardarAjuste = async () => {
+    if (ajusteGuardando) return;
+    setAjusteEstado(null);
+    if (ajusteCampo === "password") {
+      if (ajusteValor.length < 6) {
+        setAjusteEstado({ tipo: "error", texto: "La contraseña tiene que tener al menos 6 caracteres." });
+        return;
+      }
+      if (ajusteValor !== ajusteValor2) {
+        setAjusteEstado({ tipo: "error", texto: "Las dos contraseñas no son iguales." });
+        return;
+      }
+    }
+    if (ajusteCampo === "correo" && !/.+@.+\..+/.test(ajusteValor)) {
+      setAjusteEstado({ tipo: "error", texto: "Ese correo no parece válido." });
+      return;
+    }
+    setAjusteGuardando(true);
+    try {
+      if (ajusteCampo === "password") {
+        await cambiarPassword(ajusteValor);
+        setAjusteEstado({ tipo: "ok", texto: "Contraseña cambiada." });
+      } else {
+        await cambiarCorreo(ajusteValor);
+        // ⚠️ El correo NO cambia al pulsar: Supabase manda un enlace al
+        // correo NUEVO y hasta que se abre, la sesión sigue con el viejo.
+        // Si no se dice, parece que no ha funcionado.
+        setAjusteEstado({ tipo: "ok",
+          texto: `Te hemos mandado un correo a ${ajusteValor}. Hasta que abras el enlace, tu cuenta sigue con el correo de antes.` });
+      }
+      setAjusteCampo(null); setAjusteValor(""); setAjusteValor2("");
+    } catch (err) {
+      capturarError(err, { donde: `ajustes.${ajusteCampo}` });
+      setAjusteEstado({ tipo: "error",
+        texto: "No se ha podido guardar. Inténtalo otra vez en un momento." });
+    } finally {
+      setAjusteGuardando(false);
+    }
+  };
+
+  const filaAjuste = (Icono, titulo, subtitulo, onClick, peligro = false) => (
+    <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl"
+            style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0", cursor: "pointer" }}>
+      <Icono size={17} strokeWidth={1.7} style={{ color: peligro ? "#B4436C" : VIOLETA, flexShrink: 0 }} />
+      <span className="flex-1 text-left">
+        <span className="block" style={{ color: peligro ? "#B4436C" : TINTA, fontFamily: fontBody, fontSize: 14, fontWeight: 600 }}>
+          {titulo}
+        </span>
+        {subtitulo && (
+          <span className="block truncate" style={{ color: MALVA, fontFamily: fontBody, fontSize: 12 }}>{subtitulo}</span>
+        )}
+      </span>
+      <ChevronRight size={15} style={{ color: "#C9BEDD", flexShrink: 0 }} />
+    </button>
+  );
+
+  const pantallaAjustes = ajustesAbiertos && (
+    <div className="fixed inset-0 z-[75] overflow-y-auto" style={{ background: PAPEL }}>
+      <Fuentes />
+      <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-7">
+        <div className="flex items-center justify-between mb-3">
+          <button onClick={cerrarAjustes} aria-label="Volver"
+                  style={{ background: "none", border: "none", cursor: "pointer" }}>
+            <ChevronLeft size={22} style={{ color: "#FFFFFF" }} />
+          </button>
+          <span className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
+            Ajustes
+          </span>
+        </div>
+        <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+          Tu cuenta<br />y tus perros
+        </h1>
+      </div>
+
+      <div className="px-6 pt-6 pb-10 flex flex-col gap-6">
+        {ajusteEstado && (
+          <p className="text-sm leading-snug px-4 py-3 rounded-xl"
+             style={{ fontFamily: fontBody,
+                      color: ajusteEstado.tipo === "ok" ? "#2F6B4F" : "#B4436C",
+                      background: ajusteEstado.tipo === "ok" ? "#E8F5EE" : "#FFE8EC" }}>
+            {ajusteEstado.texto}
+          </p>
+        )}
+
+        {/* ── LOS PERROS ── */}
+        <div>
+          <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+            Tus perros
+          </p>
+          <div className="flex flex-col gap-2">
+            {listaDePerros.map((p) => (
+              <div key={p.id ?? "__nuevo__"} className="flex items-center gap-3 px-4 py-3 rounded-2xl"
+                   style={{ background: "#FFFFFF", border: `1.5px solid ${p.esElDeAhora ? VIOLETA : "#E3DAF0"}` }}>
+                <span aria-hidden="true" className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                      style={{ background: p.esElDeAhora ? VIOLETA : "#E3DAF0",
+                               color: p.esElDeAhora ? "#FFFFFF" : VIOLETA,
+                               fontFamily: fontDisplay, fontSize: 13, fontWeight: 700 }}>
+                  {(p.nombre || "?").trim().charAt(0).toUpperCase()}
+                </span>
+                <span className="flex-1 truncate" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>
+                  {p.nombre}
+                </span>
+                {p.esElDeAhora ? (
+                  <button onClick={() => { cerrarAjustes(); setFase("onboarding"); }}
+                          className="text-xs px-3 py-1.5 rounded-full"
+                          style={{ color: VIOLETA, background: "#F0EAF8", border: "none",
+                                   fontFamily: fontBody, fontWeight: 600, cursor: "pointer" }}>
+                    Editar ficha
+                  </button>
+                ) : (
+                  <button onClick={() => { cerrarAjustes(); onCambiarDePerro(p.id); }}
+                          className="text-xs px-3 py-1.5 rounded-full"
+                          style={{ color: VIOLETA, background: "none", border: "1.5px solid #E3DAF0",
+                                   fontFamily: fontBody, fontWeight: 600, cursor: "pointer" }}>
+                    Ir a {p.nombre}
+                  </button>
+                )}
+              </div>
+            ))}
+            {filaAjuste(Plus, "Añadir otro perro", null, () => {
+              cerrarAjustes();
+              if (!perfil._id) { setFase("onboarding"); setPaso(1); return; }
+              onAnadirPerro();
+            })}
+            {perfil._id && filaAjuste(Trash2, `Borrar a ${nombreMostrar}`,
+              "Se van también sus menús guardados", () => {
+                setErrorAlBorrarPerro(null);
+                setPerroABorrar({ id: perfil._id, nombre: nombreMostrar });
+              }, true)}
+          </div>
+        </div>
+
+        {/* ── LA CUENTA ── */}
+        <div>
+          <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+            Tu cuenta
+          </p>
+          {sinCuenta ? (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs leading-snug mb-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                Estás usando Rawku sin cuenta: todo se guarda en este móvil. Si creas una,
+                {listaDePerros.length > 1 ? " tus perros y sus menús suben" : ` ${nombreMostrar} y sus menús suben`} solos.
+              </p>
+              {filaAjuste(Check, "Crear una cuenta", "Para tenerlo desde cualquier sitio",
+                          () => { cerrarAjustes(); onCrearCuenta(); })}
+              {filaAjuste(X, "Salir y borrar lo de este móvil", null,
+                          () => { setAjustesAbiertos(false); setConfirmarDescartarLocal(true); }, true)}
+            </div>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {ajusteCampo === null && (
+                <>
+                  {filaAjuste(Info, "Correo", usuario?.email || "—", () => {
+                    setAjusteCampo("correo"); setAjusteValor(""); setAjusteEstado(null);
+                  })}
+                  {filaAjuste(Lock, "Cambiar la contraseña", null, () => {
+                    setAjusteCampo("password"); setAjusteValor(""); setAjusteValor2(""); setAjusteEstado(null);
+                  })}
+                  {filaAjuste(X, "Cerrar sesión", null, () => { cerrarAjustes(); logout(); })}
+                </>
+              )}
+              {ajusteCampo !== null && (
+                <div className="px-4 py-4 rounded-2xl flex flex-col gap-2"
+                     style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                  <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+                    {ajusteCampo === "password" ? "Nueva contraseña" : "Nuevo correo"}
+                  </p>
+                  <input
+                    type={ajusteCampo === "password" ? "password" : "email"}
+                    value={ajusteValor}
+                    onChange={(e) => setAjusteValor(e.target.value)}
+                    placeholder={ajusteCampo === "password" ? "Al menos 6 caracteres" : "tu@correo.com"}
+                    className="w-full px-3 py-2.5 rounded-xl"
+                    style={{ border: "1.5px solid #E3DAF0", fontFamily: fontBody, fontSize: 14 }}
+                  />
+                  {ajusteCampo === "password" && (
+                    <input
+                      type="password"
+                      value={ajusteValor2}
+                      onChange={(e) => setAjusteValor2(e.target.value)}
+                      placeholder="Repítela"
+                      className="w-full px-3 py-2.5 rounded-xl"
+                      style={{ border: "1.5px solid #E3DAF0", fontFamily: fontBody, fontSize: 14 }}
+                    />
+                  )}
+                  <div className="flex gap-2 mt-1">
+                    <button onClick={guardarAjuste} disabled={ajusteGuardando}
+                            className="flex-1 py-2.5 rounded-xl"
+                            style={{ background: ajusteGuardando ? MALVA : VIOLETA, color: "#FFFFFF",
+                                     border: "none", fontFamily: fontBody, fontWeight: 700, cursor: "pointer" }}>
+                      {ajusteGuardando ? "Guardando..." : "Guardar"}
+                    </button>
+                    <button onClick={() => { setAjusteCampo(null); setAjusteEstado(null); }}
+                            className="px-4 py-2.5 rounded-xl"
+                            style={{ background: "none", color: MALVA, border: "1.5px solid #E3DAF0",
+                                     fontFamily: fontBody, cursor: "pointer" }}>
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
+  const cerrarPaneles = () => {
+    setMenuLigeroAbierto(false);
+    setHojaDePerrosAbierta(false);
+  };
+
 
   // ⚠️ AÑADIDO (5 agosto, noche): panel ligero para las pantallas de
   // antes de tener un menú generado (cuantos/personalizar/resultado) --
@@ -3920,7 +4224,10 @@ function RawkuOnboardingInterna({
           <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombreMostrar}</p>
           <button onClick={() => setMenuLigeroAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
         </div>
-        {selectorDePerros}
+        {/* ⚠️ QUITADO DE AQUÍ (24 agosto) — pedido expreso: "que cambiar
+            de perro esté metido en una pestaña del panel es esconderlo".
+            Vive en la burbuja de la cabecera, que se ve sin abrir nada.
+            El panel se queda con lo que es: navegación. */}
         <div className="flex-1 px-3 pt-4">
           {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL ENCONTRADO:
               "Editar perfil de X" llevaba a la pantalla de RESUMEN
@@ -4224,6 +4531,8 @@ function RawkuOnboardingInterna({
       {avisoCambiarDePerro}
       {avisoBorrarPerro}
       {avisoDescartarLocal}
+      {hojaDePerros}
+      {pantallaAjustes}
     </>
   );
 
@@ -5518,7 +5827,6 @@ function RawkuOnboardingInterna({
         premium={premium}
         onMostrarSuscripcion={() => setMostrarSuscripcion(true)}
         onRegenerarConAlimentos={() => {}}
-        selectorDePerros={selectorDePerros}
         usuario={usuario}
         onPerroGuardado={onPerroGuardado}
       />
@@ -5527,6 +5835,8 @@ function RawkuOnboardingInterna({
       {avisoCambiarDePerro}
       {avisoBorrarPerro}
       {avisoDescartarLocal}
+      {hojaDePerros}
+      {pantallaAjustes}
       </>
     );
   }
@@ -5547,8 +5857,9 @@ function RawkuOnboardingInterna({
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
           <div className="flex items-center justify-between mb-3">
             <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
-            <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Mis menús</p>
+            {burbujaDePerfil(true)}
           </div>
+          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Mis menús</p>
           <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
             Los menús de<br />{nombreMostrar}
           </h1>
@@ -5721,10 +6032,9 @@ function RawkuOnboardingInterna({
       <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8 text-center">
         <div className="flex items-center justify-between mb-4">
           <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
-          <span className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
-            Perfil
-          </span>
+          {burbujaDePerfil(true)}
         </div>
+        <p className="text-[11px] tracking-[0.18em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>Perfil</p>
         <Dog size={36} strokeWidth={1.4} style={{ color: ROSA, margin: "0 auto" }} />
         {/* ⚠️ El mismo sitio sirve para dos momentos muy distintos, y el
             texto tiene que notarlo: justo después de rellenar el perfil
@@ -5739,34 +6049,11 @@ function RawkuOnboardingInterna({
             ? "Sus datos y lo que necesita al día — toca el lápiz para cambiar algo"
             : "Revisa que todo esté bien — toca el lápiz para cambiar algo"}
         </p>
-        {/* ⚠️ AÑADIDO — CAMBIAR DE PERRO, A LA VISTA.
-            Cuando esto solo vivía dentro del panel lateral, tener varios
-            perros era una función invisible: si no abrías el panel, no
-            existía. Aquí, en la pantalla de inicio, se ve sin buscarla.
-            Con un solo perro no se pinta nada: no hay entre qué elegir. */}
-        {listaDePerros.length > 1 && (
-          <div className="flex gap-2 mt-4 overflow-x-auto pb-1" style={{ justifyContent: "center", flexWrap: "wrap" }}>
-            {listaDePerros.map((p) => (
-              <button
-                key={p.id ?? "__nuevo__"}
-                onClick={() => {
-                  if (p.esElDeAhora) return;
-                  if (!perfil._id && perfil.nombre.trim()) { setPerroAlQueIrmeTrasAvisar(p.id); return; }
-                  onCambiarDePerro(p.id);
-                }}
-                className="px-4 py-2 rounded-full text-sm shrink-0"
-                style={{
-                  background: p.esElDeAhora ? "#FFFFFF" : "rgba(255,255,255,0.14)",
-                  color: p.esElDeAhora ? VIOLETA : "#FFFFFF",
-                  border: "none", fontFamily: fontBody,
-                  fontWeight: p.esElDeAhora ? 700 : 500,
-                }}
-              >
-                {p.nombre}
-              </button>
-            ))}
-          </div>
-        )}
+        {/* ⚠️ QUITADAS LAS PASTILLAS DE PERRO (24 agosto). Estaban aquí
+            porque cambiar de perro solo vivía dentro del panel lateral y
+            era invisible. Ahora eso lo hace la BURBUJA de la cabecera, que
+            está en todas las pantallas y no solo en ésta -- tener las dos
+            cosas era ofrecer lo mismo dos veces en el mismo sitio. */}
       </div>
 
       <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
@@ -6239,8 +6526,9 @@ function RawkuOnboardingInterna({
         <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
           <div className="flex items-center justify-between mb-3">
             <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
-            <p className="text-[11px] tracking-[0.18em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
+            {burbujaDePerfil(true)}
           </div>
+          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Menú semanal</p>
           <h1 className="text-3xl leading-tight mb-2" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
             {/* ⚠️ CASO REAL (23 agosto): con UN solo perro esto pasó a
                 decir "los menús de la casa". El título miraba la opción
@@ -6662,10 +6950,12 @@ function RawkuOnboardingInterna({
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} selectorDePerros={selectorDePerros} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} />
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} burbuja={burbujaDePerfil(true)} />
         {avisoCambiarDePerro}
         {avisoBorrarPerro}
       {avisoDescartarLocal}
+      {hojaDePerros}
+      {pantallaAjustes}
       </>
     );
   }
