@@ -351,6 +351,44 @@ test.describe("los menús de toda la casa", () => {
     await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
   });
 
+  // ⚠️ AÑADIDO (24 agosto) — CASO REAL: "este menú de personalizar me ha
+  // metido 3 verduras, no debería... yo puse zanahoria y ha metido dos más".
+  //
+  // El motor ya avisa cuando tiene que añadir algo que no elegiste
+  // (`aviso`) o cuando con lo tuyo no había menú posible
+  // (`no_se_pudo_forzar`). Con UN perro eso sale en un cartel. En esta
+  // pantalla, la de la casa, estaban puestos a null a mano: el aviso
+  // llegaba del servidor y la pantalla se lo comía. O sea que con dos
+  // perros el motor podía cambiarte lo elegido sin que nadie lo dijera.
+  //
+  // Es de la familia de fallos que no se ven: el menú sale, sale verde, y
+  // lo único que falta es la frase que explica por qué no es lo que pediste.
+  test("si hizo falta añadir algo que no elegiste, se dice", async ({ page, request }) => {
+    await configurarBackend(request, { casaAvisos: true, casaCompraUnica: false });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+
+    await generarParaLaCasa(page, { cuantos: 2 });
+
+    await expect(page.getByText(/también se ha añadido: Sardina/)).toBeVisible();
+  });
+
+  test("si no se pudo con nada de lo elegido, se dice de quién", async ({ page, request }) => {
+    await configurarBackend(request, { casaAvisos: true, casaCompraUnica: false });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await irAlGenerador(page);
+
+    await generarParaLaCasa(page, { cuantos: 2 });
+
+    // Con varios perros, "no se pudo" a secas no vale: hay que decir a
+    // cuál de ellos le pasó.
+    await expect(page.getByText(
+      new RegExp(`no había una combinación viable para\\s*${SEGUNDO_PERRO_DE_PRUEBA.nombre}`))
+    ).toBeVisible();
+  });
+
   test("cuando NO cuadra, dice cuántos alimentos cambian", async ({ page, request }) => {
     await configurarBackend(request, { casaCompraUnica: false });
     await page.goto("/");

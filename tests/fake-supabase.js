@@ -162,6 +162,11 @@ export function crearFakeSupabase(opciones = {}) {
     // Escenarios de /menu/varios-perros: si la compra sale única (todos
     // los perros con los mismos alimentos) y si la llamada falla entera.
     casaCompraUnica: true,
+    // ⚠️ AÑADIDO (24 agosto) — cuando el motor tiene que añadir algo que no
+    // elegiste, o no puede con nada de lo elegido, lo dice en cada menú
+    // (`aviso` / `no_se_pudo_forzar`). La pantalla de la casa se lo comía:
+    // los tenía puestos a null a mano. Con esto se puede probar.
+    casaAvisos: false,
     casaFalla: false,
     // Última petición recibida en /menu/varios-perros, para poder
     // comprobar que la app manda lo que dice mandar.
@@ -235,6 +240,7 @@ export function crearFakeSupabase(opciones = {}) {
       if ("avisoComposicionAlEditar" in cfg) estado.avisoComposicionAlEditar = cfg.avisoComposicionAlEditar;
       if (cfg.revalidar) estado.revalidar = cfg.revalidar;
       if (typeof cfg.casaCompraUnica === "boolean") estado.casaCompraUnica = cfg.casaCompraUnica;
+      if (typeof cfg.casaAvisos === "boolean") estado.casaAvisos = cfg.casaAvisos;
       if (typeof cfg.casaFalla === "boolean") estado.casaFalla = cfg.casaFalla;
       if (typeof cfg.premium === "boolean") estado.premium = cfg.premium;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
@@ -433,6 +439,12 @@ export function crearFakeSupabase(opciones = {}) {
             kcal_total: 1200 - i * 400, gramos_total: 610 - i * 200,
             cambios: { iguales: Object.keys(base), anadidos, quitados: [],
                        cuantos_cambios: anadidos.length },
+            // Solo en el segundo perro y solo en su primer menú: así la
+            // prueba distingue "sale donde toca" de "sale en todos".
+            ...(estado.casaAvisos && i === 1 && k === 0
+              ? { aviso: "Con solo lo que elegiste no había una combinación viable, así que también se ha añadido: Sardina." }
+              : {}),
+            ...(estado.casaAvisos && i === 1 && k === 1 ? { no_se_pudo_forzar: true } : {}),
           };
         });
         return {

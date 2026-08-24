@@ -6422,6 +6422,29 @@ function RawkuOnboardingInterna({
                           {mm.aviso_composicion}
                         </p>
                       )}
+                      {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "este menú de
+                          personalizar me ha metido 3 verduras, no debería".
+                          Parte del problema era del motor (ya arreglado: ahora
+                          respeta las seis categorías que dejas elegir). La otra
+                          parte era ESTA pantalla: con un perro, "hizo falta
+                          añadir algo" y "no se pudo con lo elegido" salen en un
+                          cartel; aquí estaban puestos a null a mano, así que con
+                          dos perros el motor podía añadir cosas y nadie lo decía.
+                          Van como texto y no como cartel a propósito: con varios
+                          perros y varios menús, un modal por cada uno sería una
+                          cadena de ventanas que se cierran sin leer. */}
+                      {mm.aviso && (
+                        <p className="text-xs leading-snug mt-2" style={{ color: "#6B4E9E", fontFamily: fontBody }}>
+                          {mm.aviso}
+                        </p>
+                      )}
+                      {mm.no_se_pudo_forzar && (
+                        <p className="text-xs leading-snug mt-2" style={{ color: "#6B4E9E", fontFamily: fontBody }}>
+                          Con lo que elegiste a mano no había una combinación viable para
+                          {" "}{p.nombre}, así que este menú se ha calculado libremente para que
+                          sí cumpla los 30 requisitos.
+                        </p>
+                      )}
                     </div>
                   ))}
 
