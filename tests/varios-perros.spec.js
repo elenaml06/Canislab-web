@@ -55,16 +55,25 @@ const abrirMenuLateral = (page) => page.getByRole("button", { name: "Menú", exa
 // "Cairo" suelto encuentra dos botones distintos.
 const panel = (page) => page.getByRole("dialog", { name: "Panel lateral" });
 
-async function abrirSelectorDePerros(page) {
-  await abrirMenuLateral(page);
-  await panel(page).getByRole("button", { name: /\d+ perros/ }).click();
-  return panel(page);
+// ⚠️ REESCRITO (24 agosto) — LOS PERROS SALIERON DEL PANEL LATERAL.
+// Pedido expreso: "que cambiar de perro esté metido en una pestaña del
+// panel es esconderlo; va como burbuja de perfil bien visible".
+//
+// Ahora se cambia desde la BURBUJA de la cabecera, que está en todas las
+// pantallas. Antes había dos caminos y ninguno completo: unas pastillas
+// que solo salían en la ficha del perro, y una fila plegada dentro del
+// panel. Desde "Mis menús", por ejemplo, no se podía cambiar de perro sin
+// abrir el panel -- lo decía el comentario de una de estas pruebas.
+async function abrirHojaDePerros(page) {
+  await page.getByRole("button", { name: /Cambiar de perro/ }).click();
+  return page.getByRole("dialog", { name: "Tus perros" });
 }
 
-// Cambiar de perro desde las pestañas de la ficha, que es el camino a la
-// vista: el del panel se prueba aparte.
-const pestanaDePerro = (page, nombre) =>
-  page.getByRole("button", { name: nombre, exact: true }).first();
+// Cambiar de perro en un toque desde donde estés.
+async function cambiarDePerro(page, nombre) {
+  const hoja = await abrirHojaDePerros(page);
+  await hoja.getByRole("button", { name: nombre, exact: true }).click();
+}
 
 const menuDeEjemplo = (perroId, extra = {}) => ({
   id: `menu-de-${perroId}`,
@@ -115,13 +124,22 @@ test.describe("varios perros por cuenta", () => {
     });
   });
 
-  test("con dos perros, los dos salen en el selector del panel", async ({ page }) => {
+  test("con dos perros, los dos salen en la hoja de la burbuja", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    const p = await abrirSelectorDePerros(page);
+    const hoja = await abrirHojaDePerros(page);
 
-    await expect(p.getByRole("button", { name: PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
-    await expect(p.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
+    await expect(hoja.getByRole("button", { name: PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
+    await expect(hoja.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true })).toBeVisible();
+    await expect(hoja.getByRole("button", { name: /Añadir otro perro/ })).toBeVisible();
+  });
+
+  test("los perros YA NO están escondidos en el panel lateral", async ({ page }) => {
+    // Esto es el punto entero: si vuelven al panel, esta prueba lo dice.
+    await page.goto("/");
+    await iniciarSesion(page);
+    await abrirMenuLateral(page);
+    await expect(panel(page).getByRole("button", { name: /\d+ perros/ })).toHaveCount(0);
   });
 
   // ⚠️ Esta prueba existe por un fallo de DISEÑO, no de código: cuando
@@ -132,10 +150,11 @@ test.describe("varios perros por cuenta", () => {
     await page.goto("/");
     await iniciarSesion(page);
 
-    await expect(pestanaDePerro(page, PERRO_DE_PRUEBA.nombre)).toBeVisible();
-    await expect(pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre)).toBeVisible();
+    // La burbuja dice de quién es la pantalla, sin tocar nada.
+    await expect(page.getByRole("button", { name: new RegExp(`Perro actual: ${PERRO_DE_PRUEBA.nombre}`) }))
+      .toBeVisible();
 
-    await pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre).click();
+    await cambiarDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre);
     await expect(page.getByText(`${SEGUNDO_PERRO_DE_PRUEBA.peso_actual}kg`).first()).toBeVisible();
   });
 
@@ -156,7 +175,7 @@ test.describe("varios perros por cuenta", () => {
     // Arranca con el primero (el más antiguo).
     await expect(page.getByText(`${PERRO_DE_PRUEBA.peso_actual}kg`).first()).toBeVisible();
 
-    await pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre).click();
+    await cambiarDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre);
 
     // Si el componente no se remontara, aquí seguiría el peso del primero
     // con el nombre del segundo -- exactamente el fallo que se busca.
@@ -179,11 +198,12 @@ test.describe("varios perros por cuenta", () => {
     await expect(page.getByText("Menú de Nala")).toBeVisible();
     await expect(page.getByText("Menú de Cairo")).toHaveCount(0);
 
-    // Desde "Mis menús" no hay pestañas de perro (solo están en la ficha),
-    // así que aquí se cambia por el panel — que es justo para lo que sigue
-    // existiendo el selector de dentro.
-    const p2 = await abrirSelectorDePerros(page);
-    await p2.getByRole("button", { name: SEGUNDO_PERRO_DE_PRUEBA.nombre, exact: true }).click();
+    // ⚠️ Aquí estaba el agujero que arregla la burbuja: desde "Mis menús"
+    // NO había forma de cambiar de perro sin abrir el panel lateral, y
+    // esta prueba lo decía en su propio comentario. Ahora la burbuja está
+    // también en esta pantalla, así que se cambia igual que en cualquier
+    // otra -- sin abrir nada.
+    await cambiarDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre);
 
     await abrirMenuLateral(page);
     await page.getByRole("button", { name: /Mis menús/ }).click();
@@ -194,7 +214,7 @@ test.describe("varios perros por cuenta", () => {
   test("se recuerda con qué perro se estaba al volver a entrar", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await pestanaDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre).click();
+    await cambiarDePerro(page, SEGUNDO_PERRO_DE_PRUEBA.nombre);
     await expect(page.getByText(`${SEGUNDO_PERRO_DE_PRUEBA.peso_actual}kg`).first()).toBeVisible();
 
     await page.reload();
@@ -207,7 +227,7 @@ test.describe("varios perros por cuenta", () => {
   test("añadir otro perro no borra el que ya había", async ({ page, request }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await abrirSelectorDePerros(page);
+    await abrirHojaDePerros(page);
     await page.getByRole("button", { name: /Añadir otro perro/ }).click();
 
     // Empieza el asistente desde cero, con la ficha en blanco.
@@ -264,11 +284,19 @@ test.describe("varios perros por cuenta", () => {
     await configurarBackend(request, { perros: [PERRO_DE_PRUEBA] });
     await page.goto("/");
     await iniciarSesion(page);
-    await abrirMenuLateral(page);
 
-    // A quien tenga un perro la app no le cambia de sitio.
-    await expect(page.getByRole("button", { name: /\d+ perros/ })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /Añadir otro perro/ })).toBeVisible();
+    // A quien tenga un perro la app no le da a elegir entre nada: la
+    // burbuja dice de quién es la pantalla y punto.
+    const burbuja = page.getByRole("button", { name: new RegExp(`Perro actual: ${PERRO_DE_PRUEBA.nombre}`) });
+    await expect(burbuja).toBeVisible();
+    await expect(burbuja).not.toHaveAttribute("aria-label", /Cambiar de perro/);
+
+    // Pero añadir el segundo sí tiene que poder hacerse desde cualquier
+    // pantalla, no solo desde la ficha: por eso la hoja se abre también
+    // con un perro.
+    await burbuja.click();
+    await expect(page.getByRole("dialog", { name: "Tus perros" })
+                     .getByRole("button", { name: /Añadir otro perro/ })).toBeVisible();
   });
 });
 

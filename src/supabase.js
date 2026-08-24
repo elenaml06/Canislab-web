@@ -40,6 +40,24 @@ export async function recuperarPassword(email) {
   if (error) throw error
 }
 
+// ⚠️ AÑADIDO (24 agosto) — AJUSTES DE CUENTA. Hasta ahora la única forma
+// de cambiar la contraseña era el enlace de "olvidé mi contraseña", que
+// obliga a salir de la app y abrir el correo. Estando ya dentro no tiene
+// sentido: se cambia y ya.
+export async function cambiarPassword(nueva) {
+  const { error } = await supabase.auth.updateUser({ password: nueva })
+  if (error) throw error
+}
+
+// Cambiar el correo NO es inmediato: Supabase manda un enlace de
+// confirmación al correo NUEVO y hasta que se pulsa, la sesión sigue con
+// el viejo. Quien llame a esto tiene que decirlo, o parecerá que no ha
+// funcionado.
+export async function cambiarCorreo(nuevo) {
+  const { error } = await supabase.auth.updateUser({ email: nuevo })
+  if (error) throw error
+}
+
 export function onAuthChange(callback) {
   return supabase.auth.onAuthStateChange((_event, session) => {
     callback(session?.user ?? null)

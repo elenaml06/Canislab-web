@@ -166,6 +166,8 @@ export function crearFakeSupabase(opciones = {}) {
     // Última petición recibida en /menu/varios-perros, para poder
     // comprobar que la app manda lo que dice mandar.
     ultimaPeticionCasa: null,
+    // Lo último que se pidió cambiar de la cuenta (correo o contraseña).
+    ultimoCambioDeCuenta: null,
     // TODAS las de /menu/varios-perros, en orden: con varios menús puede
     // haber una llamada por menú, y guardar sólo la última no distingue
     // "todos con lo mismo" de "cada uno con lo suyo".
@@ -190,7 +192,11 @@ export function crearFakeSupabase(opciones = {}) {
     const cors = {
       "Access-Control-Allow-Origin": req.headers.origin || "*",
       "Access-Control-Allow-Headers": "*",
-      "Access-Control-Allow-Methods": "GET,POST,PATCH,DELETE,OPTIONS",
+      // ⚠️ PUT hacía falta desde que existen los ajustes de cuenta:
+    // supabase.auth.updateUser() manda PUT /auth/v1/user, y sin el
+    // permiso el navegador lo bloquea en la comprobación previa --
+    // la app veía un error de red y decía "no se ha podido guardar".
+    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
       "Access-Control-Expose-Headers": "content-range, x-supabase-api-version",
       "Access-Control-Max-Age": "86400",
     };
@@ -259,6 +265,7 @@ export function crearFakeSupabase(opciones = {}) {
         // el momento en que hace falta.
         perrosGuardados: estado.perros.map((p) => ({ ...p })),
         ultimaPeticionCasa: estado.ultimaPeticionCasa,
+        ultimoCambioDeCuenta: estado.ultimoCambioDeCuenta,
         peticionesCasa: estado.peticionesCasa.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesMenu: estado.peticionesMenu.map((p) => ({ ...p })),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
@@ -286,7 +293,19 @@ export function crearFakeSupabase(opciones = {}) {
       return responder(200, sesion());
     }
     if (ruta === "/auth/v1/signup") return responder(200, sesion());
-    if (ruta === "/auth/v1/user") return responder(200, usuario());
+    if (ruta === "/auth/v1/user") {
+      // PUT = actualizar (correo o contraseña). Se responde con el usuario
+      // ya cambiado, como hace GoTrue. El correo NUEVO no se aplica de
+      // verdad hasta que se confirma por enlace, así que aquí se devuelve
+      // el de siempre -- que es justo lo que la app tiene que saber
+      // explicar en pantalla.
+      if (req.method === "PUT") {
+        const datos = cuerpo ? JSON.parse(cuerpo) : {};
+        estado.ultimoCambioDeCuenta = datos;
+        return responder(200, usuario());
+      }
+      return responder(200, usuario());
+    }
     if (ruta === "/auth/v1/logout") { res.writeHead(204, cors); return res.end(); }
     if (ruta === "/auth/v1/recover") return responder(200, {});
     if (ruta === "/auth/v1/settings") {
