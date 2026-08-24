@@ -348,10 +348,11 @@ test.describe("los menús de toda la casa", () => {
     // los dos perros, con sus cantidades distintas
     await expect(page.getByText(PERRO_DE_PRUEBA.nombre).first()).toBeVisible();
     await expect(page.getByText(SEGUNDO_PERRO_DE_PRUEBA.nombre).first()).toBeVisible();
-    // ⚠️ El texto cambió (24 agosto): la compra pasó de ser "la de un día,
-    // el primer menú de cada uno" a la SEMANA entera, cada menú por sus
-    // días. Ver tests/cesta.spec.js, que es donde se comprueban las sumas.
-    await expect(page.getByText("La compra de la semana")).toBeVisible();
+    // ⚠️ QUITADO (24 agosto) — pedido expreso: "no quiero que la compra
+    // aparezca en el menú, tiene que estar solo en el menú lateral". Aquí
+    // se comprueba justo lo contrario de antes: que NO esté.
+    // Dónde sí está, en tests/compra-en-el-panel.spec.js.
+    await expect(page.getByText("La compra de la semana")).toHaveCount(0);
   });
 
   // ⚠️ AÑADIDO (24 agosto) — CASO REAL: "este menú de personalizar me ha
@@ -581,10 +582,11 @@ test.describe("decir que tienes más de un perro desde el principio", () => {
     await expect(page.getByRole("button", { name: /Los mismos alimentos para todos/ })).toBeVisible();
     await generarParaLaCasa(page);
 
-    // ⚠️ El texto cambió (24 agosto): la compra pasó de ser "la de un día,
-    // el primer menú de cada uno" a la SEMANA entera, cada menú por sus
-    // días. Ver tests/cesta.spec.js, que es donde se comprueban las sumas.
-    await expect(page.getByText("La compra de la semana")).toBeVisible();
+    // ⚠️ QUITADO (24 agosto) — pedido expreso: "no quiero que la compra
+    // aparezca en el menú, tiene que estar solo en el menú lateral". Aquí
+    // se comprueba justo lo contrario de antes: que NO esté.
+    // Dónde sí está, en tests/compra-en-el-panel.spec.js.
+    await expect(page.getByText("La compra de la semana")).toHaveCount(0);
   });
 });
 
@@ -810,10 +812,11 @@ test.describe("para varios perros, el recorrido completo", () => {
     // importa es que el camino existe y llega: modo personalizar de verdad.
     const { ultimaPeticionCasa } = await configurarBackend(request, {});
     expect(ultimaPeticionCasa.perros.length).toBe(2);
-    // ⚠️ El texto cambió (24 agosto): la compra pasó de ser "la de un día,
-    // el primer menú de cada uno" a la SEMANA entera, cada menú por sus
-    // días. Ver tests/cesta.spec.js, que es donde se comprueban las sumas.
-    await expect(page.getByText("La compra de la semana")).toBeVisible();
+    // ⚠️ QUITADO (24 agosto) — pedido expreso: "no quiero que la compra
+    // aparezca en el menú, tiene que estar solo en el menú lateral". Aquí
+    // se comprueba justo lo contrario de antes: que NO esté.
+    // Dónde sí está, en tests/compra-en-el-panel.spec.js.
+    await expect(page.getByText("La compra de la semana")).toHaveCount(0);
   });
 
   test("desde el resultado se puede ir a editar el menú de cada perro", async ({ page }) => {

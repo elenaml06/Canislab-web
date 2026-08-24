@@ -1188,7 +1188,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
-function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null }) {
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
   // pantalla del menú era un scroll larguísimo donde el plan de
@@ -1451,28 +1451,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   const [diasSeleccionados, setDiasSeleccionados] = useState(1);
   const multiplicador = diasSeleccionados;
 
-  // ⚠️ AÑADIDO (24 agosto) — LA CESTA DE LA COMPRA, de la SEMANA entera.
-  //
-  // Hasta ahora la app decía lo de cada día y comprar era cosa tuya: mirar
-  // los dos o tres menús, multiplicar cada uno por sus días, sumar lo que
-  // se repite y acordarte de lo que solo sale en uno.
-  //
-  // Suma cada menú por SUS días (m.dias), no el que estés mirando por los
-  // días que hayas elegido arriba: ese selector es para preparar una tanda
-  // de ese menú concreto, y la compra es otra cosa -- vas a la tienda una
-  // vez, para toda la semana.
-  //
-  // Usa el menú RECALCULADO cuando lo hay (gramosRealesPorMenu), igual que
-  // la lista de arriba: si editaste un alimento, comprar lo de antes sería
-  // comprar lo que ya no vas a dar.
-  const cestaDeLaSemana = useMemo(() => cestaDeLaCompra([{
-    nombre: nombrePerro,
-    menus: menus.map((m) => ({
-      dias: m.dias,
-      gramos: gramosRealesPorMenu[m.id]
-        || Object.fromEntries((m.items || []).map((it) => [it.alimento, it.gramos])),
-    })),
-  }], categoriaDeAlimento), [menus, gramosRealesPorMenu, nombrePerro]);
 
   const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * multiplicador * 10) / 10;
   // ⚠️ AÑADIDO (5 agosto): se sube aquí para que tanto el badge de arriba
@@ -2557,43 +2535,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           </div>
         )}
 
-        {/* ⚠️ LA CESTA, al final de "El menú" y no en una pestaña nueva.
-            Decisión de ella: "el menú, luego cómo darlo y ya está". La
-            compra es la última pregunta de esta misma pantalla ("¿y qué
-            compro?"), no una sección aparte. */}
-        {cestaDeLaSemana.length > 0 && (
-          <div className="rounded-2xl p-5 mb-4" style={{ background: VIOLETA }}>
-            <p className="text-[10px] tracking-[0.18em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
-              La compra de la semana
-            </p>
-            <p className="text-[11px] mb-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-              Los {menus.length === 1 ? "7 días" : `${menus.length} menús`} sumados,
-              cada uno por sus días. Es lo que entra en casa.
-            </p>
-            {cestaDeLaSemana.map((zona) => (
-              <div key={zona.clave} className="mb-3">
-                <p className="text-[10px] tracking-[0.14em] uppercase mb-1" style={{ color: ROSA, fontFamily: "monospace" }}>
-                  {zona.titulo}
-                </p>
-                {zona.lineas.map((linea) => (
-                  <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1">
-                    <span className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontBody }}>
-                      {linea.alimento}
-                    </span>
-                    <span className="text-sm shrink-0" style={{ color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>
-                      {formatearCompra(linea.gramos)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            ))}
-            <p className="text-[11px] pt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
-              Compra un poco de más en lo fresco: al deshuesar y limpiar se
-              pierde parte, y estas cifras son de comida ya lista para pesar.
-            </p>
-          </div>
-        )}
-
         </>)}
 
         <div className="flex-1" />
@@ -2650,6 +2591,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
+                de perro y configuración tiene que existir en todas las
+                pantallas, y en todas las pantallas del menú lateral no
+                aparecen". Estas seis se abren desde el panel y se habían
+                quedado sin ella: entrabas en Evolución y ya no sabías de
+                qué perro estabas viendo la evolución, ni podías cambiar.
+                Fondo claro, así que la versión clara. */}
+            {burbujaClara}
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <div className="flex items-center gap-3 mb-6">
@@ -2695,6 +2644,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
+                de perro y configuración tiene que existir en todas las
+                pantallas, y en todas las pantallas del menú lateral no
+                aparecen". Estas seis se abren desde el panel y se habían
+                quedado sin ella: entrabas en Evolución y ya no sabías de
+                qué perro estabas viendo la evolución, ni podías cambiar.
+                Fondo claro, así que la versión clara. */}
+            {burbujaClara}
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-1" style={{ color: TINTA, fontFamily: fontDisplay }}>Evolución de {nombrePerro}</p>
@@ -2793,6 +2750,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
+                de perro y configuración tiene que existir en todas las
+                pantallas, y en todas las pantallas del menú lateral no
+                aparecen". Estas seis se abren desde el panel y se habían
+                quedado sin ella: entrabas en Evolución y ya no sabías de
+                qué perro estabas viendo la evolución, ni podías cambiar.
+                Fondo claro, así que la versión clara. */}
+            {burbujaClara}
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-4" style={{ color: TINTA, fontFamily: fontDisplay }}>Mis menús</p>
@@ -2833,6 +2798,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
+                de perro y configuración tiene que existir en todas las
+                pantallas, y en todas las pantallas del menú lateral no
+                aparecen". Estas seis se abren desde el panel y se habían
+                quedado sin ella: entrabas en Evolución y ya no sabías de
+                qué perro estabas viendo la evolución, ni podías cambiar.
+                Fondo claro, así que la versión clara. */}
+            {burbujaClara}
             <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué Rawku</p>
@@ -2862,6 +2835,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            {burbujaClara}
             <button onClick={() => { setSeccionActiva(null); setResultadoAnalisis(null); setErrorAnalisis(null); }} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
           </div>
           <PremiumGate
@@ -3227,6 +3201,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               en vez de tener que pasar por un botón de "volver". */}
           <div className="flex items-center gap-3 mb-6">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            {burbujaClara}
             <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
               Guardado
             </p>
@@ -3310,13 +3285,29 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}`, isPremium: false },
                 { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true },
                 ...(soloSeccion ? [] : [{ key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false }]),
+                // ⚠️ AÑADIDO (24 agosto) — ESTE PANEL ES OTRO.
+                // Hay DOS paneles laterales: el ligero (perfil, asistente,
+                // mis menús...) y éste, el de dentro del menú. "La compra"
+                // se puso solo en el ligero, así que desde la pantalla del
+                // menú -- que es donde más falta hace -- no aparecía.
+                // Si añades una entrada a un panel, mira si va en los dos.
+                ...(onAbrirLaCompra
+                  ? [{ key: "compra", Icono: ShoppingBasket, label: "La compra", isPremium: false }]
+                  : []),
                 { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true },
                 { key: "porque", Icono: Heart, label: "Por qué Rawku", isPremium: false },
               ].map((op) => {
                 const Icono = op.Icono;
                 const bloqueado = op.isPremium && !premium;
                 return (
-                  <button key={op.key} onClick={() => { setSeccionActiva(op.key); setMenuLateralAbierto(false); setSemanaConfirmada(false); }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
+                  <button key={op.key} onClick={() => {
+                    setMenuLateralAbierto(false);
+                    setSemanaConfirmada(false);
+                    // La compra no es una sección de esta pantalla: la
+                    // pinta el de fuera, para que sea la MISMA en todas.
+                    if (op.key === "compra") { onAbrirLaCompra?.(); return; }
+                    setSeccionActiva(op.key);
+                  }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
                       <Icono size={17} strokeWidth={1.6} style={{ color: bloqueado ? MALVA : VIOLETA }} />
                     </div>
@@ -3707,6 +3698,10 @@ function RawkuOnboardingInterna({
   const [compraDias, setCompraDias] = useState(7);
   const [compraGuardada, setCompraGuardada] = useState(null); // [{nombre, menus}]
   const [cargandoCompra, setCargandoCompra] = useState(false);
+  // Para poder decir en pantalla de dónde salen los números: del menú que
+  // acabas de hacer, o del último que guardaste. No es lo mismo y la
+  // diferencia no se ve mirando la lista.
+  const [compraDeLoQueMiras, setCompraDeLoQueMiras] = useState(false);
   const [errorCompra, setErrorCompra] = useState(null);
 
   const abrirLaCompra = async () => {
@@ -3716,8 +3711,46 @@ function RawkuOnboardingInterna({
     setErrorCompra(null);
     setCargandoCompra(true);
     try {
+      // ⚠️ AÑADIDO (24 agosto) — LO QUE ESTÁS MIRANDO MANDA SOBRE LO
+      // GUARDADO.
+      //
+      // Desde que la compra vive SOLO aquí (pedido: "no quiero que la
+      // compra aparezca en el menú"), leer únicamente lo guardado tenía un
+      // fallo callado: acabas de generar un menú, no le has dado a guardar
+      // todavía, abres la compra y te enseña la del menú ANTERIOR. Números
+      // correctos, menú equivocado, y nada en pantalla que lo delate.
+      //
+      // Así que si hay menús en pantalla, son ésos. Lo guardado es el
+      // respaldo para cuando no estás mirando ninguno.
+      if (menusDeLaCasa?.perros?.length) {
+        setCompraGuardada(menusDeLaCasa.perros
+          .filter((p) => p.factible && (p.menus || []).length)
+          .map((p) => ({
+            nombre: p.nombre,
+            menus: (p.menus || []).map((m) => ({ gramos: m.menu, dias: m.dias })),
+          })));
+        setCompraDeLoQueMiras(true);
+        setCargandoCompra(false);
+        return;
+      }
+
       const conMenu = [];
+      let hayEnPantalla = false;
       for (const p of (perros ?? [])) {
+        // El perro que tienes abierto puede tener menús recién hechos sin
+        // guardar. Ésos ganan.
+        if (p.id === perfil._id && menuReal && menuReal.length) {
+          const diasAhora = repartirDiasSemana(Math.max(1, menuReal.length));
+          conMenu.push({
+            nombre: p.nombre || "Sin nombre",
+            menus: menuReal.map((r, i) => ({
+              gramos: r.menu || r.gramos || {},
+              dias: diasAhora[i],
+            })),
+          });
+          hayEnPantalla = true;
+          continue;
+        }
         const filas = await getMenus(p.id);
         // getMenus ya los devuelve del más nuevo al más viejo.
         const ultima = (filas || [])[0];
@@ -3738,6 +3771,7 @@ function RawkuOnboardingInterna({
         });
       }
       setCompraGuardada(conMenu);
+      setCompraDeLoQueMiras(hayEnPantalla);
     } catch (err) {
       capturarError(err, { donde: "abrirLaCompra" });
       setErrorCompra("No hemos podido cargar tus menús guardados. Inténtalo otra vez.");
@@ -4441,7 +4475,10 @@ function RawkuOnboardingInterna({
               Se mira en la tienda, no al generar el menú: tiene que estar a
               un toque desde cualquier pantalla. Solo aparece si hay algún
               menú guardado del que sacarla. */}
-          {menusGuardados.length > 0 && !(paso >= 1 && paso <= TOTAL_PASOS) && (
+          {/* Basta con que haya ALGO de lo que sacarla: un menú en pantalla
+              aunque no lo hayas guardado, o alguno guardado de antes. */}
+          {(menusGuardados.length > 0 || (menuReal && menuReal.length) || menusDeLaCasa)
+            && !(paso >= 1 && paso <= TOTAL_PASOS) && (
             <button
               onClick={() => { setMenuLigeroAbierto(false); abrirLaCompra(); }}
               className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
@@ -4763,10 +4800,12 @@ function RawkuOnboardingInterna({
 
           <p className="text-xs mb-4 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
             {compraDeQuien
-              ? `Para ${compraDeQuien}, de su último menú guardado.`
+              ? `Para ${compraDeQuien}, ${compraDeLoQueMiras ? "del menú que tienes en pantalla" : "de su último menú guardado"}.`
               : (compraGuardada || []).length > 1
-                ? `Para ${nombresDeLosPerros(compraGuardada || [])} juntos, del último menú guardado de cada uno.`
-                : "De tu último menú guardado."}
+                ? `Para ${nombresDeLosPerros(compraGuardada || [])} juntos, ${compraDeLoQueMiras ? "de los menús que tienes en pantalla" : "del último menú guardado de cada uno"}.`
+                : compraDeLoQueMiras
+                  ? "Del menú que tienes en pantalla."
+                  : "De tu último menú guardado."}
             {compraDias !== 7 && (
               <> Los menús cubren una semana, así que esto es esa semana
               {" "}{compraDias > 7 ? "multiplicada" : "en proporción"} a {compraDias} días.</>
@@ -4982,22 +5021,6 @@ function RawkuOnboardingInterna({
   // La compra de la semana, sumando lo de todos los perros. Es el motivo
   // entero de que los menús se parezcan: si cada perro lleva lo suyo, la
   // lista es el doble de larga y hay que porcionar dos veces.
-  // ⚠️ REESCRITO (24 agosto) — antes esto sumaba SOLO el primer menú de
-  // cada perro ("la compra de un día, para todos"). Si el segundo menú
-  // llevaba un alimento distinto -- que es justo para lo que sirve tener
-  // dos menús -- ese alimento no salía en la compra y te ibas a la tienda
-  // sin él. Ahora suma cada menú por sus días, la semana entera, con la
-  // misma función que la pantalla de un perro (src/cesta.js): tener dos
-  // copias fue lo que dejó ésta a medias mientras la otra ni existía.
-  const compraDeLaCasa = useMemo(() => {
-    if (!menusDeLaCasa) return [];
-    return cestaDeLaCompra(
-      (menusDeLaCasa.perros || []).map((p) => ({
-        nombre: p.nombre,
-        menus: (p.menus || []).map((m) => ({ dias: m.dias, gramos: m.menu })),
-      })),
-      categoriaDeAlimento);
-  }, [menusDeLaCasa]);
 
   // ⚠️ AÑADIDO — AÑADIR OTRO PERRO DESDE LA PRIMERA VEZ.
   //
@@ -6109,6 +6132,11 @@ function RawkuOnboardingInterna({
         avisoNoForzado={false}
         diagnosticoPersonalizar={null}
         avisoExtraEspecie={null}
+        // Estas dos (Evolución y Analizar abiertas desde el perfil) tampoco
+        // la tenían: mismo caso, mismo arreglo.
+        burbuja={burbujaDePerfil(true)}
+        burbujaClara={burbujaDePerfil(false)}
+        onAbrirLaCompra={abrirLaCompra}
         premium={premium}
         onMostrarSuscripcion={() => setMostrarSuscripcion(true)}
         onRegenerarConAlimentos={() => {}}
@@ -6767,51 +6795,6 @@ function RawkuOnboardingInterna({
             </div>
           );})}
 
-          {/* La lista de la compra junta. Es el motivo de todo esto: que
-              compres una vez y porciones una vez. */}
-          {compraDeLaCasa.length > 0 && (
-            <div className="rounded-2xl p-5 mb-4" style={{ background: VIOLETA }}>
-              <p className="text-[10px] tracking-[0.18em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
-                La compra de la semana
-              </p>
-              <p className="text-[11px] mb-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-                Todo lo de {nombresDeLosPerros(menusDeLaCasa.perros)} sumado, cada menú
-                por sus días. Es lo que entra en casa.
-              </p>
-              {compraDeLaCasa.map((zona) => (
-                <div key={zona.clave} className="mb-3">
-                  <p className="text-[10px] tracking-[0.14em] uppercase mb-1" style={{ color: ROSA, fontFamily: "monospace" }}>
-                    {zona.titulo}
-                  </p>
-                  {zona.lineas.map((linea) => {
-                    // ⚠️ PEDIDO EXPRESO: "diferenciando de quién es cada cosa".
-                    // Solo cuando hay algo que distinguir -- ver deQuienEs().
-                    const deQuien = deQuienEs(linea.deQuien, (menusDeLaCasa.perros || []).length);
-                    return (
-                      <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1">
-                        <span className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontBody }}>
-                          {linea.alimento}
-                          {deQuien && (
-                            <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
-                              {deQuien}
-                            </span>
-                          )}
-                        </span>
-                        <span className="text-sm shrink-0" style={{ color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>
-                          {formatearCompra(linea.gramos)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-              <p className="text-[11px] pt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
-                Compra un poco de más en lo fresco: al deshuesar y limpiar se
-                pierde parte, y estas cifras son de comida ya lista para pesar.
-              </p>
-            </div>
-          )}
-
           <div className="flex-1" />
           {usuario && (
             <button
@@ -7273,7 +7256,12 @@ function RawkuOnboardingInterna({
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} burbuja={burbujaDePerfil(true)} />
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAbrirLaCompra={abrirLaCompra} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} burbuja={burbujaDePerfil(true)} burbujaClara={burbujaDePerfil(false)} />
+        {/* ⚠️ AÑADIDO (24 agosto) — la pantalla de la compra colgaba SOLO
+            de `drawerLigero`, y ésta es la única pantalla que no lo pinta
+            (VistaMenus trae su propio panel). Resultado: el botón "La
+            compra" cerraba el panel y no pasaba nada. Va aquí también. */}
+        {pantallaDeLaCompra}
         {avisoCambiarDePerro}
         {avisoBorrarPerro}
       {avisoDescartarLocal}

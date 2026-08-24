@@ -207,26 +207,42 @@ async function entrar(page) {
   await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
 }
 
+const abrirElPanel = async (page) => {
+  await page.getByRole("button", { name: "Menú", exact: true }).click();
+  await page.getByRole("button", { name: "La compra", exact: true }).click();
+};
+
 test.describe("la compra en pantalla", () => {
-  test("con un perro, la compra sale al final de El menú", async ({ page, request }) => {
+  // ⚠️ REESCRITO (24 agosto) — PEDIDO EXPRESO: "no quiero que la compra
+  // aparezca en el menú, tiene que estar solo en el menú lateral".
+  //
+  // Al sacarla del menú aparece un fallo que antes no existía: si la
+  // compra solo lee lo GUARDADO, acabas de generar un menú, todavía no le
+  // has dado a guardar, y el panel te enseña la compra del menú ANTERIOR.
+  // Números correctos, menú equivocado, y nada en pantalla que lo delate.
+  // Por eso estas dos generan y NO guardan.
+  test("no sale en el menú, y el panel usa el que acabas de hacer", async ({ page, request }) => {
     await configurar(request, {
       retrasoPerrosMs: 50, perros: [{ ...PERRO_DE_PRUEBA, dieta_actual: "barf" }],
-      menus: [], olvidarUltimoMenu: true,
+      menus: [], olvidarUltimoMenu: true,      // NADA guardado, a propósito
     });
     await page.goto("/");
     await entrar(page);
     await page.getByRole("button", { name: /^Automático/ }).click();
     await page.getByRole("button", { name: /^(Generar|Hacer)/ }).click();
 
-    await expect(page.getByText("La compra de la semana")).toBeVisible();
-    // El menú de mentira da 90 g de calabacín al día; la semana son 630.
-    // Con la versión vieja (un día) habría puesto 90.
+    // En el menú ya no está.
+    await expect(page.getByText("La compra de la semana")).toHaveCount(0);
+
+    await abrirElPanel(page);
+    // Y sale del menú que tienes delante, sin haberlo guardado: el de
+    // mentira da 90 g de calabacín al día, la semana son 630.
     await expect(page.getByText("630 g")).toBeVisible();
-    // Y va a su zona de la tienda, no en una lista plana.
     await expect(page.getByText("Frutería")).toBeVisible();
+    await expect(page.getByText(/menú que tienes en pantalla/)).toBeVisible();
   });
 
-  test("con dos perros, dice qué es solo de uno", async ({ page, request }) => {
+  test("con dos perros, el panel suma los dos y dice qué es de uno", async ({ page, request }) => {
     await configurar(request, {
       retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA],
       menus: [], olvidarUltimoMenu: true,
@@ -243,12 +259,12 @@ test.describe("la compra en pantalla", () => {
     await page.getByRole("button", { name: "+" }).click();          // dos menús
     await page.getByRole("button", { name: /^(Generar|Elegir los ingredientes|Personalizar los)/ }).click();
 
-    await expect(page.getByText("La compra de la semana")).toBeVisible();
+    await expect(page.getByText("La compra de la semana")).toHaveCount(0);
+
+    await abrirElPanel(page);
     // La sardina solo la lleva el segundo perro.
     await expect(page.getByText(`solo ${SEGUNDO_PERRO_DE_PRUEBA.nombre}`)).toBeVisible();
-    // Y la suma es de la SEMANA (los dos menús, 4 días + 3 días, los dos
-    // perros): 4704 g. Con la versión vieja -- solo el primer menú, un día
-    // -- eran 672 g.
+    // La semana de los dos, los dos menús (4 y 3 días): 4704 g.
     await expect(page.getByText("4,7 kg")).toBeVisible();
   });
 });
