@@ -251,3 +251,85 @@ test.describe("al crear la cuenta sube lo que ya había", () => {
     expect(perrosGuardados, "no había nada local: no debería haberse creado ningún perro").toEqual([]);
   });
 });
+
+test.describe("sin cuenta se puede tener más de un perro", () => {
+  // ⚠️ AÑADIDO (24 agosto) — la pregunta era: "¿la burbuja de los perfiles
+  // se ve sin tener cuenta?".
+  //
+  // Verla es lo fácil. Lo que puede fallar en silencio es lo otro: que
+  // añadir el segundo perro parezca funcionar y no se guarde, porque sin
+  // cuenta ese guardado va al navegador por un camino distinto
+  // (almacen.js) del de Supabase. Sería la misma familia que el fallo de
+  // la ficha que no se guardaba: sin error, sin aviso, y te enteras días
+  // después.
+  //
+  // Por eso esto no mira la pantalla: mira lo GUARDADO.
+  test.beforeEach(async ({ request }) => {
+    await configurarBackend(request, { retrasoPerrosMs: 50, sinPerro: true, menus: [] });
+  });
+
+  test("la burbuja y el engranaje están, sin cuenta", async ({ page }) => {
+    await sembrarUsoSinCuenta(page);
+    await page.goto("/");
+
+    await expect(page.getByRole("button", { name: /Perro actual: Ruffo/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ajustes" })).toBeVisible();
+  });
+
+  test("el segundo perro se guarda de verdad en el móvil", async ({ page }) => {
+    await sembrarUsoSinCuenta(page, { menus: [] });
+    await page.goto("/");
+
+    await page.getByRole("button", { name: /Perro actual: Ruffo/ }).click();
+    await page.getByRole("dialog", { name: "Tus perros" })
+              .getByRole("button", { name: /Añadir otro perro/ }).click();
+
+    // El asistente de 6 pasos, igual que con cuenta.
+    await page.getByText("1 / 6").waitFor();
+    await page.getByPlaceholder("Nombre de tu perro").fill("Lola");
+    await page.getByRole("button", { name: "Hembra", exact: true }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByText("2 / 6").waitFor();
+    await page.getByRole("button", { name: /Es mestizo/ }).click();
+    await page.getByRole("button", { name: /^Mediano/ }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByText("3 / 6").waitFor();
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByText("4 / 6").waitFor();
+    await page.getByPlaceholder("0").fill("20");
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByText("5 / 6").waitFor();
+    await page.getByRole("button", { name: "No", exact: true }).click();
+    await page.getByRole("button", { name: "Continuar" }).click();
+    await page.getByText("6 / 6").waitFor();
+    const noes = page.getByRole("button", { name: "No", exact: true });
+    for (let i = 0; i < 4; i++) await noes.nth(i).click();
+    await page.getByRole("button", { name: "Terminar" }).click();
+
+    // Entrar al generador es lo que dispara el guardado, igual que con
+    // cuenta.
+    await page.getByRole("button", { name: /ir al generador de menús|Hacer el menú de la semana/ }).click();
+
+    await expect.poll(async () => page.evaluate(() =>
+      JSON.parse(window.localStorage.getItem("rawku.local.perros") || "[]").map((p) => p.nombre)
+    ), { timeout: 10000 }).toEqual(["Ruffo", "Lola"]);
+  });
+
+  test("y los dos salen en la burbuja al volver", async ({ page }) => {
+    // Que estén guardados no basta: hay que poder llegar a ellos.
+    await sembrarUsoSinCuenta(page, {
+      perros: [PERRO_LOCAL, { ...PERRO_LOCAL, id: "local-2", nombre: "Lola" }],
+      menus: [],
+    });
+    await page.goto("/");
+
+    await page.getByRole("button", { name: /Perro actual/ }).click();
+    const hoja = page.getByRole("dialog", { name: "Tus perros" });
+    await expect(hoja.getByRole("button", { name: "Ruffo", exact: true })).toBeVisible();
+    await expect(hoja.getByRole("button", { name: "Lola", exact: true })).toBeVisible();
+
+    // Y se cambia de uno a otro sin cuenta ninguna.
+    await hoja.getByRole("button", { name: "Lola", exact: true }).click();
+    await expect(page.getByRole("button", { name: /Perro actual: Lola/ })).toBeVisible();
+  });
+});
