@@ -6,6 +6,7 @@ import { onAuthChange, logout, cambiarPassword, cambiarCorreo } from "./supabase
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
+import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // ⚠️ Los datos NO se piden a Supabase directamente: pasan por el almacén,
 // que los manda a Supabase o al navegador según haya cuenta o no. Ver el
 // comentario de cabecera de almacen.js — ahí está decidido cuándo se da
@@ -1450,6 +1451,29 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   const [diasSeleccionados, setDiasSeleccionados] = useState(1);
   const multiplicador = diasSeleccionados;
 
+  // ⚠️ AÑADIDO (24 agosto) — LA CESTA DE LA COMPRA, de la SEMANA entera.
+  //
+  // Hasta ahora la app decía lo de cada día y comprar era cosa tuya: mirar
+  // los dos o tres menús, multiplicar cada uno por sus días, sumar lo que
+  // se repite y acordarte de lo que solo sale en uno.
+  //
+  // Suma cada menú por SUS días (m.dias), no el que estés mirando por los
+  // días que hayas elegido arriba: ese selector es para preparar una tanda
+  // de ese menú concreto, y la compra es otra cosa -- vas a la tienda una
+  // vez, para toda la semana.
+  //
+  // Usa el menú RECALCULADO cuando lo hay (gramosRealesPorMenu), igual que
+  // la lista de arriba: si editaste un alimento, comprar lo de antes sería
+  // comprar lo que ya no vas a dar.
+  const cestaDeLaSemana = useMemo(() => cestaDeLaCompra([{
+    nombre: nombrePerro,
+    menus: menus.map((m) => ({
+      dias: m.dias,
+      gramos: gramosRealesPorMenu[m.id]
+        || Object.fromEntries((m.items || []).map((it) => [it.alimento, it.gramos])),
+    })),
+  }], categoriaDeAlimento), [menus, gramosRealesPorMenu, nombrePerro]);
+
   const totalGramos = Math.round(itemsMostrados.reduce((s, it) => s + it.gramos, 0) * multiplicador * 10) / 10;
   // ⚠️ AÑADIDO (5 agosto): se sube aquí para que tanto el badge de arriba
   // como la nota informativa de abajo usen el MISMO dato real, en vez de
@@ -2530,6 +2554,43 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               ))}
             </div>
             <button onClick={() => setSupTipoAbierto(null)} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>← Otra categoría</button>
+          </div>
+        )}
+
+        {/* ⚠️ LA CESTA, al final de "El menú" y no en una pestaña nueva.
+            Decisión de ella: "el menú, luego cómo darlo y ya está". La
+            compra es la última pregunta de esta misma pantalla ("¿y qué
+            compro?"), no una sección aparte. */}
+        {cestaDeLaSemana.length > 0 && (
+          <div className="rounded-2xl p-5 mb-4" style={{ background: VIOLETA }}>
+            <p className="text-[10px] tracking-[0.18em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+              La compra de la semana
+            </p>
+            <p className="text-[11px] mb-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Los {menus.length === 1 ? "7 días" : `${menus.length} menús`} sumados,
+              cada uno por sus días. Es lo que entra en casa.
+            </p>
+            {cestaDeLaSemana.map((zona) => (
+              <div key={zona.clave} className="mb-3">
+                <p className="text-[10px] tracking-[0.14em] uppercase mb-1" style={{ color: ROSA, fontFamily: "monospace" }}>
+                  {zona.titulo}
+                </p>
+                {zona.lineas.map((linea) => (
+                  <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1">
+                    <span className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontBody }}>
+                      {linea.alimento}
+                    </span>
+                    <span className="text-sm shrink-0" style={{ color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>
+                      {formatearCompra(linea.gramos)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            ))}
+            <p className="text-[11px] pt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
+              Compra un poco de más en lo fresco: al deshuesar y limpiar se
+              pierde parte, y estas cifras son de comida ya lista para pesar.
+            </p>
           </div>
         )}
 
@@ -4697,21 +4758,21 @@ function RawkuOnboardingInterna({
   // La compra de la semana, sumando lo de todos los perros. Es el motivo
   // entero de que los menús se parezcan: si cada perro lleva lo suyo, la
   // lista es el doble de larga y hay que porcionar dos veces.
+  // ⚠️ REESCRITO (24 agosto) — antes esto sumaba SOLO el primer menú de
+  // cada perro ("la compra de un día, para todos"). Si el segundo menú
+  // llevaba un alimento distinto -- que es justo para lo que sirve tener
+  // dos menús -- ese alimento no salía en la compra y te ibas a la tienda
+  // sin él. Ahora suma cada menú por sus días, la semana entera, con la
+  // misma función que la pantalla de un perro (src/cesta.js): tener dos
+  // copias fue lo que dejó ésta a medias mientras la otra ni existía.
   const compraDeLaCasa = useMemo(() => {
     if (!menusDeLaCasa) return [];
-    const total = {};
-    for (const p of menusDeLaCasa.perros || []) {
-      // Con varios menús en la semana se usa el PRIMERO de cada perro, que
-      // es el que se prepara primero; los demás llevan su propia lista.
-      for (const [alimento, gramos] of Object.entries((p.menus || [])[0]?.menu || {})) {
-        if (!total[alimento]) total[alimento] = { gramos: 0, deQuien: [] };
-        total[alimento].gramos += gramos;
-        total[alimento].deQuien.push(p.nombre);
-      }
-    }
-    return Object.entries(total)
-      .map(([alimento, d]) => ({ alimento, ...d }))
-      .sort((a, b) => b.gramos - a.gramos);
+    return cestaDeLaCompra(
+      (menusDeLaCasa.perros || []).map((p) => ({
+        nombre: p.nombre,
+        menus: (p.menus || []).map((m) => ({ dias: m.dias, gramos: m.menu })),
+      })),
+      categoriaDeAlimento);
   }, [menusDeLaCasa]);
 
   // ⚠️ AÑADIDO — AÑADIR OTRO PERRO DESDE LA PRIMERA VEZ.
@@ -6486,28 +6547,43 @@ function RawkuOnboardingInterna({
               compres una vez y porciones una vez. */}
           {compraDeLaCasa.length > 0 && (
             <div className="rounded-2xl p-5 mb-4" style={{ background: VIOLETA }}>
-              <p className="text-[10px] tracking-[0.18em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
-                {(menusDeLaCasa.numero_de_menus || 1) === 1
-                  ? "La compra de un día, para todos"
-                  : "El primer menú de cada uno, junto"}
+              <p className="text-[10px] tracking-[0.18em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                La compra de la semana
               </p>
-              {compraDeLaCasa.map((linea) => (
-                <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1">
-                  <span className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontBody }}>
-                    {linea.alimento}
-                    {linea.deQuien.length < menusDeLaCasa.perros.length && (
-                      <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
-                        solo {linea.deQuien.join(" y ")}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-sm shrink-0" style={{ color: ROSA, fontFamily: fontBody, fontWeight: 700 }}>
-                    {linea.gramos < 1 ? linea.gramos.toFixed(2) : Math.round(linea.gramos)} g
-                  </span>
+              <p className="text-[11px] mb-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                Todo lo de {nombresDeLosPerros(menusDeLaCasa.perros)} sumado, cada menú
+                por sus días. Es lo que entra en casa.
+              </p>
+              {compraDeLaCasa.map((zona) => (
+                <div key={zona.clave} className="mb-3">
+                  <p className="text-[10px] tracking-[0.14em] uppercase mb-1" style={{ color: ROSA, fontFamily: "monospace" }}>
+                    {zona.titulo}
+                  </p>
+                  {zona.lineas.map((linea) => {
+                    // ⚠️ PEDIDO EXPRESO: "diferenciando de quién es cada cosa".
+                    // Solo cuando hay algo que distinguir -- ver deQuienEs().
+                    const deQuien = deQuienEs(linea.deQuien, (menusDeLaCasa.perros || []).length);
+                    return (
+                      <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1">
+                        <span className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontBody }}>
+                          {linea.alimento}
+                          {deQuien && (
+                            <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                              {deQuien}
+                            </span>
+                          )}
+                        </span>
+                        <span className="text-sm shrink-0" style={{ color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>
+                          {formatearCompra(linea.gramos)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               ))}
-              <p className="text-[11px] mt-3 pt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
-                Es lo de UN día. Multiplica por los días que vayas a preparar de golpe.
+              <p className="text-[11px] pt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody, borderTop: "1px solid rgba(255,255,255,0.18)" }}>
+                Compra un poco de más en lo fresco: al deshuesar y limpiar se
+                pierde parte, y estas cifras son de comida ya lista para pesar.
               </p>
             </div>
           )}
