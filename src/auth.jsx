@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { login, registrar, recuperarPassword } from './supabase'
+import { useState, useEffect } from 'react'
+import { login, registrar, recuperarPassword, entrarConGoogle } from './supabase'
 
 const VIOLETA = '#5A4088'
 const ROSA = '#FF6F91'
@@ -20,6 +20,47 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
   const [mensajeOk, setMensajeOk] = useState(null)
 
   const limpiar = () => { setError(null); setMensajeOk(null) }
+
+  // ⚠️ AÑADIDO (24 agosto) — SI VUELVES DE GOOGLE CON UN ERROR, SE DICE.
+  //
+  // Cuando el proveedor no está bien configurado (falta activarlo en el
+  // panel de Supabase, o el ID de cliente está mal), Google/Supabase NO
+  // fallan aquí: te mandan de vuelta a la app con el motivo en la URL. Sin
+  // esto, vuelves a la pantalla de entrar exactamente igual que estaba y
+  // parece que el botón no hace nada -- el peor error posible, el que no
+  // se ve. Se mira en la query Y en el hash porque según el flujo va en
+  // uno o en otro.
+  useEffect(() => {
+    const enQuery = new URLSearchParams(window.location.search)
+    const enHash = new URLSearchParams(window.location.hash.replace(/^#/, ''))
+    const motivo = enQuery.get('error_description') || enHash.get('error_description')
+    if (!motivo) return
+    setError(`No se ha podido entrar con Google: ${motivo}`)
+    // Se limpia la URL para que recargar no repita el error para siempre.
+    window.history.replaceState({}, '', window.location.pathname)
+  }, [])
+
+  // ⚠️ AÑADIDO (24 agosto) — ENTRAR CON GOOGLE.
+  //
+  // No hay `onAutenticado` que llamar: esto SE VA de la página (redirect a
+  // Google) y vuelve con la sesión puesta, que recoge onAuthChange. Por eso
+  // `cargando` se queda en true a propósito -- si se apagara, se vería el
+  // botón "listo" un instante justo antes de irse.
+  //
+  // El error se enseña TAL CUAL. Si el proveedor no está activado en el
+  // panel de Supabase, dice "Unsupported provider", y eso es exactamente lo
+  // que hay que leer para saber qué falta: un "algo ha fallado" costaría
+  // media hora de buscar dónde.
+  const handleGoogle = async () => {
+    limpiar()
+    setCargando(true)
+    try {
+      await entrarConGoogle()
+    } catch (err) {
+      setError(`No se ha podido entrar con Google: ${err.message}`)
+      setCargando(false)
+    }
+  }
 
   const handleLogin = async (e) => {
     e.preventDefault()
@@ -174,6 +215,45 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
             </button>
           </div>
         </form>
+
+        {/* ⚠️ AÑADIDO (24 agosto) — ENTRAR CON GOOGLE.
+            Va DEBAJO del formulario y no encima: quien ya tiene cuenta de
+            correo aquí entra por costumbre, y moverle el botón de sitio es
+            peor que ahorrarle un toque a quien empieza.
+            En "recuperar contraseña" no se pinta: ahí no pega nada. */}
+        {modo !== 'recuperar' && (
+          <div style={{ marginTop: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
+              <div style={{ flex: 1, height: 1, background: '#E3DAF0' }} />
+              <span style={{ color: MALVA, fontFamily: fontBody, fontSize: 12 }}>o</span>
+              <div style={{ flex: 1, height: 1, background: '#E3DAF0' }} />
+            </div>
+            <button
+              type="button"
+              onClick={handleGoogle}
+              disabled={cargando}
+              style={{
+                width: '100%', padding: '14px', borderRadius: 14,
+                background: '#FFFFFF', color: TINTA,
+                border: '1.5px solid #E3DAF0',
+                fontFamily: fontBody, fontWeight: 700, fontSize: 15,
+                cursor: cargando ? 'default' : 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              }}
+            >
+              {/* El logo de Google, en SVG y con sus colores oficiales.
+                  Va inline porque el archivo no puede depender de una
+                  imagen externa que un día deje de cargar. */}
+              <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+                <path fill="#4285F4" d="M45.1 24.5c0-1.6-.1-2.7-.4-3.9H24v7.1h12.1c-.2 1.8-1.6 4.6-4.5 6.5l-.04.3 6.5 5 .5.1c4.1-3.8 6.5-9.4 6.5-15.1z"/>
+                <path fill="#34A853" d="M24 46c5.9 0 10.9-2 14.5-5.3l-6.9-5.4c-1.8 1.3-4.3 2.2-7.6 2.2-5.8 0-10.7-3.8-12.5-9.1l-.3 0-6.7 5.2-.1.3C8 40.6 15.4 46 24 46z"/>
+                <path fill="#FBBC05" d="M11.5 28.4c-.5-1.4-.7-2.9-.7-4.4s.3-3 .7-4.4l0-.3-6.8-5.3-.2.1C2.9 17 2 20.4 2 24s.9 7 2.5 9.9l7-5.5z"/>
+                <path fill="#EB4335" d="M24 9.9c4.1 0 6.9 1.8 8.5 3.3l6.2-6C34.9 3.7 29.9 1.5 24 1.5 15.4 1.5 8 7 4.5 14.1l7 5.5c1.8-5.3 6.7-9.7 12.5-9.7z"/>
+              </svg>
+              Continuar con Google
+            </button>
+          </div>
+        )}
 
         {/* Links de cambio de modo */}
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, marginTop: 24 }}>
