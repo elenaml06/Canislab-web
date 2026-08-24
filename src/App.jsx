@@ -2589,17 +2589,20 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
 
       {seccionActiva === "perfil" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3 min-w-0">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
-                de perro y configuración tiene que existir en todas las
-                pantallas, y en todas las pantallas del menú lateral no
-                aparecen". Estas seis se abren desde el panel y se habían
-                quedado sin ella: entrabas en Evolución y ya no sabías de
-                qué perro estabas viendo la evolución, ni podías cambiar.
-                Fondo claro, así que la versión clara. */}
+            </div>
+            {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
+                engranaje y el perfil en varias pantallas, se ve como arriba
+                centrado, debería estar siempre en el mismo sitio".
+                Cierto. En toda la app la regla es hamburguesa IZQUIERDA y
+                burbuja DERECHA, con `justify-between` entre las dos. Al
+                meter aquí el "← Volver" como TERCER hijo, el reparto dejaba
+                la burbuja en medio. Ahora el volver va agrupado con la
+                hamburguesa a la izquierda y la burbuja vuelve a su esquina,
+                igual que en las demás pantallas. */}
             {burbujaClara}
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <div className="flex items-center gap-3 mb-6">
             <div className="w-14 h-14 rounded-full flex items-center justify-center" style={{ background: VIOLETA }}>
@@ -2642,17 +2645,20 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
 
       {seccionActiva === "evolucion" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3 min-w-0">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
-                de perro y configuración tiene que existir en todas las
-                pantallas, y en todas las pantallas del menú lateral no
-                aparecen". Estas seis se abren desde el panel y se habían
-                quedado sin ella: entrabas en Evolución y ya no sabías de
-                qué perro estabas viendo la evolución, ni podías cambiar.
-                Fondo claro, así que la versión clara. */}
+            </div>
+            {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
+                engranaje y el perfil en varias pantallas, se ve como arriba
+                centrado, debería estar siempre en el mismo sitio".
+                Cierto. En toda la app la regla es hamburguesa IZQUIERDA y
+                burbuja DERECHA, con `justify-between` entre las dos. Al
+                meter aquí el "← Volver" como TERCER hijo, el reparto dejaba
+                la burbuja en medio. Ahora el volver va agrupado con la
+                hamburguesa a la izquierda y la burbuja vuelve a su esquina,
+                igual que en las demás pantallas. */}
             {burbujaClara}
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-1" style={{ color: TINTA, fontFamily: fontDisplay }}>Evolución de {nombrePerro}</p>
           <p className="text-xs mb-6" style={{ color: MALVA, fontFamily: fontBody }}>Peso esperado vs. peso real registrado</p>
@@ -2748,17 +2754,20 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
 
       {seccionActiva === "menus" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8" style={{ background: PAPEL }}>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3 min-w-0">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
-                de perro y configuración tiene que existir en todas las
-                pantallas, y en todas las pantallas del menú lateral no
-                aparecen". Estas seis se abren desde el panel y se habían
-                quedado sin ella: entrabas en Evolución y ya no sabías de
-                qué perro estabas viendo la evolución, ni podías cambiar.
-                Fondo claro, así que la versión clara. */}
+            </div>
+            {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
+                engranaje y el perfil en varias pantallas, se ve como arriba
+                centrado, debería estar siempre en el mismo sitio".
+                Cierto. En toda la app la regla es hamburguesa IZQUIERDA y
+                burbuja DERECHA, con `justify-between` entre las dos. Al
+                meter aquí el "← Volver" como TERCER hijo, el reparto dejaba
+                la burbuja en medio. Ahora el volver va agrupado con la
+                hamburguesa a la izquierda y la burbuja vuelve a su esquina,
+                igual que en las demás pantallas. */}
             {burbujaClara}
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-4" style={{ color: TINTA, fontFamily: fontDisplay }}>Mis menús</p>
           <div className="flex flex-col gap-2">
@@ -2796,17 +2805,20 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
 
       {seccionActiva === "porque" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3 min-w-0">
             <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
-            {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "la burbuja de perfiles
-                de perro y configuración tiene que existir en todas las
-                pantallas, y en todas las pantallas del menú lateral no
-                aparecen". Estas seis se abren desde el panel y se habían
-                quedado sin ella: entrabas en Evolución y ya no sabías de
-                qué perro estabas viendo la evolución, ni podías cambiar.
-                Fondo claro, así que la versión clara. */}
+            </div>
+            {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
+                engranaje y el perfil en varias pantallas, se ve como arriba
+                centrado, debería estar siempre en el mismo sitio".
+                Cierto. En toda la app la regla es hamburguesa IZQUIERDA y
+                burbuja DERECHA, con `justify-between` entre las dos. Al
+                meter aquí el "← Volver" como TERCER hijo, el reparto dejaba
+                la burbuja en medio. Ahora el volver va agrupado con la
+                hamburguesa a la izquierda y la burbuja vuelve a su esquina,
+                igual que en las demás pantallas. */}
             {burbujaClara}
-            <button onClick={() => setSeccionActiva(null)} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>{soloSeccion ? "← Volver al perfil" : "← Volver a los menús"}</button>
           </div>
           <p className="text-2xl mb-5" style={{ color: TINTA, fontFamily: fontDisplay }}>Por qué Rawku</p>
           <p className="text-sm leading-relaxed mb-4" style={{ color: TINTA, fontFamily: fontBody }}>
@@ -2833,10 +2845,11 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
 
       {seccionActiva === "analizar" && (
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
-          <div className="flex items-center justify-between mb-6">
-            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3 min-w-0">
+              <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            </div>
             {burbujaClara}
-            <button onClick={() => { setSeccionActiva(null); setResultadoAnalisis(null); setErrorAnalisis(null); }} className="text-sm text-left" style={{ color: MALVA, fontFamily: fontBody }}>← Volver</button>
           </div>
           <PremiumGate
             premium={premium}
@@ -3199,12 +3212,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               solo los nombres, tal como se pidió). El menú lateral
               queda accesible directamente desde aquí, a la izquierda,
               en vez de tener que pasar por un botón de "volver". */}
-          <div className="flex items-center gap-3 mb-6">
-            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+          <div className="flex items-center justify-between gap-3 mb-6">
+            <div className="flex items-center gap-3 min-w-0">
+              <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+              <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                Guardado
+              </p>
+            </div>
             {burbujaClara}
-            <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
-              Guardado
-            </p>
           </div>
           <div className="flex items-center gap-3 mb-6">
             <div className="w-11 h-11 rounded-full flex items-center justify-center shrink-0" style={{ background: VIOLETA }}>
@@ -3282,6 +3297,18 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             El panel se queda con lo que es: navegación. */}
             <div className="flex-1 px-3 pt-4">
               {[
+                // ⚠️ AÑADIDO (24 agosto) — CASO REAL: "lo de volver y volver
+                // al menú en las pantallas que se eligen desde el menú
+                // lateral, FUERA. Para algo hay una pestaña de menú para
+                // elegir a dónde te quieres mover".
+                //
+                // De acuerdo, pero entonces el panel tiene que llevar a
+                // TODOS los sitios, y al menú también: quitar los "volver"
+                // sin esto te dejaba dentro de una sección sin salida.
+                // Solo se pinta cuando hay un menú al que volver.
+                ...(soloSeccion
+                  ? [{ key: "__salir__", Icono: UtensilsCrossed, label: "Hacer el menú de la semana", isPremium: false }]
+                  : [{ key: null, Icono: UtensilsCrossed, label: "El menú de la semana", isPremium: false }]),
                 { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}`, isPremium: false },
                 { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true },
                 ...(soloSeccion ? [] : [{ key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false }]),
@@ -3300,12 +3327,15 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 const Icono = op.Icono;
                 const bloqueado = op.isPremium && !premium;
                 return (
-                  <button key={op.key} onClick={() => {
+                  <button key={op.key ?? "__menu__"} onClick={() => {
                     setMenuLateralAbierto(false);
                     setSemanaConfirmada(false);
                     // La compra no es una sección de esta pantalla: la
                     // pinta el de fuera, para que sea la MISMA en todas.
                     if (op.key === "compra") { onAbrirLaCompra?.(); return; }
+                    // En "sólo esta sección" no hay menú debajo al que
+                    // volver: hay que salir del todo, al generador.
+                    if (op.key === "__salir__") { onVolver?.(); return; }
                     setSeccionActiva(op.key);
                   }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
                     <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
@@ -4030,48 +4060,42 @@ function RawkuOnboardingInterna({
     const varios = listaDePerros.length > 1;
     const inicial = (nombreMostrar || "?").trim().charAt(0).toUpperCase();
     return (
-      <div className="flex items-center gap-1.5">
-        <button
-          // Abre la hoja SIEMPRE, también con un perro: ahí es donde vive
-          // ahora "Añadir otro perro", y desde el panel lateral ya no se
-          // llega. Con uno solo la hoja enseña ese perro y el botón de
-          // añadir -- que es justo lo que hace falta para pasar a dos.
-          onClick={() => setHojaDePerrosAbierta(true)}
-          aria-label={varios
-            ? `Perro actual: ${nombreMostrar}. Cambiar de perro`
-            : `Perro actual: ${nombreMostrar}. Tus perros`}
-          className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full"
-          style={{
-            background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
-            border: sobreOscuro ? "none" : "1.5px solid #E3DAF0",
-            cursor: "pointer",
-          }}
+      <button
+        // ⚠️ REHECHA (24 agosto) — CASO REAL: "NO QUIERO DOS, QUIERO UNA
+        // SOLA BURBUJITA PARA CONFIGURACIÓN Y LOS PERROS, Y TIENE QUE
+        // ESTAR EN EL EXTREMO DERECHO ARRIBA".
+        //
+        // Eran dos botones pegados: el perro y un engranaje aparte. Dos
+        // cosas que abren dos sitios distintos, en la esquina donde solo
+        // cabe una idea. Ahora es UNA: se toca y la hoja lleva los perros
+        // Y los ajustes.
+        onClick={() => setHojaDePerrosAbierta(true)}
+        aria-label={varios
+          ? `Perro actual: ${nombreMostrar}. Cambiar de perro y ajustes`
+          : `Perro actual: ${nombreMostrar}. Tus perros y ajustes`}
+        className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full shrink-0"
+        style={{
+          background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
+          border: sobreOscuro ? "none" : "1.5px solid #E3DAF0",
+          cursor: "pointer",
+        }}
+      >
+        <span
+          aria-hidden="true"
+          className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: sobreOscuro ? "#FFFFFF" : VIOLETA,
+                   color: sobreOscuro ? VIOLETA : "#FFFFFF",
+                   fontFamily: fontDisplay, fontSize: 12, fontWeight: 700 }}
         >
-          <span
-            aria-hidden="true"
-            className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-            style={{ background: sobreOscuro ? "#FFFFFF" : VIOLETA,
-                     color: sobreOscuro ? VIOLETA : "#FFFFFF",
-                     fontFamily: fontDisplay, fontSize: 12, fontWeight: 700 }}
-          >
-            {inicial}
-          </span>
-          <span className="truncate" style={{ maxWidth: 92, color: sobreOscuro ? "#FFFFFF" : TINTA,
-                                              fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
-            {nombreMostrar}
-          </span>
-          {varios && <ChevronRight size={13} style={{ color: sobreOscuro ? "#D8CFEC" : MALVA,
-                                                      transform: "rotate(90deg)" }} />}
-        </button>
-        <button
-          onClick={() => setAjustesAbiertos(true)}
-          aria-label="Ajustes"
-          className="p-1.5 rounded-full"
-          style={{ background: "none", border: "none", cursor: "pointer" }}
-        >
-          <Settings size={18} strokeWidth={1.8} style={{ color: sobreOscuro ? "#FFFFFF" : VIOLETA }} />
-        </button>
-      </div>
+          {inicial}
+        </span>
+        <span className="truncate" style={{ maxWidth: 92, color: sobreOscuro ? "#FFFFFF" : TINTA,
+                                            fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
+          {nombreMostrar}
+        </span>
+        <ChevronRight size={13} aria-hidden="true"
+                      style={{ color: sobreOscuro ? "#D8CFEC" : MALVA, transform: "rotate(90deg)" }} />
+      </button>
     );
   };
 
@@ -4154,6 +4178,28 @@ function RawkuOnboardingInterna({
             </span>
           </button>
         </div>
+
+        {/* ⚠️ AÑADIDO (24 agosto) — LOS AJUSTES, AQUÍ DENTRO.
+            Antes colgaban de un engranaje aparte, al lado de la burbuja.
+            Eran dos botones en la esquina donde solo cabe una idea. Ahora
+            la burbuja es una sola y esta hoja lleva las dos cosas: de qué
+            perro estás, y tu cuenta. Separado por una línea porque no es
+            un perro más. */}
+        <button
+          onClick={() => { setHojaDePerrosAbierta(false); setAjustesAbiertos(true); }}
+          className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl mt-4 pt-4"
+          style={{ background: "none", border: "none", borderTop: "1px solid #F0EAF8",
+                   borderRadius: 0, cursor: "pointer" }}
+        >
+          <span aria-hidden="true" className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                style={{ background: "#F0EAF8" }}>
+            <Settings size={17} strokeWidth={1.8} style={{ color: VIOLETA }} />
+          </span>
+          <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+            Ajustes
+          </span>
+          <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+        </button>
       </div>
     </div>
   );
@@ -4726,7 +4772,18 @@ function RawkuOnboardingInterna({
   // viviera dentro de VistaMenus solo existiría con un menú recién
   // generado, que es justo lo contrario de para lo que sirve.
   const pantallaDeLaCompra = compraAbierta ? (
-    <div className="fixed inset-0 z-[60] flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+    // ⚠️ z-[55] y no z-[60]: por encima de las secciones (z-50), pero por
+    // DEBAJO del panel lateral (z-60) y de la hoja de perros (z-70). Con
+    // los tres al mismo nivel, abrir el panel desde aquí lo dejaba detrás
+    // -- se veía el oscurecido y ningún panel.
+    <div className="fixed inset-0 z-[55] flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+      {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "en la pantalla de la compra no
+          aparece la hamburguesa del menú lateral ni lo del perfil". Misma
+          cabecera que el resto: hamburguesa IZQUIERDA, burbuja DERECHA. */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <BotonMenu onClick={() => { setMenuLigeroAbierto(true); }} color={VIOLETA} className="p-1" />
+        {burbujaDePerfil(false)}
+      </div>
       <div className="flex items-center justify-between mb-4">
         <p className="text-2xl" style={{ color: TINTA, fontFamily: fontDisplay }}>La compra</p>
         <button onClick={() => setCompraAbierta(false)} aria-label="Cerrar"
@@ -6226,13 +6283,6 @@ function RawkuOnboardingInterna({
           )}
 
           <div className="flex-1" />
-          <button
-            onClick={() => setFase("onboarding")}
-            className="text-xs mt-6"
-            style={{ color: MALVA, fontFamily: fontBody }}
-          >
-            ← Volver al perfil de {nombreMostrar}
-          </button>
         </div>
         {/* Confirmación de borrado. Borrar sin preguntar un menú que
             costó una llamada al servidor y que la usuaria puede estar
@@ -7262,6 +7312,11 @@ function RawkuOnboardingInterna({
             (VistaMenus trae su propio panel). Resultado: el botón "La
             compra" cerraba el panel y no pasaba nada. Va aquí también. */}
         {pantallaDeLaCompra}
+        {/* El panel que abre la hamburguesa de la compra. El de VistaMenus
+            vive dentro de VistaMenus y desde aquí no se puede abrir, así
+            que en esta pantalla se usa el ligero -- que lleva las mismas
+            secciones y funciona desde cualquier sitio. */}
+        {panelLigero}
         {avisoCambiarDePerro}
         {avisoBorrarPerro}
       {avisoDescartarLocal}
