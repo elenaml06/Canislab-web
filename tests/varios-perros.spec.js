@@ -348,7 +348,10 @@ test.describe("los menús de toda la casa", () => {
     // los dos perros, con sus cantidades distintas
     await expect(page.getByText(PERRO_DE_PRUEBA.nombre).first()).toBeVisible();
     await expect(page.getByText(SEGUNDO_PERRO_DE_PRUEBA.nombre).first()).toBeVisible();
-    await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
+    // ⚠️ El texto cambió (24 agosto): la compra pasó de ser "la de un día,
+    // el primer menú de cada uno" a la SEMANA entera, cada menú por sus
+    // días. Ver tests/cesta.spec.js, que es donde se comprueban las sumas.
+    await expect(page.getByText("La compra de la semana")).toBeVisible();
   });
 
   // ⚠️ AÑADIDO (24 agosto) — CASO REAL: "este menú de personalizar me ha
@@ -578,7 +581,10 @@ test.describe("decir que tienes más de un perro desde el principio", () => {
     await expect(page.getByRole("button", { name: /Los mismos alimentos para todos/ })).toBeVisible();
     await generarParaLaCasa(page);
 
-    await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
+    // ⚠️ El texto cambió (24 agosto): la compra pasó de ser "la de un día,
+    // el primer menú de cada uno" a la SEMANA entera, cada menú por sus
+    // días. Ver tests/cesta.spec.js, que es donde se comprueban las sumas.
+    await expect(page.getByText("La compra de la semana")).toBeVisible();
   });
 });
 
@@ -804,7 +810,10 @@ test.describe("para varios perros, el recorrido completo", () => {
     // importa es que el camino existe y llega: modo personalizar de verdad.
     const { ultimaPeticionCasa } = await configurarBackend(request, {});
     expect(ultimaPeticionCasa.perros.length).toBe(2);
-    await expect(page.getByText("La compra de un día, para todos")).toBeVisible();
+    // ⚠️ El texto cambió (24 agosto): la compra pasó de ser "la de un día,
+    // el primer menú de cada uno" a la SEMANA entera, cada menú por sus
+    // días. Ver tests/cesta.spec.js, que es donde se comprueban las sumas.
+    await expect(page.getByText("La compra de la semana")).toBeVisible();
   });
 
   test("desde el resultado se puede ir a editar el menú de cada perro", async ({ page }) => {
