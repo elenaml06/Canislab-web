@@ -7898,6 +7898,9 @@ function AuthGate() {
   // haría creer al resto de la app que hay sesión donde no la hay.
   const [sinCuenta, setSinCuenta] = useState(() => estaSinCuenta());
   const [migrando, setMigrando] = useState(false);
+  // Los perros del móvil que NO subieron porque ya estaban en la cuenta.
+  // Se enseña una vez, al entrar. Ver migrarLocalACuenta en almacen.js.
+  const [perrosNoSubidos, setPerrosNoSubidos] = useState(null);
 
   // ⚠️ CORREGIDO — había DOS caminos distintos cargando el perro a la vez
   // y pisándose el uno al otro:
@@ -7969,7 +7972,14 @@ function AuthGate() {
     // Va ANTES de getPerros y no en paralelo: si no, la lista se leería
     // antes de que los perros hayan subido y saldría vacía.
     const traerLoLocal = hayDatosLocales()
-      ? (setMigrando(true), migrarLocalACuenta(user.id).catch((err) => {
+      ? (setMigrando(true), migrarLocalACuenta(user.id).then((r) => {
+          // ⚠️ Los perros que ya estaban en la cuenta NO suben (ver
+          // almacen.js). Eso hay que DECIRLO: lo del móvil se ha borrado y
+          // quien lo hizo tiene derecho a enterarse ahora, no días después
+          // al no encontrar su ficha.
+          if (r && r.noSubidos && r.noSubidos.length) setPerrosNoSubidos(r.noSubidos);
+          return r;
+        }).catch((err) => {
           // Que falle no puede dejar a nadie fuera de su cuenta. Lo local
           // NO se borra (vaciarLocal sólo corre si todo subió), así que
           // se puede reintentar entrando otra vez.
@@ -8130,6 +8140,37 @@ function AuthGate() {
 
   return (
     <ErrorBoundary>
+      {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "tenía dos Cairo y un Rufo".
+          Los perros del móvil que ya estaban en la cuenta no suben, para no
+          duplicarlos. Pero eso NO puede pasar en silencio: lo del móvil se
+          ha borrado, y enterarse días después de que tu ficha de prueba no
+          está es justo la clase de fallo que este proyecto persigue.
+          Va como cartel y no como línea de texto porque es sobre DATOS. */}
+      {perrosNoSubidos && perrosNoSubidos.length > 0 && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center px-6"
+             style={{ background: "rgba(35,21,57,0.55)" }}>
+          <div className="flex flex-col items-center gap-2 px-6 py-6 rounded-2xl max-w-sm"
+               style={{ background: "#FFFFFF" }}>
+            <p className="text-sm text-center" style={{ color: "#231539", fontFamily: '"DM Sans", sans-serif', fontWeight: 700 }}>
+              {perrosNoSubidos.length === 1
+                ? `A ${perrosNoSubidos[0]} ya lo tenías en tu cuenta`
+                : "Algunos ya los tenías en tu cuenta"}
+            </p>
+            <p className="text-xs text-center mb-2" style={{ color: "#231539", fontFamily: '"DM Sans", sans-serif', lineHeight: 1.5 }}>
+              {perrosNoSubidos.length === 1
+                ? `La ficha que hiciste en este móvil no se ha subido, para no dejarte dos ${perrosNoSubidos[0]}. Se ha quedado la de tu cuenta, que es la que tiene sus menús y sus pesos.`
+                : `Las fichas que hiciste en este móvil de ${perrosNoSubidos.join(", ")} no se han subido, para no dejarte dos de cada uno. Se han quedado las de tu cuenta, que son las que tienen sus menús y sus pesos.`}
+            </p>
+            <button
+              onClick={() => setPerrosNoSubidos(null)}
+              className="px-6 py-2.5 rounded-xl text-sm w-full"
+              style={{ background: "#5A4088", color: "#FFFFFF", fontFamily: '"DM Sans", sans-serif', fontWeight: 700, border: "none", cursor: "pointer" }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
       {/* key por cuenta Y por montaje: si se cambia de usuario o de perro,
           el componente se monta de cero en vez de heredar el estado del
           anterior. Sin esto, cambiar de perro dejaría el perfil, los

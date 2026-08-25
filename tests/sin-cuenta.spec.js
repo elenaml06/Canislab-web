@@ -333,3 +333,84 @@ test.describe("sin cuenta se puede tener más de un perro", () => {
     await expect(page.getByRole("button", { name: /Perro actual: Lola/ })).toBeVisible();
   });
 });
+
+test.describe("al entrar, un perro que ya tenías no se duplica", () => {
+  // ⚠️ CASO REAL (24 agosto): "estaba sin perfil creando a Cairo y eso, y
+  // luego he iniciado sesión, y tenía dos Cairo y un Rufo... porque en mi
+  // perfil ya tenía creado Cairo y Rufo".
+  //
+  // La migración subía TODOS los perros del navegador sin mirar si ya
+  // estaban en la cuenta. El caso normal es justo ése: pruebas la app sin
+  // cuenta, haces tu perro, y luego entras en la cuenta que YA tiene a ese
+  // perro. Resultado: dos.
+  //
+  // No es solo feo: a partir de ahí tienes dos fichas del mismo animal,
+  // cada una con sus menús y sus pesos, y ninguna es "la buena".
+  async function iniciarSesion(page) {
+    await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+    await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+    await page.getByRole("button", { name: "Entrar" }).click();
+  }
+
+  test("el que ya estaba en la cuenta se queda, y no aparece dos veces", async ({ page, request }) => {
+    // La cuenta YA tiene a Ruffo. En el móvil, otro Ruffo de la prueba.
+    await configurarBackend(request, {
+      retrasoPerrosMs: 50, menus: [],
+      perros: [{ ...PERRO_DE_PRUEBA, nombre: "Ruffo" }],
+    });
+    await sembrarUsoSinCuenta(page, { dentro: false, menus: [] });
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    // ⚠️ Esperar a que la app esté cargada, y ENTONCES mirar una vez.
+    //
+    // Con `expect.poll` esta prueba pasaba CON EL FALLO PUESTO: el perro
+    // sembrado ya está en la cuenta desde el primer instante, así que el
+    // poll veía 1, se daba por bueno y terminaba antes de que la migración
+    // subiera el segundo. Un poll que busca un número que ya se cumple al
+    // empezar no comprueba nada.
+    //
+    // La migración se espera ANTES de cargar la lista de perros (ver
+    // AuthGate), así que si la app ya está en pie, la migración terminó.
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor({ timeout: 15000 });
+
+    const { perrosGuardados } = await configurarBackend(request, {});
+    const ruffos = perrosGuardados.filter((p) => p.nombre === "Ruffo");
+    expect(ruffos.length, `hay ${ruffos.length} Ruffo en la cuenta`).toBe(1);
+  });
+
+  test("y se dice, no se hace en silencio", async ({ page, request }) => {
+    // Que no se duplique está bien; que no se diga, no. Lo que había en el
+    // móvil NO ha subido, y quien lo hizo tiene derecho a enterarse en vez
+    // de descubrir días después que su ficha de prueba no está.
+    await configurarBackend(request, {
+      retrasoPerrosMs: 50, menus: [],
+      perros: [{ ...PERRO_DE_PRUEBA, nombre: "Ruffo" }],
+    });
+    await sembrarUsoSinCuenta(page, { dentro: false, menus: [] });
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    await expect(page.getByText(/Ruffo/).first()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(/ya (lo )?tenías|ya estaba en tu cuenta/i),
+      "no avisa de que el perro del móvil no ha subido").toBeVisible({ timeout: 15000 });
+  });
+
+  test("uno que NO estaba sí sube", async ({ page, request }) => {
+    // El contrapeso: no vale con dejar de subir perros.
+    await configurarBackend(request, {
+      retrasoPerrosMs: 50, menus: [],
+      perros: [{ ...PERRO_DE_PRUEBA, nombre: "Cairo" }],
+    });
+    await sembrarUsoSinCuenta(page, { dentro: false, menus: [] });   // Ruffo
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    // Mismo motivo que arriba: esperar a que la app esté en pie y mirar
+    // una vez, no ir preguntando hasta que salga lo que espero.
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor({ timeout: 15000 });
+
+    const { perrosGuardados } = await configurarBackend(request, {});
+    expect(perrosGuardados.map((p) => p.nombre).sort()).toEqual(["Cairo", "Ruffo"]);
+  });
+});
