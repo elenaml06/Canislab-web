@@ -2763,10 +2763,24 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               </p>
               <button
                 onClick={() => {
+                  // ⚠️ CASO REAL ENCONTRADO (25 agosto, por Sentry):
+                  // "ReferenceError: setMenuReal is not defined", sin
+                  // manejar. Aquí había un `setMenuReal(null)` -- pero
+                  // `menuReal` vive en el componente de fuera, no en éste.
+                  // Pesabas al perro, salía el ✅, pulsabas "Regenerar
+                  // menú adaptado al nuevo peso" y reventaba: el menú no
+                  // se regeneraba nunca y en pantalla no pasaba nada.
+                  //
+                  // Es EL MISMO fallo que el de `usuario` doce líneas más
+                  // arriba, en esta misma pantalla: JavaScript no avisa de
+                  // un nombre que no existe hasta que se ejecuta esa línea,
+                  // y esa línea solo se ejecuta pulsando ese botón.
+                  //
+                  // Vaciar el menú es cosa de quien lo tiene: lo hace
+                  // `onRegenerarConAlimentos` en el componente de fuera.
                   const alimentosActuales = (menus[0]?.items || []).map(i => i.alimento).filter(Boolean);
                   setAvisoPesoActualizado(false);
                   setSeccionActiva(null);
-                  setMenuReal(null);
                   onRegenerarConAlimentos(alimentosActuales);
                 }}
                 className="w-full py-2 rounded-lg text-sm"
@@ -3704,6 +3718,25 @@ function RawkuOnboardingInterna({
   // diferencia no se ve mirando la lista.
   const [compraDeLoQueMiras, setCompraDeLoQueMiras] = useState(false);
   const [errorCompra, setErrorCompra] = useState(null);
+
+  // ⚠️ UNO SOLO (25 agosto). Estaba escrito a mano en la llamada a
+  // VistaMenus de la pantalla del menú, y en la de las secciones era un
+  // `() => {}`. Mismo botón, misma pantalla, dos comportamientos. Aquí
+  // también se sale de la sección: si no, se regenera por detrás y sigues
+  // mirando Evolución sin enterarte.
+  const regenerarConAlimentos = (alimentos) => {
+    // ⚠️ "Con los mismos ingredientes" solo tiene sentido si hay un menú de
+    // verdad del que sacarlos. Abriendo Evolución desde el panel sin haber
+    // hecho ninguno, la vista recibe MENUS_EJEMPLO de relleno -- preservar
+    // ESO sería hacerle al perro un menú con los alimentos del ejemplo.
+    // Sin menú, se calcula de cero con el peso nuevo, que es lo que se ha
+    // pedido de verdad.
+    setAlimentosAPreservar(menuReal && menuReal.length ? (alimentos || []) : []);
+    setMenuReal(null);
+    setSeccionSuelta(null);
+    setFase("generador");
+    setPantalla("resultado");
+  };
 
   const abrirLaCompra = async () => {
     setCompraAbierta(true);
@@ -6286,7 +6319,12 @@ function RawkuOnboardingInterna({
         onAbrirLaCompra={abrirLaCompra}
         premium={premium}
         onMostrarSuscripcion={() => setMostrarSuscripcion(true)}
-        onRegenerarConAlimentos={() => {}}
+        // ⚠️ AQUÍ HABÍA UN `() => {}` (25 agosto). Evolución abierta
+        // desde el panel es la MISMA pantalla, con el mismo botón de
+        // "Regenerar menú adaptado al nuevo peso" -- y por este camino no
+        // reventaba: no hacía absolutamente nada, en silencio. Peor.
+        // Ahora los dos caminos llaman a lo mismo.
+        onRegenerarConAlimentos={regenerarConAlimentos}
         usuario={usuario}
         onPerroGuardado={onPerroGuardado}
       />
@@ -7414,7 +7452,7 @@ function RawkuOnboardingInterna({
             copia[i] = { ...copia[i], menu: gramos, gramos };
             return copia;
           });
-        }} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} burbuja={burbujaDePerfil(true)} onAbrirPanel={() => setMenuLigeroAbierto(true)} burbujaClara={burbujaDePerfil(false)} />
+        }} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={regenerarConAlimentos} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} burbuja={burbujaDePerfil(true)} onAbrirPanel={() => setMenuLigeroAbierto(true)} burbujaClara={burbujaDePerfil(false)} />
         {/* ⚠️ AÑADIDO (24 agosto) — la pantalla de la compra colgaba SOLO
             de `drawerLigero`, y ésta es la única pantalla que no lo pinta
             (VistaMenus trae su propio panel). Resultado: el botón "La
