@@ -564,6 +564,59 @@ const NIVELES = [
   { label: "Trabajo", detalle: "Pastoreo, guarda, o similar", Icono: Award },
 ];
 
+// ─── ELEGIR ALIMENTO: LA LISTA DE ESPECIES, UNA SOLA VEZ ─────────────────────
+//
+// ⚠️ CASO REAL ENCONTRADO (25 agosto): "veo que hay en ciertas categorías
+// alimentos dentro de otra subcategoría cuando solo hay un alimento dentro,
+// por ejemplo en verduras seleccionas acelga y se abre otra vez para solo
+// poder seleccionar acelga... eso tiene que ser solo si hay más de un
+// alimento dentro".
+//
+// POR QUÉ ESTO ES UN COMPONENTE Y NO CUATRO COPIAS
+// Porque esto YA SE ARREGLÓ el 5 de agosto. El comentario de entonces dice
+// literalmente "este era el peor de los TRES SITIOS con este problema".
+// Eran cuatro: el analizador de dietas se quedó fuera, con el clic de más,
+// y ahí es donde ella lo encontró veinte días después. Y había un quinto
+// (los suplementos comerciales) que nadie había mirado nunca.
+//
+// Arreglar cuatro copias a mano no es arreglarlo: es dejarlo listo para que
+// vuelva a pasar en la quinta pantalla. Ahora hay UNA lista, y la pantalla
+// que venga la usa y ya está bien sin que nadie se acuerde de esto.
+//
+// La regla, en una línea: si dentro de una especie solo hay un alimento,
+// pulsarla LO ELIGE. Si hay varios, se ve cuántos son y que esto abre otro
+// paso -- sin ese indicador los dos botones se veían iguales y no se sabía
+// si ya habías elegido o te faltaba un clic.
+// `ocultar`: especies que no se enseñan (en alergias, las que ya excluiste).
+function ListaDeEspecies({ porEspecie, onElegir, onAbrir, fondo = "#FFFFFF", ocultar = null }) {
+  return (
+    <>
+      {Object.entries(porEspecie || {}).map(([especie, alimentos]) => {
+        if (ocultar && ocultar(especie)) return null;
+        const lista = alimentos || [];
+        const unico = lista.length === 1;
+        return (
+          <button
+            key={especie}
+            onClick={() => (unico ? onElegir(lista[0], especie) : onAbrir(especie))}
+            aria-label={unico ? lista[0] : `${especie}: ver los ${lista.length} tipos`}
+            className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between"
+            style={{ color: TINTA, fontFamily: fontBody, background: fondo }}
+          >
+            <span>{unico ? lista[0] : especie}</span>
+            {!unico && (
+              <span className="flex items-center gap-1 shrink-0" style={{ color: VIOLETA }}>
+                <span className="text-[11px] font-semibold" style={{ fontFamily: "monospace" }}>{lista.length} tipos</span>
+                <ChevronRight size={14} />
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </>
+  );
+}
+
 const CATEGORIAS_ALIMENTO = {
   "Carne muscular": {
     // ⚠️ CORREGIDO (5 agosto, madrugada) — segunda pasada: lengua y
@@ -2400,34 +2453,12 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{editorAbierto.categoria.toUpperCase()}</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                      {/* ⚠️ CORREGIDO (5 agosto, madrugada): si la especie
-                          solo tiene 1 alimento dentro, pulsarla ya lo
-                          aplica directamente -- antes siempre navegaba a
-                          un submenú que, con 1 sola opción, era un clic
-                          de más sin ningún sentido (caso real: "Pimiento"
-                          → clic → solo "Pimiento rojo" dentro). */}
-                      {Object.entries((categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]).map(([especie, alimentos]) => {
-                        const unico = alimentos.length === 1;
-                        return (
-                          <button key={especie}
-                            onClick={() => unico ? cambiarAlimento(editorAbierto.alimentoViejo, alimentos[0]) : setEditorAbierto({ ...editorAbierto, especie })}
-                            className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
-                            <span>{unico ? alimentos[0] : especie}</span>
-                            {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL: este era
-                                el peor de los tres sitios con este problema -- aquí no
-                                había NINGUNA diferencia visual entre "esto selecciona
-                                directo" y "esto abre un paso más", los dos botones se
-                                veían exactamente igual. Mismo indicador que en los
-                                otros dos sitios. */}
-                            {!unico && (
-                              <span className="flex items-center gap-1 shrink-0" style={{ color: VIOLETA }}>
-                                <span className="text-[11px] font-semibold" style={{ fontFamily: "monospace" }}>{alimentos.length} tipos</span>
-                                <ChevronRight size={14} />
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
+                      <ListaDeEspecies
+                        porEspecie={(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]}
+                        onElegir={(alimento) => cambiarAlimento(editorAbierto.alimentoViejo, alimento)}
+                        onAbrir={(especie) => setEditorAbierto({ ...editorAbierto, especie })}
+                        fondo={PAPEL}
+                      />
                     </div>
                     <button onClick={() => setEditorAbierto({ ...editorAbierto, categoria: null })} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>← Otra categoría</button>
                   </div>
@@ -2539,12 +2570,12 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           <div className="rounded-xl p-3 mb-6" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
             <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>TIPO DE SUPLEMENTO</p>
             <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
-              {Object.keys(CATEGORIAS_ALIMENTO["Suplementos comerciales"]).map((tipo) => (
-                <button key={tipo} onClick={() => setSupTipoAbierto(tipo)}
-                  className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
-                  {tipo}
-                </button>
-              ))}
+              <ListaDeEspecies
+                porEspecie={CATEGORIAS_ALIMENTO["Suplementos comerciales"]}
+                onElegir={(producto, tipo) => anadirSuplemento(tipo, producto)}
+                onAbrir={(tipo) => setSupTipoAbierto(tipo)}
+                fondo={PAPEL}
+              />
             </div>
             <button onClick={() => setSupAbierto(false)} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>Cancelar</button>
           </div>
@@ -3084,6 +3115,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 <div className="mt-3 pl-12">
                   {!abierto && (
                     <button onClick={() => setAbiertoAnalizar({ categoria: cat.nombre, especie: null })}
+                      aria-label={`${cat.nombre}: añadir alimento`}
                       className="px-3 py-2 rounded-lg text-sm" style={{ background: PAPEL, color: MALVA, fontFamily: fontBody, border: "1.5px dashed #C9BEDD" }}>
                       {itemsDeEstaCategoria.length > 0 ? "+ Añadir otro" : "+ Añadir alimento"}
                     </button>
@@ -3092,12 +3124,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                     <div className="rounded-xl p-3" style={{ background: PAPEL }}>
                       <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>ESPECIE</p>
                       <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                        {Object.keys(catsParaEsta[cat.nombre] || {}).map((especie) => (
-                          <button key={especie} onClick={() => setAbiertoAnalizar({ categoria: cat.nombre, especie })}
-                            className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
-                            {especie}
-                          </button>
-                        ))}
+                        <ListaDeEspecies
+                          porEspecie={catsParaEsta[cat.nombre]}
+                          onElegir={(alimento) => {
+                            setDietaAnalizar((prev) => [...prev, { categoria: cat.nombre, alimento, gramos: "" }]);
+                            setAbiertoAnalizar(null);
+                          }}
+                          onAbrir={(especie) => setAbiertoAnalizar({ categoria: cat.nombre, especie })}
+                        />
                       </div>
                       <button onClick={() => setAbiertoAnalizar(null)} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>Cancelar</button>
                     </div>
@@ -7633,34 +7667,11 @@ function RawkuOnboardingInterna({
                         <div className="rounded-xl p-3" style={{ background: PAPEL }}>
                           <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>ESPECIE</p>
                           <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
-                            {/* ⚠️ CORREGIDO (5 agosto, madrugada): si la
-                                especie solo tiene 1 alimento, pulsarla ya
-                                lo elige directamente -- antes siempre
-                                navegaba a un submenú de un solo elemento. */}
-                            {Object.entries(categoriasDisponibles[cat.nombre] || {}).map(([especie, items]) => {
-                              const unico = items.length === 1;
-                              return (
-                                <button key={especie}
-                                  onClick={() => unico ? elegirAlimento(cat.nombre, items[0]) : setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie })}
-                                  className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
-                                  <span>{unico ? items[0] : especie}</span>
-                                  {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL: "2 tipos"
-                                      en texto pequeño y gris era muy fácil de no ver, y este
-                                      botón se veía casi idéntico al de una especie con un solo
-                                      alimento (que SÍ selecciona directamente al pulsar) --
-                                      alguien podía pensar que ya había elegido cuando en
-                                      realidad este botón solo abre un paso más. Ahora se ve
-                                      claramente como "esto navega a otro sitio", con flecha y
-                                      color destacado, no como una selección ya hecha. */}
-                                  {!unico && (
-                                    <span className="flex items-center gap-1 shrink-0" style={{ color: VIOLETA }}>
-                                      <span className="text-[11px] font-semibold" style={{ fontFamily: "monospace" }}>{items.length} tipos</span>
-                                      <ChevronRight size={14} />
-                                    </span>
-                                  )}
-                                </button>
-                              );
-                            })}
+                            <ListaDeEspecies
+                              porEspecie={categoriasDisponibles[cat.nombre]}
+                              onElegir={(alimento) => elegirAlimento(cat.nombre, alimento)}
+                              onAbrir={(especie) => setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie })}
+                            />
                           </div>
                           <button onClick={() => setEstadoAbiertoPersonalizar(null)} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>Cancelar</button>
                         </div>
@@ -7904,34 +7915,13 @@ function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, 
         <div className="rounded-xl p-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
           <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{abierto.categoria.toUpperCase()}</p>
           <div className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
-            {/* ⚠️ CORREGIDO (5 agosto, madrugada): mismo ajuste que en
-                Personalizar y el editor -- si la especie solo tiene 1
-                alimento, pulsarla ya lo añade directamente. */}
-            {Object.keys(CATS[abierto.categoria]).filter((especie) => !especiesYaExcluidas.has(especie)).map((especie) => {
-              const items = CATS[abierto.categoria][especie];
-              const unico = items.length === 1;
-              return (
-                <button
-                  key={especie}
-                  onClick={() => unico
-                    ? onAnadir({ categoria: abierto.categoria, alimento: items[0] })
-                    : elegirEspecie(abierto.categoria, especie)}
-                  className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between"
-                  style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}
-                >
-                  <span>{unico ? items[0] : especie}</span>
-                  {/* ⚠️ CORREGIDO (5 agosto, madrugada) — mismo arreglo que en
-                      Personalizar: indicador claro de navegación, no un texto
-                      pequeño fácil de pasar por alto. */}
-                  {!unico && (
-                    <span className="flex items-center gap-1 shrink-0" style={{ color: VIOLETA }}>
-                      <span className="text-[11px] font-semibold" style={{ fontFamily: "monospace" }}>{items.length} tipos</span>
-                      <ChevronRight size={14} />
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+            <ListaDeEspecies
+              porEspecie={CATS[abierto.categoria]}
+              ocultar={(especie) => especiesYaExcluidas.has(especie)}
+              onElegir={(alimento) => onAnadir({ categoria: abierto.categoria, alimento })}
+              onAbrir={(especie) => elegirEspecie(abierto.categoria, especie)}
+              fondo={PAPEL}
+            />
           </div>
           <button onClick={() => setEstadoAbierto({ grupo: idGrupo, categoria: null, especie: null })} className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>← Otra categoría</button>
         </div>
