@@ -161,6 +161,13 @@ export function filaDePerro(userId, perfil, extras = {}) {
     // pero se guardan bien igualmente, que para eso está la columna.
     peso_adulto_esperado: extras.pesoAdultoEsperado ?? (perfil.pesoAdultoEsperado ? Number(perfil.pesoAdultoEsperado) : null),
     condicion_idx: perfil.condicionIdx ?? 2,
+    // ⚠️ AÑADIDO (25 agosto) — EL PESO OBJETIVO SE GUARDA EN KILOS.
+    // Antes se recalculaba en cada pantalla dividiendo el peso de HOY, así
+    // que un perro «Rellenito» tenía siempre exactamente el mismo ratio
+    // (1,20) pesara lo que pesara: el objetivo bajaba con él y la dieta no
+    // podía terminar nunca. Medido: 7,0 kg -> 263 kcal, 6,5 -> 249,
+    // 6,2 -> 240. Adelgazaba y le dábamos menos comida.
+    peso_objetivo_kg: perfil.pesoObjetivoKg > 0 ? Number(perfil.pesoObjetivoKg) : null,
     etapa: extras.etapa ?? perfil.etapa ?? null,
     tamano: perfil.raza?.tamano || perfil.tamanoManual || perfil.tamano || null,
     sexo: perfil.sexo,
@@ -186,29 +193,38 @@ export function filaDePerro(userId, perfil, extras = {}) {
   }
 }
 
+// ⚠️ Reconoce el error de PostgREST cuando la columna no existe todavía.
+// Hace falta porque `peso_objetivo_kg` es nueva: si el código llega a
+// producción antes que el ALTER TABLE, guardar un perro fallaría ENTERO y
+// la app se quedaría sin poder guardar la ficha -- justo lo que no nos
+// podemos permitir. Así se guarda todo lo demás y el objetivo empieza a
+// persistirse solo, en cuanto exista la columna.
+const esColumnaQueNoExiste = (error, columna) => {
+  const texto = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
+  return error?.code === 'PGRST204' || texto.includes(columna)
+}
+
 export async function guardarPerro(userId, perfil, extras = {}) {
   const payload = filaDePerro(userId, perfil, extras)
 
-  if (perfil.id) {
-    // actualizar perro existente
-    const { data, error } = await supabase
-      .from('perros')
-      .update(payload)
-      .eq('id', perfil.id)
-      .select()
-      .single()
-    if (error) throw error
-    return data
-  } else {
-    // crear perro nuevo
-    const { data, error } = await supabase
-      .from('perros')
-      .insert(payload)
-      .select()
-      .single()
-    if (error) throw error
-    return data
+  const escribir = async (fila) => perfil.id
+    ? supabase.from('perros').update(fila).eq('id', perfil.id).select().single()
+    : supabase.from('perros').insert(fila).select().single()
+
+  let { data, error } = await escribir(payload)
+
+  if (error && esColumnaQueNoExiste(error, 'peso_objetivo_kg')) {
+    // Falta el ALTER TABLE. Se guarda el resto: perder el peso objetivo es
+    // molesto, no poder guardar la ficha es que la app no sirve.
+    const { peso_objetivo_kg, ...sinLaColumna } = payload
+    void peso_objetivo_kg
+    console.warn('[rawku] la columna peso_objetivo_kg no existe todavía en Supabase; ' +
+                 'se guarda el resto de la ficha. Falta el ALTER TABLE.')
+    ;({ data, error } = await escribir(sinLaColumna))
   }
+
+  if (error) throw error
+  return data
 }
 
 export async function eliminarPerro(perroId) {
