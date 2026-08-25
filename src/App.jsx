@@ -801,7 +801,19 @@ const PATOLOGIAS = [
   // al servidor -- ya se sabe en el cliente que no va a funcionar.
   { key: "estruvita", label: "Cálculos de estruvita / cistina / urato", segura: false,
     aviso: "Estos cálculos dependen del pH de la orina y de analíticas que la app no puede ver. Una dieta mal ajustada aquí puede empeorarlos, así que no generamos menú automático: necesitas una dieta pautada por tu veterinario." },
-  { key: "hepatopatia", label: "Hepatopatía (enfermedad hepática)", segura: true },
+  // ⚠️ CAMBIADO A `segura: false` (25 agosto), con la revisión clínica.
+  // La restricción de cobre que hace falta en una hepatopatía por acúmulo
+  // (1,2 mg/1000 kcal, Today's Veterinary Practice 2023) está POR DEBAJO
+  // del mínimo de cobre que FEDIAF exige a cualquier perro (2,08). O sea
+  // que la dieta que trata está por debajo de la que alimenta: no es que
+  // el catálogo se quede corto, es que no se puede hacer con comida sin
+  // suplementación dirigida.
+  //
+  // Va aquí y no solo en el servidor porque el aviso tiene que saltar al
+  // ELEGIR la patología, no después de recorrer todo el generador para
+  // que al final no salga menú. Mismo patrón que estruvita.
+  { key: "hepatopatia", label: "Hepatopatía (enfermedad hepática)", segura: false,
+    aviso: "La restricción de cobre que hace falta en una hepatopatía por acúmulo está POR DEBAJO del mínimo de cobre que necesita cualquier perro para estar sano. No es algo que se pueda resolver eligiendo mejor los alimentos: hace falta supervisión veterinaria con suplementación dirigida, así que no generamos menú automático." },
   { key: "cardiopatia", label: "Cardiopatía", segura: true },
   { key: "diabetes", label: "Diabetes mellitus", segura: true },
   { key: "hipotiroidismo", label: "Hipotiroidismo", segura: true },
