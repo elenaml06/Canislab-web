@@ -2778,10 +2778,16 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   //
                   // Vaciar el menú es cosa de quien lo tiene: lo hace
                   // `onRegenerarConAlimentos` en el componente de fuera.
-                  const alimentosActuales = (menus[0]?.items || []).map(i => i.alimento).filter(Boolean);
+                  // ⚠️ LOS ALIMENTOS NO SE SACAN DE AQUÍ (25 agosto). Se
+                  // intentó (`menus.map(...)`) y estaba mal: abriendo
+                  // Evolución desde el panel, esta vista recibe
+                  // MENUS_EJEMPLO de relleno, así que se habrían mandado
+                  // los alimentos del EJEMPLO como si fueran los del
+                  // perro. Los menús de verdad los tiene el componente de
+                  // fuera; que los lea de ahí.
                   setAvisoPesoActualizado(false);
                   setSeccionActiva(null);
-                  onRegenerarConAlimentos(alimentosActuales);
+                  onRegenerarConAlimentos();
                 }}
                 className="w-full py-2 rounded-lg text-sm"
                 style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
@@ -3605,7 +3611,16 @@ function RawkuOnboardingInterna({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [menuReal, setMenuReal] = useState(null);
-  const [alimentosAPreservar, setAlimentosAPreservar] = useState([]);
+  // ⚠️ REHECHO (25 agosto) — UNA LISTA POR MENÚ. CASO REAL: "he lanzado el
+  // regenerar menús cambiando el peso del perro desde evolución, pero me
+  // los ha cambiado BASTANTE, el primero lo ha respetado un poco más pero
+  // el segundo... prácticamente nada".
+  //
+  // Era UNA sola lista, sacada de `menus[0]`, y se mandaba igual para
+  // todos: el menú 2 recibía los alimentos del 1. Medido con dos menús de
+  // 6 alimentos: el 1 conservaba 3 de 6 y el 2 solo 2 de 6, que es
+  // exactamente "el primero un poco más, el segundo prácticamente nada".
+  const [alimentosAPreservarPorMenu, setAlimentosAPreservarPorMenu] = useState([]);
   // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso, AUDITORÍA: el
   // servidor ya avisaba (no_se_pudo_forzar: true) cuando en Personalizar
   // no era viable un menú con TODO lo elegido a mano, y tenía que
@@ -3724,14 +3739,16 @@ function RawkuOnboardingInterna({
   // `() => {}`. Mismo botón, misma pantalla, dos comportamientos. Aquí
   // también se sale de la sección: si no, se regenera por detrás y sigues
   // mirando Evolución sin enterarte.
-  const regenerarConAlimentos = (alimentos) => {
-    // ⚠️ "Con los mismos ingredientes" solo tiene sentido si hay un menú de
-    // verdad del que sacarlos. Abriendo Evolución desde el panel sin haber
-    // hecho ninguno, la vista recibe MENUS_EJEMPLO de relleno -- preservar
-    // ESO sería hacerle al perro un menú con los alimentos del ejemplo.
-    // Sin menú, se calcula de cero con el peso nuevo, que es lo que se ha
-    // pedido de verdad.
-    setAlimentosAPreservar(menuReal && menuReal.length ? (alimentos || []) : []);
+  const regenerarConAlimentos = () => {
+    // ⚠️ Los alimentos salen de `menuReal`, que es EL menú del perro, y no
+    // de lo que tenga pintado la vista: abriendo Evolución desde el panel,
+    // la vista recibe MENUS_EJEMPLO de relleno. Sin menú de verdad, lista
+    // vacía y se calcula de cero con el peso nuevo, que es lo que se ha
+    // pedido.
+    setAlimentosAPreservarPorMenu(
+      (menuReal || []).map((r) => Object.entries(r.menu || r.gramos || {})
+                                        .filter(([, g]) => g > 0)
+                                        .map(([n]) => n)));
     setMenuReal(null);
     setSeccionSuelta(null);
     setFase("generador");
@@ -5489,7 +5506,7 @@ function RawkuOnboardingInterna({
     if (!(fase === "generador" && pantalla === "resultado" && derReal)) return;
     let cancelado = false;
     setMenuCargando(true);
-    setAlimentosAPreservar([]); // limpiar tras usar — no afectar a futuras generaciones
+    setAlimentosAPreservarPorMenu([]); // limpiar tras usar — no afectar a futuras generaciones
     setMenuError(null);
     setDiagnosticoMenus(null);
     setNecesitaVeterinario(false);
@@ -5506,16 +5523,25 @@ function RawkuOnboardingInterna({
     // elecciones, en vez de repetir siempre las del último editado).
     // Por defecto usa configPersonalizar (el activo ahora mismo), así
     // que las llamadas que ya existían sin este parámetro no cambian.
-    const pedirMenu = (especiesYaUsadas = [], configDeEsteMenu = configPersonalizar) =>
+    const pedirMenu = (especiesYaUsadas = [], configDeEsteMenu = configPersonalizar, indice = 0) =>
       fetchConTimeout(`${API_BASE}/menu/v2`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           modo: modo || "automatico",
           nombres_alimentos:
-            alimentosAPreservar.length > 0 ? alimentosAPreservar :
             modo === "personalizar" ? eleccionesDelUsuario(modo, configDeEsteMenu) :
             [],
+          // ⚠️ AQUÍ ESTABA EL FALLO (25 agosto). Los alimentos a conservar
+          // se metían arriba, en `nombres_alimentos` -- y el servidor SOLO
+          // mira esa lista en los modos "personalizar" y "aprovechar".
+          // Esta pantalla manda "automatico", que la ignora. La petición
+          // salía perfecta y el servidor la tiraba entera.
+          //
+          // `preferir_alimentos` vale en cualquier modo y es una
+          // preferencia, no una imposición: abarata usar esos alimentos,
+          // nunca puede volver el menú imposible ni saltarse un requisito.
+          preferir_alimentos: alimentosAPreservarPorMenu[indice] || null,
           forzar_presencia: eleccionesDelUsuario(modo, configDeEsteMenu),
           restringir_especie: restriccionesDeEspecie(modo, configDeEsteMenu),
           der_objetivo: derReal,
@@ -5606,6 +5632,8 @@ function RawkuOnboardingInterna({
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
             especies_excluidas: Array.from(especiesExcluidas),
             evitar_especies: [],
+            // Una lista por menú, en orden. Vacío = semana nueva de cero.
+            preferir_por_menu: alimentosAPreservarPorMenu.length ? alimentosAPreservarPorMenu : null,
             nombres_excluidos: Array.from(alimentosEvitados),
             peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
             patologias: perfil?.patologias || [],
@@ -5665,7 +5693,14 @@ function RawkuOnboardingInterna({
           // así cada menú lleva de verdad lo que se eligió para él, en
           // vez de repartir las mismas elecciones entre todos.
           const configDeEsteMenu = modo === "personalizar" ? (configsPorMenu[i] || configPersonalizar) : configPersonalizar;
-          const data = await pedirMenu(especiesUsadas, configDeEsteMenu);
+          // ⚠️ Conservando NO se rota (25 agosto): `especiesUsadas` está
+          // para que dos menús automáticos no salgan con la misma
+          // proteína, pero al regenerar la variedad ya la da el menú
+          // original -- evitar la especie del menú 1 es empujar al menú 2
+          // fuera de sus propios alimentos. Las dos cosas juntas se
+          // anulan: se pide conservar y se obliga a cambiar.
+          const conservando = (alimentosAPreservarPorMenu[i] || []).length > 0;
+          const data = await pedirMenu(conservando ? [] : especiesUsadas, configDeEsteMenu, i);
           if (data.factible) {
             resultados.push(data);
             registro.push({ intento: i + 1, resultado: "ok" });

@@ -186,6 +186,13 @@ export function crearFakeSupabase(opciones = {}) {
     // guardar sólo la última no distingue "los dos con lo mismo" de "cada
     // uno con lo suyo".
     peticionesMenu: [],
+    // ⚠️ AÑADIDO (25 agosto) — las peticiones a /menu/semana, que es por
+    // donde va la rotación automática de varios menús. Sin guardarlas no
+    // se puede comprobar que al regenerar tras cambiar el peso llegue
+    // `preferir_por_menu`, y ese campo es justo el que faltaba: la app lo
+    // mandaba en `nombres_alimentos`, que en modo "automatico" el servidor
+    // ignora. La petición salía perfecta y no servía de nada.
+    peticionesSemana: [],
     // Si la cuenta de prueba es Premium. Hace falta para probar lo que
     // está detrás del muro de pago (varios menús en la semana), sin tener
     // que tocar Stripe ni nada real.
@@ -260,7 +267,7 @@ export function crearFakeSupabase(opciones = {}) {
       // la lista completa.
       if (Array.isArray(cfg.perros)) estado.perros = cfg.perros.map((p) => ({ ...PERRO_DE_PRUEBA, ...p }));
       if (cfg.olvidarUltimoMenu) estado.ultimoMenuGuardado = null;
-      if (cfg.olvidarPeticionesMenu !== false) { estado.peticionesMenu = []; estado.peticionesCasa = []; }
+      if (cfg.olvidarPeticionesMenu !== false) { estado.peticionesMenu = []; estado.peticionesCasa = []; estado.peticionesSemana = []; }
       return responder(200, {
         retrasoPerrosMs: estado.retrasoPerrosMs,
         perros: estado.perros.length,
@@ -282,6 +289,7 @@ export function crearFakeSupabase(opciones = {}) {
         ultimoCambioDeCuenta: estado.ultimoCambioDeCuenta,
         peticionesCasa: estado.peticionesCasa.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesMenu: estado.peticionesMenu.map((p) => ({ ...p })),
+        peticionesSemana: estado.peticionesSemana.map((p) => JSON.parse(JSON.stringify(p))),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
           const k = String(m.perro_id);
           cuenta[k] = (cuenta[k] || 0) + 1;
@@ -503,10 +511,20 @@ export function crearFakeSupabase(opciones = {}) {
     }
     if (ruta === "/menu/semana") {
       const cuantos = Number(url.searchParams.get("numero_de_menus") || 1);
+      estado.peticionesSemana.push(JSON.parse(cuerpo || "{}"));
       return responder(200, {
         factible: true,
-        menus: Array.from({ length: cuantos },
-                          () => ({ ...MENU_FALSO, aviso_composicion: estado.avisoComposicion })),
+        // Con `menusDistintos`, cada menú lleva un alimento propio. Hace
+        // falta para poder distinguir "cada menú conserva LO SUYO" de
+        // "todos conservan lo del primero", que era el fallo real: los
+        // menús de mentira eran idénticos y las dos cosas cuadraban igual.
+        menus: Array.from({ length: cuantos }, (_, i) => ({
+          ...MENU_FALSO,
+          ...(estado.menusDistintos
+              ? { menu: { ...MENU_FALSO.menu, [`Marcador de prueba ${i + 1}`]: 100 } }
+              : {}),
+          aviso_composicion: estado.avisoComposicion,
+        })),
       });
     }
     if (ruta === "/alimentos") {
