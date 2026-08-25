@@ -8507,6 +8507,14 @@ function AuthGate() {
   // acaba de hacer. Ahí sólo se apunta el id (sin tocar `montaje`), y el
   // componente sigue vivo exactamente donde estaba.
   const [perroMontadoId, setPerroMontadoId] = useState(null);
+  // ⚠️ La MISMA información, en una referencia viva (25 agosto). Hace falta
+  // porque el componente que se desmonta al cambiar de perro se lleva una
+  // copia CONGELADA de `onPerroGuardado`, con el `perroMontadoId` que había
+  // cuando se montó. Si su guardado contesta tarde, ese callback viejo mira
+  // un valor viejo y no puede saber que ya estás en otro perro. La
+  // referencia siempre dice quién está en pantalla AHORA.
+  const perroMontadoRef = useRef(null);
+  const apuntarPerroMontado = (id) => { perroMontadoRef.current = id; setPerroMontadoId(id); };
   const [montaje, setMontaje] = useState(0);
 
   // ⚠️ AÑADIDO — ENTRAR SIN CUENTA. Pedido expreso: "necesito poder
@@ -8568,7 +8576,7 @@ function AuthGate() {
         return;
       }
       setPerros([]);
-      setPerroMontadoId(null);
+      apuntarPerroMontado(null);
       return;
     }
 
@@ -8639,7 +8647,7 @@ function AuthGate() {
           seRecuperoElRecordado: Boolean(recordado && elegido && elegido.id === recordado),
         });
         setPerros(perrosCargados);
-        setPerroMontadoId(elegido ? elegido.id : null);
+        apuntarPerroMontado(elegido ? elegido.id : null);
       })
       .catch((err) => {
         if (cargaRef.current.token !== token) return;
@@ -8649,7 +8657,7 @@ function AuthGate() {
         capturarError(err, { donde: "AuthGate.getPerros", userId: user.id });
         setMigrando(false);
         setPerros([]);
-        setPerroMontadoId(null);
+        apuntarPerroMontado(null);
       });
   };
 
@@ -8666,9 +8674,20 @@ function AuthGate() {
     // ⚠️ Antes esto era `if (!usuario ...)`: sin cuenta no se podía
     // cambiar de perro, aunque los perros existieran en el navegador.
     // `cuentaEfectiva` es la cuenta de verdad si la hay y la local si no.
-    if (!cuentaEfectiva || perroId === perroMontadoId) return;
+    //
+    // ⚠️ QUITADA LA COMPARACIÓN `perroId === perroMontadoId` (25 agosto).
+    // CASO REAL: "cuando cambio de perro la primera vez se cambia sin
+    // problema pero si quiero cambiarlo otra vez de perro sin cambiar de
+    // pantalla primero no me deja".
+    //
+    // Esa comparación no protegía de nada -- la hoja de perros ya devuelve
+    // sin hacer nada si tocas el perro que estás mirando -- y en cambio
+    // convertía cualquier desajuste de `perroMontadoId` en un botón muerto,
+    // sin error ni aviso. Si alguien elige un perro a mano, se monta ese
+    // perro y punto.
+    if (!cuentaEfectiva) return;
     recordarPerroActivo(cuentaEfectiva.id, perroId);
-    setPerroMontadoId(perroId);
+    apuntarPerroMontado(perroId);
     setMontaje((m) => m + 1);
   };
 
@@ -8677,7 +8696,7 @@ function AuthGate() {
   const anadirPerro = () => {
     if (!cuentaEfectiva) return;
     recordarPerroActivo(cuentaEfectiva.id, null);
-    setPerroMontadoId(null);
+    apuntarPerroMontado(null);
     setMontaje((m) => m + 1);
   };
 
@@ -8692,8 +8711,28 @@ function AuthGate() {
         ? lista.map((p) => (p.id === perro.id ? { ...p, ...perro } : p))
         : [...lista, perro];
     });
+
+    // ⚠️ AQUÍ ESTABA EL FALLO (25 agosto). CASO REAL: "cuando cambio de
+    // perro la primera vez se cambia sin problema pero si quiero cambiarlo
+    // otra vez de perro sin cambiar de pantalla primero no me deja".
+    //
+    // Esto apuntaba `perroMontadoId` al perro guardado SIEMPRE. Y guardar
+    // tarda: si mientras la respuesta viaja cambias de perro, esa respuesta
+    // llega de un componente que ya no está en pantalla y mueve el puntero
+    // al perro de ANTES. A partir de ahí el padre cree que estás en Nala
+    // mientras miras a Cairo, y pedir Nala no hace nada -- botón muerto,
+    // sin error, sin aviso. Reproducido con el guardado a 2,5 segundos.
+    //
+    // Adoptar el id solo tiene sentido en su caso original: acabas de CREAR
+    // un perro y todavía no hay ninguno montado. Con uno ya montado, quien
+    // decide qué perro se mira es `cambiarDePerro`, no una respuesta que
+    // llega tarde.
+    // Se mira la REFERENCIA, no el estado: este callback puede venir de un
+    // componente ya desmontado, con el estado de hace dos perros.
+    if (perroMontadoRef.current !== null && perroMontadoRef.current !== perro.id) return;
+
     if (cuentaEfectiva) recordarPerroActivo(cuentaEfectiva.id, perro.id);
-    setPerroMontadoId(perro.id);
+    apuntarPerroMontado(perro.id);
   };
 
   // Un perro se acaba de borrar. Aquí SÍ hay que remontar: el perro que
@@ -8703,7 +8742,7 @@ function AuthGate() {
     const siguiente = restantes[0] ?? null;
     setPerros(restantes);
     if (cuentaEfectiva) recordarPerroActivo(cuentaEfectiva.id, siguiente ? siguiente.id : null);
-    setPerroMontadoId(siguiente ? siguiente.id : null);
+    apuntarPerroMontado(siguiente ? siguiente.id : null);
     setMontaje((m) => m + 1);
   };
 
@@ -8723,13 +8762,13 @@ function AuthGate() {
         if (!vivo) return;
         const perrosLocales = lista ?? [];
         setPerros(perrosLocales);
-        setPerroMontadoId(perrosLocales[0]?.id ?? null);
+        apuntarPerroMontado(perrosLocales[0]?.id ?? null);
       })
       .catch((err) => {
         if (!vivo) return;
         capturarError(err, { donde: "AuthGate.getPerros(local)" });
         setPerros([]);
-        setPerroMontadoId(null);
+        apuntarPerroMontado(null);
       });
     return () => { vivo = false; };
   }, [sinCuenta, usuario, montaje]);
