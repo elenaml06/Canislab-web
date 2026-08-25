@@ -1218,6 +1218,21 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // mascotas.
   const [seccionActiva, setSeccionActiva] = useState(soloSeccion);
 
+  // ⚠️ CASO REAL ENCONTRADO (25 agosto): "desde analizar la dieta actual
+  // también hay ciertas pantallas a las que no puedo ir". Era esto, y no
+  // el panel: `seccionActiva` se estrenaba con `soloSeccion` y ahí se
+  // quedaba para siempre. Estando en Analizar y pidiendo Evolución, el
+  // padre cambiaba `soloSeccion` -- pero esta vista seguía montada, con la
+  // sección de antes puesta. El panel se abría, la entrada se pulsaba, la
+  // navegación ocurría... y la pantalla no cambiaba. Ni un error.
+  //
+  // Solo se sigue a `soloSeccion`. Cerrar la sección desde dentro
+  // (`seccionActiva = null`) tiene que poder salir, y por eso el efecto de
+  // abajo existe aparte: si éste mirara las dos, se pisarían.
+  useEffect(() => {
+    if (soloSeccion) setSeccionActiva(soloSeccion);
+  }, [soloSeccion]);
+
   // En modo "sólo una sección" no hay vista de menús detrás a la que
   // volver: cerrar la sección significa salir de aquí del todo. Así los
   // botones de "← Volver" existentes siguen valiendo sin tocarlos uno a uno.
@@ -4465,14 +4480,31 @@ function RawkuOnboardingInterna({
   // algunas pantallas del menú lateral".
   //
   // Si añades una entrada: que su acción viva AQUÍ, no dentro de una vista.
+  //
+  // ⚠️ Y NAVEGAR NO ES SOLO LLAMAR A `ir()`. CASO REAL (25 agosto): "desde
+  // la compra sigo sin poder ir a mis menús... ni a nada de nadaaaa". El
+  // panel se abría, la entrada se pulsaba y `fase` cambiaba de verdad --
+  // pero la compra es una CAPA FIJA (inset-0) que no depende de `fase`, así
+  // que seguía tapando la pantalla nueva. Navegabas bien y no lo veías.
+  //
+  // Por eso se navega SIEMPRE por aquí: cerrar todo lo que esté por encima
+  // y luego ir. Si algún día se añade otra capa fija, se cierra AQUÍ -- si
+  // no, repetirá este fallo, que no da error y parece que el botón está
+  // muerto.
+  const navegarDesdeElPanel = (op) => {
+    setMenuLigeroAbierto(false);
+    setHojaDePerrosAbierta(false);
+    setCompraAbierta(false);   // "La compra" la vuelve a abrir en su `ir()`
+    op.ir();
+  };
+
   const ENTRADAS_DEL_PANEL = [
-    // El menú recién hecho no está guardado en ninguna parte todavía, así
-    // que si se sale sin esto se pierde. Solo aparece cuando hay uno.
-    ...(menuReal && menuReal.length
-      ? [{ key: "elmenu", Icono: UtensilsCrossed, label: "El menú de la semana",
-           isPremium: false,
-           ir: () => { setFase("generador"); setPantalla("resultado"); } }]
-      : []),
+    // ⚠️ QUITADO (25 agosto) — aquí había una sexta entrada, "El menú de la
+    // semana". La puse el 24 para poder salir de las pantallas del panel
+    // después de quitarles el "← Volver". Sobra por dos motivos: ella pidió
+    // CINCO y esas cinco ("aparece el menú de la semana arriba"), y el menú
+    // recién hecho no se pierde -- se guarda solo al generarlo, así que
+    // está en "Mis menús". No había nada que rescatar.
     { key: "perfil", Icono: Dog, label: `Perfil de ${nombreMostrar}`, isPremium: false,
       ir: () => { setSeccionSuelta(null); setFase("onboarding"); } },
     { key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false,
@@ -4522,7 +4554,7 @@ function RawkuOnboardingInterna({
             return (
               <button
                 key={op.key}
-                onClick={() => { setMenuLigeroAbierto(false); op.ir(); }}
+                onClick={() => navegarDesdeElPanel(op)}
                 className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
                 style={{ background: "none", border: "none", cursor: "pointer" }}
               >
@@ -4542,7 +4574,7 @@ function RawkuOnboardingInterna({
               hay que perderlo: es informativo, no navegación. Va abajo y en
               pequeño, no como una sexta entrada. */}
           <button
-            onClick={() => { setMenuLigeroAbierto(false); setSeccionSuelta("porque"); setFase("seccion"); }}
+            onClick={() => navegarDesdeElPanel({ ir: () => { setSeccionSuelta("porque"); setFase("seccion"); } })}
             className="w-full text-left px-3 py-3 mt-2"
             style={{ background: "none", border: "none", borderTop: "1px solid #F0EAF8", cursor: "pointer" }}
           >
