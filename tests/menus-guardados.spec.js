@@ -19,6 +19,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarLaFicha, irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -32,7 +33,7 @@ async function iniciarSesion(page) {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+  await esperarLaFicha(page);
 }
 
 const abrirMenuLateral = (page) => page.getByRole("button", { name: "Menú", exact: true }).click();
@@ -63,7 +64,7 @@ test.describe("menús guardados", () => {
     await page.goto("/");
     await iniciarSesion(page);
 
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.getByRole("button", { name: "Pienso" }).click();
     await page.getByRole("button", { name: /Automático/ }).click();
     await page.getByRole("button", { name: /Generar/i }).first().click();

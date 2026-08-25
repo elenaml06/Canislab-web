@@ -19,6 +19,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -40,7 +41,7 @@ test("al cambiar de menú, las cantidades son las de ESE menú", async ({ page, 
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+  await irAlGenerador(page);
   await page.getByRole("button", { name: /^Automático/ }).click();
   // Dos menús: la semana se reparte 4 y 3 días. Con uno solo, el fallo no
   // puede existir -- hace falta que los dos duren distinto.

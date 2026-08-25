@@ -19,6 +19,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarLaFicha, irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -46,7 +47,7 @@ async function entrar(page) {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+  await esperarLaFicha(page);
 }
 
 async function elegirEnCategoria(page, categoria, especie, alimento) {
@@ -312,7 +313,7 @@ test.describe("marcar lo que ya tienes", () => {
     // así que tras recargar no hay pantalla de login que rellenar. Esperar
     // aquí el formulario era esperar algo que no llega nunca.
     await page.reload();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+    await esperarLaFicha(page);
     await abrirLaCompra(page);
 
     await expect(page.getByRole("dialog", { name: "La compra" })
@@ -357,7 +358,7 @@ test.describe("con varios menús en la semana", () => {
     });
     await page.goto("/");
     await entrar(page);
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.getByRole("button", { name: /^Personalizar/ }).click();
     await page.getByRole("button", { name: "+", exact: true }).click();   // dos menús
     await page.getByRole("button", { name: /^(Elegir los ingredientes|Personalizar los)/ }).click();
@@ -420,7 +421,7 @@ test.describe("si editas un alimento, la compra se entera", () => {
     });
     await page.goto("/");
     await entrar(page);
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.getByRole("button", { name: /^Automático/ }).click();
     await page.getByRole("button", { name: /^(Generar|Hacer)/ }).click();
     await page.getByRole("button", { name: /Perro actual/ }).waitFor();

@@ -16,6 +16,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA } from "./fake-supabase.js";
+import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 const AVISO = "Con las restricciones de este perro no había forma de incluir vísceras " +
@@ -37,7 +38,7 @@ async function iniciarSesion(page) {
 async function generarMenu(page) {
   await page.goto("/");
   await iniciarSesion(page);
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+  await irAlGenerador(page);
   await page.getByRole("button", { name: "Pienso" }).click();
   await page.getByRole("button", { name: /Automático/ }).click();
   await page.getByRole("button", { name: /Generar/i }).first().click();

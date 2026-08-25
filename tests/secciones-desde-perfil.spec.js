@@ -7,6 +7,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarLaFicha, laFichaHaCargado } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -19,7 +20,7 @@ async function iniciarSesion(page) {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+  await esperarLaFicha(page);
 }
 
 const abrirMenuLateral = (page) => page.getByRole("button", { name: "Menú", exact: true }).click();
@@ -84,9 +85,12 @@ test.describe("secciones desde el perfil", () => {
     //
     // Lo que esta prueba vigila NO ha cambiado, y es lo importante: que la
     // salida lleve a un sitio que EXISTE. Antes el botón decía "volver a
-    // los menús" y detrás no había ninguna vista de menús. Ahora el panel,
-    // en este modo, ofrece "Hacer el menú de la semana" -- que es
-    // justamente lo que hay: no un menú hecho, sino el generador.
+    // los menús" y detrás no había ninguna vista de menús. Ahora se sale
+    // por el panel al perfil del perro, que siempre existe.
+    //
+    // ⚠️ Se comprueba con una FILA de la ficha, no con el botón de hacer
+    // el menú: ese botón dejó de estar el 25 de agosto cuando entras a
+    // editar la ficha (pedido expreso), y la ficha sigue estando igual.
     await expect(page.getByRole("button", { name: /^← Volver/ })).toHaveCount(0);
 
     // ⚠️ El panel es UNO solo desde el 24 de agosto, con cinco entradas
@@ -95,7 +99,7 @@ test.describe("secciones desde el perfil", () => {
     // es el perfil del perro.
     await abrirMenuLateral(page);
     await page.getByRole("button", { name: /^Perfil de/ }).click();
-    await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
+    await expect(laFichaHaCargado(page)).toBeVisible();
   });
 });
 
@@ -132,6 +136,6 @@ test.describe("el muro de pago nunca encierra", () => {
 
     // Y hay salida.
     await page.getByRole("button", { name: /Ahora no, volver/ }).click();
-    await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
+    await expect(laFichaHaCargado(page)).toBeVisible();
   });
 });

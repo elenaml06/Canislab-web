@@ -17,6 +17,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { irAlGenerador, laFichaHaCargado } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -36,7 +37,7 @@ async function iniciarSesion(page) {
 const generador = (page) => page.getByText("Menú semanal");
 const asistentePaso1 = (page) => page.getByText("Perfil nuevo");
 // Pantalla de inicio: el perfil del perro (sus datos y sus kcal/día).
-const perfilDelPerro = (page) => page.getByRole("button", { name: /Hacer el menú de la semana/ });
+const perfilDelPerro = (page) => laFichaHaCargado(page);
 
 test.describe("login → generador", () => {
   test.beforeEach(async ({ request }) => {
@@ -58,11 +59,20 @@ test.describe("login → generador", () => {
     await expect(asistentePaso1(page)).toHaveCount(0);
   });
 
-  test("desde el perfil se llega al generador en un toque", async ({ page }) => {
+  test("desde el perfil se llega al generador", async ({ page }) => {
+    // ⚠️ CAMBIADO (25 agosto). Antes se llegaba en UN toque, con el botón
+    // "Hacer el menú de la semana" de la propia ficha. Pedido expreso:
+    // "cuando entras a editar el perfil del perro desde el menú lateral ahí
+    // es donde no tiene que estar" -- ese botón se queda solo al terminar
+    // el asistente. Hacer menús se pide desde "Mis menús".
+    //
+    // Lo que esta prueba vigila NO ha cambiado: que desde la ficha se
+    // llegue al generador y que el título sea el del perro, no "la casa".
     await page.goto("/");
     await iniciarSesion(page);
+    await expect(perfilDelPerro(page)).toBeVisible();
 
-    await perfilDelPerro(page).click();
+    await irAlGenerador(page);
 
     await expect(generador(page)).toBeVisible();
     // ⚠️ ESTA LÍNEA CAZÓ UN FALLO (23 agosto): al quitar la opción "Solo
@@ -157,5 +167,37 @@ test.describe("login → generador", () => {
     await expect(perfilDelPerro(page)).toBeVisible();
 
     expect(errores).toEqual([]);
+  });
+
+  test("editando la ficha NO se ofrece hacer el menú; terminando el asistente SÍ", async ({ page }) => {
+    // ⚠️ PEDIDO EXPRESO (25 agosto), con el matiz que hacía falta: "cuando
+    // terminas de generar por primera vez el perfil del perro sí que tienes
+    // que tener ese botón, pero cuando entras a editar el perfil del perro
+    // desde el menú lateral ahí es donde no tiene que estar".
+    //
+    // O sea que no depende de si el perro existe, sino de CÓMO has llegado
+    // a la pantalla -- y las dos pintan lo mismo. Por eso se comprueban los
+    // dos caminos aquí: comprobar solo uno dejaría pasar el otro.
+    await page.goto("/");
+    await iniciarSesion(page);
+
+    // Camino 1: la app arranca con un perro guardado. Eso es editar.
+    await expect(perfilDelPerro(page)).toBeVisible();
+    // ⚠️ El texto es el del botón DE VERDAD ("ir al generador de menús").
+    // La primera versión de esta prueba buscaba "Hacer el menú de la
+    // semana", que es como se llamaba ANTES -- y como ese texto ya no
+    // existe en ninguna parte, la comprobación pasaba siempre, también con
+    // el botón puesto. Comprobado: el sabotaje no la rompía.
+    await expect(page.getByRole("button", { name: /ir al generador de menús/ }),
+      "editando la ficha sigue saliendo el botón de hacer el menú").toHaveCount(0);
+
+    // Camino 2: entrar a la ficha desde el panel. También es editar.
+    await irAlGenerador(page);
+    await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+    await page.getByRole("dialog", { name: "Panel lateral" })
+              .getByRole("button", { name: /^Perfil de/ }).click();
+    await expect(perfilDelPerro(page)).toBeVisible();
+    await expect(page.getByRole("button", { name: /ir al generador de menús/ }),
+      "entrando a la ficha desde el panel sigue saliendo el botón").toHaveCount(0);
   });
 });
