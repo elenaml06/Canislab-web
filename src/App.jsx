@@ -4103,9 +4103,20 @@ function RawkuOnboardingInterna({
   // otro. Es lo mismo que había escondido en el panel, pero a un toque y
   // desde cualquier pantalla.
   const hojaDePerros = hojaDePerrosAbierta && (
-    <div className="fixed inset-0 z-[70] flex items-end" style={{ background: "rgba(35,21,57,0.45)" }}
+    // ⚠️ CASO REAL (24 agosto): "en el ordenador necesito que cuando se
+    // despliega esté abajo en pequeñito". En el móvil una hoja a todo lo
+    // ancho es lo natural -- ahí el ancho ES la pantalla. En un monitor de
+    // 1200px la misma hoja son 1200px de blanco para enseñar dos nombres.
+    //
+    // Se acota SOLO a partir de `sm` (640px): por debajo, el móvil se queda
+    // exactamente como estaba. Y va a la DERECHA porque es donde está la
+    // burbuja que la abre: aparecer en la esquina contraria a lo que has
+    // tocado obliga a buscarla con la vista.
+    <div className="fixed inset-0 z-[70] flex items-end justify-center sm:justify-end sm:p-6"
+         style={{ background: "rgba(35,21,57,0.45)" }}
          onClick={() => setHojaDePerrosAbierta(false)}>
-      <div role="dialog" aria-label="Tus perros" className="w-full rounded-t-3xl px-5 pt-5 pb-8"
+      <div role="dialog" aria-label="Tus perros"
+           className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl px-5 pt-5 pb-8 sm:pb-5"
            style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <p className="text-[11px] tracking-[0.14em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
