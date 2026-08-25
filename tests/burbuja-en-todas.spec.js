@@ -50,11 +50,6 @@ const laBurbuja = (page) => page.getByRole("button", { name: /Perro actual/ });
 // su pantalla tiene burbuja. Escribirla sola no valía: el bucle se enredaba
 // con las pantallas que se abren encima.
 const PANTALLAS_DEL_PANEL = [
-  // ⚠️ "El menú de la semana" NO va aquí: no es una sección, es volver a la
-  // pantalla de debajo. Se añadió al panel el 24 de agosto porque al quitar
-  // los "← Volver" de estas pantallas había que poder salir de ellas por
-  // algún sitio, y el sitio es el panel -- pedido expreso: "para algo hay
-  // una pestaña de menú para elegir a dónde te quieres mover".
   "Perfil de Nala",
   "Evolución y crecimiento",
   "Mis menús",
@@ -129,20 +124,63 @@ test.describe("el panel lateral es UNO y llega a todo", () => {
 
   test("desde cada pantalla se llega a TODAS las demás", async ({ page }) => {
     // "Y desde todas se tiene que poder abrir todas las demás sin
-    // problema". Antes no: las entradas de un panel eran acciones de una
-    // pantalla concreta, así que desde otra no hacían nada.
+    // problema".
+    //
+    // ⚠️ ESTA PRUEBA PASABA CON EL FALLO PUESTO, y por eso está reescrita.
+    // Antes solo miraba que las cinco entradas ESTUVIERAN VISIBLES en el
+    // panel. Y estaban: el panel era correcto. Lo que fallaba era lo que
+    // pasaba AL PULSARLAS.
+    //
+    // Dos fallos distintos, los dos mudos:
+    //   · Desde la compra no se movía a ningún sitio ("ni a nada de
+    //     nadaaaa"). La navegación ocurría de verdad, pero la compra es
+    //     una capa fija que no depende de `fase` y seguía tapando la
+    //     pantalla nueva.
+    //   · Desde Analizar no se podía ir a Evolución ni a Por qué Rawku:
+    //     las dos viven en la misma vista, que se quedaba montada con la
+    //     sección con la que se estrenó.
+    //
+    // En los dos casos el botón parecía muerto. Por eso ahora se PULSA y
+    // se comprueba que HAS LLEGADO, con una señal propia de cada pantalla.
     await page.goto("/");
     await entrarYGenerar(page);
 
+    // La señal de que estás en cada sitio, no de que el botón exista.
+    const LLEGADA = {
+      "Perfil de Nala": (p) => p.getByRole("button", { name: /Hacer el menú de la semana/ }),
+      "Mis menús": (p) => p.getByText(/Los menús de/),
+      "Evolución y crecimiento": (p) => p.getByText(/Evolución de Nala/),
+      // Con premium sale el analizador; sin él, el muro. Las dos valen:
+      // lo que se comprueba es haber llegado, no qué se puede hacer allí.
+      "Analizar la dieta actual": (p) =>
+        p.getByText(/Analizar la dieta actual|Analizador nutricional/).first(),
+      "La compra": (p) => p.getByRole("dialog", { name: "La compra" }),
+    };
+
+    const irA = async (destino) => {
+      await (await abrirPanel(page)).getByRole("button", { name: destino, exact: true }).click();
+    };
+
     for (const desde of ENTRADAS_DEL_PANEL) {
-      await (await abrirPanel(page)).getByRole("button", { name: desde, exact: true }).click();
-      // Ya estamos en `desde`. Desde aquí tienen que estar las cinco.
-      const panel = await abrirPanel(page);
       for (const hacia of ENTRADAS_DEL_PANEL) {
-        await expect(panel.getByRole("button", { name: hacia, exact: true }),
-          `desde «${desde}» no se puede ir a «${hacia}»`).toBeVisible();
+        if (hacia === desde) continue;
+        await irA(desde);
+        await expect(LLEGADA[desde](page), `no se llega a «${desde}» para empezar`).toBeVisible();
+
+        await irA(hacia);
+        await expect(LLEGADA[hacia](page),
+          `desde «${desde}» se pulsa «${hacia}» y no pasa nada: sigues donde estabas`)
+          .toBeVisible();
+
+        // Y lo de antes tiene que haberse ido. Sin esto, salir de la compra
+        // pasaba igual: la pantalla nueva se montaba DEBAJO y la lista de
+        // la compra seguía encima, tapándola entera.
+        if (desde === "La compra") {
+          await expect(page.getByRole("dialog", { name: "La compra" }),
+            `se ha ido a «${hacia}» pero la compra sigue tapando la pantalla`)
+            .toHaveCount(0);
+        }
       }
-      await panel.getByRole("button", { name: "Perfil de Nala", exact: true }).click();
     }
   });
 });
@@ -187,9 +225,13 @@ test.describe("la burbuja y el engranaje, en todas", () => {
       // para elegir a dónde te quieres mover". Si el panel dejara de tener
       // salida, esto se cae, que es exactamente lo que hay que vigilar:
       // sin volver Y sin salida en el panel, te quedas encerrada.
+      //
+      // ⚠️ CAMBIADO (25 agosto): antes se salía por "El menú de la semana",
+      // una sexta entrada que ya no existe -- ella pidió cinco y esas
+      // cinco. Se sale por el perfil, que es una de las cinco.
       await page.getByRole("button", { name: "Menú", exact: true }).last().click();
       await page.getByRole("dialog", { name: "Panel lateral" })
-                .getByRole("button", { name: "El menú de la semana", exact: true }).click();
+                .getByRole("button", { name: "Perfil de Nala", exact: true }).click();
     }
   });
 
@@ -214,7 +256,7 @@ test.describe("la burbuja y el engranaje, en todas", () => {
     // pantalla propia, no una sección de ésta.
     const sinCubrir = etiquetas.filter(
       (t) => !PANTALLAS_DEL_PANEL.includes(t) && t !== "La compra"
-             && t !== "Cerrar sesión" && t !== "El menú de la semana");
+             && t !== "Cerrar sesión");
 
     expect(sinCubrir,
       `El panel tiene entradas que la prueba de la burbuja no mira: ${JSON.stringify(sinCubrir)}. ` +
@@ -271,9 +313,13 @@ test.describe("la burbuja y el engranaje, en todas", () => {
       // para elegir a dónde te quieres mover". Si el panel dejara de tener
       // salida, esto se cae, que es exactamente lo que hay que vigilar:
       // sin volver Y sin salida en el panel, te quedas encerrada.
+      //
+      // ⚠️ CAMBIADO (25 agosto): antes se salía por "El menú de la semana",
+      // una sexta entrada que ya no existe -- ella pidió cinco y esas
+      // cinco. Se sale por el perfil, que es una de las cinco.
       await page.getByRole("button", { name: "Menú", exact: true }).last().click();
       await page.getByRole("dialog", { name: "Panel lateral" })
-                .getByRole("button", { name: "El menú de la semana", exact: true }).click();
+                .getByRole("button", { name: "Perfil de Nala", exact: true }).click();
     }
   });
 
