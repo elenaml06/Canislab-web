@@ -1610,7 +1610,25 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // "diasMinimoNecesario" solo se usaban para el aviso de "Algunos
   // alimentos salen a pocos gramos..." que se ha quitado -- se
   // quitan también, ya no los usa nada.
-  const [diasSeleccionados, setDiasSeleccionados] = useState(1);
+  // ⚠️ REHECHO (25 agosto) — CASO REAL ENCONTRADO: "cuando te genera varios
+  // menús y te pones a cambiar las cantidades según si es para toda la
+  // semana o para un solo día, y cambias de menú, no se refresca
+  // automáticamente la pantalla del siguiente menú: tienes que darle a
+  // algún botón para que se refresquen las cantidades".
+  //
+  // Aquí había un número de días suelto, COMPARTIDO por todas las pestañas.
+  // Y cada menú cubre los suyos: el 1 puede durar 4 días y el 2 durar 3.
+  // Estando en el menú 1 con "toda la semana" (4), al pasar al menú 2 el
+  // número se quedaba en 4 -- así que se veían las cantidades de CUATRO
+  // días de un menú que se da TRES. Ningún botón salía marcado, porque el 4
+  // no era ninguna de sus opciones, y hasta que no tocabas uno las cifras
+  // eran de otro menú. Eso no es un refresco que falta: es cocinar de más.
+  //
+  // Ahora no se guarda el número, se guarda la INTENCIÓN: "de un día" o "la
+  // tanda entera". Los días salen del menú que estés mirando, así que no
+  // pueden ser los de otro ni aunque se quiera.
+  const [verLaTanda, setVerLaTanda] = useState(false);
+  const diasSeleccionados = verLaTanda && menu.dias > 1 ? menu.dias : 1;
   const multiplicador = diasSeleccionados;
 
 
@@ -2429,7 +2447,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               return (
                 <button
                   key={op.dias}
-                  onClick={() => setDiasSeleccionados(op.dias)}
+                  onClick={() => setVerLaTanda(op.dias > 1)}
                   className="flex-1 py-2 rounded-lg text-xs"
                   style={{ background: activo ? VIOLETA : "transparent",
                            color: activo ? "#FFFFFF" : VIOLETA,
