@@ -265,6 +265,12 @@ export async function migrarLocalACuenta(userId) {
       nombre: p.nombre,
       pesoActual: p.peso_actual,
       condicionIdx: p.condicion_idx,
+      // ⚠️ Sin esta línea, al crear cuenta el perro subiría sin su peso
+      // objetivo y la app se lo recalcularía desde el peso de ese día: el
+      // perro que llevaba dos meses adelgazando volvería a empezar la
+      // dieta desde cero. Es la misma familia de fallo que la fecha de
+      // nacimiento que se perdía en silencio (ver CLAUDE.md).
+      pesoObjetivoKg: p.peso_objetivo_kg,
       sexo: p.sexo,
       castrado: p.castrado,
       actividad: p.actividad,

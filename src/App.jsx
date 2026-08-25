@@ -1116,6 +1116,91 @@ function pesoIdealDesdeCondicion(pesoActualKg, condicionIdx) {
   return Math.round(ideal * 100) / 100;
 }
 
+// ─── QUÉ PESO OBJETIVO SE USA HOY ────────────────────────────────────────────
+//
+// ⚠️ CASO REAL ENCONTRADO (25 agosto): "cree el primer menú poniendo que
+// pesaba 7 kg y que está rellenita, y luego actualicé el peso a 6.2 pero
+// sigue quedándose en rellenito, entonces sigue metiendo menos kcal".
+//
+// Tenía razón, y el fallo era peor que el olvido de actualizar la
+// condición. `pesoIdealDesdeCondicion` divide el peso de HOY, así que el
+// objetivo bajaba con el perro y el ratio quedaba clavado en 1,20 pesara lo
+// que pesara. Medido con Lola: 7,0 kg -> 263 kcal, 6,5 -> 249 (la cifra que
+// ella vio en pantalla), 6,2 -> 240, 5,9 -> 231. Adelgazaba y le dábamos
+// menos comida, para siempre: la dieta no podía terminar nunca. Y al revés
+// igual -- un perro «Flaquito» está siempre exactamente en 0,90, así que
+// engorde lo que engorde sigue en régimen de subida.
+//
+// Ahora el objetivo se fija EN KILOS cuando se marca la condición, y deja
+// de moverse. Pero un objetivo guardado puede quedarse viejo, y uno viejo
+// es más peligroso que no tener ninguno:
+//
+//   · UN CACHORRO. Un labrador marcado a los 5 kg guardaría objetivo 5. De
+//     adulto con 30 kg, el ratio sería 6 y le pondríamos una dieta de
+//     hambre de por vida. Por eso en crecimiento NO se usa objetivo
+//     ninguno, igual que hace calcularDER, y se estrena al llegar a
+//     adulto.
+//   · UNO ABANDONADO. Una ficha que lleva un año sin tocarse puede tener
+//     un objetivo que ya no se parece en nada al perro. Si el ratio se sale
+//     de una banda razonable, se descarta y se recalcula -- y la pantalla
+//     de Evolución pide confirmarlo.
+//
+// Devuelve { kg, esViejo, esCalculadoAlVuelo } para que la pantalla pueda
+// decir de dónde sale el número en vez de enseñarlo a secas.
+const RATIO_MINIMO_CREIBLE = 0.55;
+const RATIO_MAXIMO_CREIBLE = 1.60;
+
+function objetivoVigente(perfil, etapa) {
+  const peso = Number(perfil?.pesoActual);
+  if (!(peso > 0)) return { kg: null, esViejo: false, esCalculadoAlVuelo: false };
+
+  // En crecimiento el peso cambia por definición: no hay objetivo que fijar.
+  if (etapa === "cachorro_joven" || etapa === "cachorro_crecimiento") {
+    return { kg: null, esViejo: false, esCalculadoAlVuelo: false };
+  }
+
+  const guardado = Number(perfil?.pesoObjetivoKg);
+  if (guardado > 0) {
+    const ratio = peso / guardado;
+    if (ratio >= RATIO_MINIMO_CREIBLE && ratio <= RATIO_MAXIMO_CREIBLE) {
+      return { kg: guardado, esViejo: false, esCalculadoAlVuelo: false };
+    }
+    // Se sale de la banda: el objetivo es de otra época del perro.
+    return {
+      kg: pesoIdealDesdeCondicion(peso, perfil.condicionIdx),
+      esViejo: true,
+      esCalculadoAlVuelo: true,
+    };
+  }
+
+  // Nunca se ha fijado (fichas de antes del 25 de agosto).
+  return {
+    kg: pesoIdealDesdeCondicion(peso, perfil.condicionIdx),
+    esViejo: false,
+    esCalculadoAlVuelo: true,
+  };
+}
+
+// Cuánto le falta para llegar, y si conviene avisar. El aviso salta ANTES
+// de cruzar el umbral de 1,10, no después: al cruzarlo la ración pega un
+// salto grande (de dieta de bajada a mantenimiento), y lo que toca en ese
+// momento es volver a mirar al perro, no que le cambie la comida sin más.
+const UMBRAL_FIN_DE_DIETA = 1.10;
+const UMBRAL_AVISO_CERCA = 1.15;
+
+function comoVaLaDieta(perfil, etapa) {
+  const { kg } = objetivoVigente(perfil, etapa);
+  const peso = Number(perfil?.pesoActual);
+  if (!(kg > 0) || !(peso > 0)) return null;
+  const ratio = peso / kg;
+  return {
+    objetivoKg: kg,
+    ratio,
+    enBajada: ratio >= UMBRAL_FIN_DE_DIETA,
+    cerca: ratio >= UMBRAL_FIN_DE_DIETA && ratio < UMBRAL_AVISO_CERCA,
+  };
+}
+
 function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones = {}) {
   if (!pesoActualKg || pesoActualKg <= 0) return null;
   const { pesoAdultoKg, pesoIdealKg, raza, nCachorros, semanaLactancia = 3,
@@ -1292,6 +1377,16 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   useEffect(() => {
     if (soloSeccion && seccionActiva === null) onVolver?.();
   }, [soloSeccion, seccionActiva, onVolver]);
+  // ⚠️ AÑADIDO (25 agosto) — al pesar hay que volver a mirar al perro.
+  // CASO REAL: "cree el primer menú poniendo que pesaba 7 kg y que está
+  // rellenita, y luego actualicé el peso a 6.2 pero sigue quedándose en
+  // rellenito, entonces sigue metiendo menos kcal... si solo cambia el peso
+  // y no cambia eso porque no se acuerda pues es un problema".
+  //
+  // Se pregunta DESPUÉS de guardar el peso, no antes: el peso ya está a
+  // salvo pase lo que pase, y la pregunta no bloquea nada.
+  const [preguntarCondicion, setPreguntarCondicion] = useState(false);
+  const [objetivoConfirmado, setObjetivoConfirmado] = useState(false);
   const [semanaConfirmada, setSemanaConfirmada] = useState(false);
   const [dietaAnalizar, setDietaAnalizar] = useState([]);
   const [abiertoAnalizar, setAbiertoAnalizar] = useState(null);
@@ -2755,6 +2850,73 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               pueden necesitar hasta un 38% más o menos. Pésalo cada 2-3 semanas y ajusta
               la cantidad según cómo lo veas.
             </p>
+
+            {/* ⚠️ AÑADIDO (25 agosto) — EL PESO OBJETIVO, A LA VISTA. Estaba
+                calculado por dentro y no se enseñaba en ninguna parte, así
+                que nadie podía notar que se movía. Y se movía: bajaba con el
+                perro, un 20% por debajo de donde estuviera, y por eso la
+                dieta no terminaba nunca. Un número que decide las kcal no
+                puede estar escondido. */}
+            {(() => {
+              const obj = objetivoVigente(perfil, etapaCalculada);
+              if (!(obj.kg > 0)) return null;   // en crecimiento no hay objetivo
+              const dieta = comoVaLaDieta(perfil, etapaCalculada);
+              const hayQueConfirmar = obj.esCalculadoAlVuelo && !objetivoConfirmado;
+              return (
+                <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
+                  <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                    Peso objetivo:{" "}
+                    <b style={{ color: TINTA }}>{String(obj.kg).replace(".", ",")} kg</b>
+                    {dieta?.enBajada && <span style={{ color: ROSA }}> · ración de bajada</span>}
+                  </p>
+
+                  {/* Fichas de antes de que el objetivo se guardara, y las
+                      que traían uno que ya no se parece al perro. Se enseña
+                      el número y se pide confirmarlo en vez de aplicarlo a
+                      la callada: de él salen las kcal. */}
+                  {hayQueConfirmar && (
+                    <div className="mt-2">
+                      <p className="text-[11px] leading-snug mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                        {obj.esViejo
+                          ? `El objetivo que había guardado ya no cuadra con lo que pesa hoy, así que está recalculado con «${CONDICIONES[perfil?.condicionIdx ?? 2].label}».`
+                          : `Sale de su peso de hoy y de «${CONDICIONES[perfil?.condicionIdx ?? 2].label}». Confírmalo y dejará de moverse cada vez que lo peses.`}
+                      </p>
+                      <button
+                        aria-label="Confirmar el peso objetivo"
+                        onClick={() => {
+                          set("pesoObjetivoKg", obj.kg);
+                          setObjetivoConfirmado(true);
+                          if (usuario && perfil?._id) {
+                            const ficha = { ...perfil, pesoObjetivoKg: obj.kg, id: perfil._id };
+                            const d = datosDeUnPerro(ficha);
+                            guardarPerro(usuario.id, ficha,
+                              { etapa: d.etapaCalculada, pesoAdultoEsperado: d.pesoAdultoEsperado })
+                              .then((g) => { if (g?.id) onPerroGuardado(g); })
+                              .catch((err) => capturarError(err, { donde: "confirmarObjetivo" }));
+                          }
+                        }}
+                        className="px-3 py-1.5 rounded-lg text-xs"
+                        style={{ background: VIOLETA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>
+                        Confirmar {String(obj.kg).replace(".", ",")} kg
+                      </button>
+                    </div>
+                  )}
+
+                  {/* ⚠️ EL AVISO DE QUE SE ACERCA. Al cruzar el objetivo la
+                      ración pega un salto grande -- de dieta de bajada a
+                      mantenimiento -- y lo que toca en ese momento no es que
+                      le cambie la comida sin más, es volver a mirar al perro.
+                      Por eso se avisa ANTES de cruzarlo, no después. */}
+                  {dieta?.cerca && !hayQueConfirmar && (
+                    <p className="text-[11px] mt-2 leading-snug px-2 py-2 rounded-lg"
+                       style={{ background: "#FFF7E8", border: "1px solid #F5DFA8", color: "#7A5C00", fontFamily: fontBody }}>
+                      {nombrePerro} está cerca de su peso objetivo. Cuando llegue, mira otra vez
+                      cómo lo ves: la ración pasa de bajada a mantenimiento y sube bastante de golpe.
+                    </p>
+                  )}
+                </div>
+              );
+            })()}
           </div>
           <div className="flex gap-2 mb-2">
             <input type="number" inputMode="decimal" value={nuevoPeso} onChange={(e) => setNuevoPeso(e.target.value)} placeholder="ej. 18.5"
@@ -2764,6 +2926,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 set("pesoActual", nuevoPeso);
                 setNuevoPeso("");
                 setAvisoPesoActualizado(true);
+                setPreguntarCondicion(true);
                 // ⚠️ CORREGIDO — CASO REAL: pesar al perro aquí decía
                 // "✅ Peso actualizado" pero NO lo guardaba nunca. Este
                 // `usuario` no existía en esta pantalla: VistaMenus no lo
@@ -2787,6 +2950,67 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             }}
               className="px-5 rounded-xl" style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>Guardar</button>
           </div>
+          {/* ⚠️ LA PREGUNTA DEL 25 DE AGOSTO. De la condición salen las kcal:
+              con «Rellenito» se calcula una dieta de bajada. Si el peso
+              cambia y la condición no, seguimos dándole de comer como al
+              perro de hace tres meses. Por eso al pesar se vuelve a
+              preguntar, con la respuesta anterior ya marcada.
+
+              Cualquier respuesta REHACE el peso objetivo con el peso que
+              se acaba de meter -- también si eliges la misma de antes,
+              porque "sigue rellenita, ahora con 6,2 kg" es información
+              nueva, no una repetición. Lo que no se puede es que el
+              objetivo se mueva sin que nadie haya mirado al perro: eso era
+              el fallo. */}
+          {preguntarCondicion && (
+            <div className="rounded-xl p-3 mb-2" style={{ background: "#FFFFFF", border: "1.5px solid #D8CFEC" }}>
+              <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                ¿Cómo ves a {nombrePerro} ahora?
+              </p>
+              <p className="text-[11px] mb-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                De esto salen las kcal, no solo del peso. Si ya no le sobra, hay que decirlo
+                aquí o le seguiremos dando una ración de bajada.
+              </p>
+              <div className="flex flex-col gap-1.5">
+                {CONDICIONES.map((c, idx) => {
+                  const puesta = idx === perfil?.condicionIdx;
+                  return (
+                    <button key={c.label}
+                      aria-label={`Ahora está: ${c.label}`}
+                      onClick={() => {
+                        const peso = Number(perfil?.pesoActual);
+                        const objetivo = pesoIdealDesdeCondicion(peso, idx);
+                        set("condicionIdx", idx);
+                        set("condicionTocado", true);
+                        set("pesoObjetivoKg", objetivo);
+                        setPreguntarCondicion(false);
+                        setObjetivoConfirmado(true);
+                        if (usuario && perfil?._id) {
+                          const ficha = { ...perfil, condicionIdx: idx, pesoObjetivoKg: objetivo, id: perfil._id };
+                          const d = datosDeUnPerro(ficha);
+                          guardarPerro(usuario.id, ficha,
+                            { etapa: d.etapaCalculada, pesoAdultoEsperado: d.pesoAdultoEsperado })
+                            .then((g) => { if (g?.id) onPerroGuardado(g); })
+                            .catch((err) => capturarError(err, { donde: "condicionAlPesar" }));
+                        }
+                      }}
+                      className="text-left px-3 py-2 rounded-lg text-sm flex items-center justify-between"
+                      style={{
+                        background: puesta ? "#F0EBF8" : PAPEL,
+                        border: `1.5px solid ${puesta ? VIOLETA : "transparent"}`,
+                        color: TINTA, fontFamily: fontBody,
+                      }}>
+                      <span>{c.label}</span>
+                      <span className="text-[10px] text-right ml-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                        {c.detalle}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {avisoPesoActualizado ? (
             <div className="rounded-xl p-3 mb-2" style={{ background: "#F0EBF8", border: "1.5px solid #D8CFEC" }}>
               <p className="text-xs mb-2" style={{ color: TINTA, fontFamily: fontBody }}>
@@ -3413,6 +3637,11 @@ function perfilDesdeSupabase(p) {
     pesoActual: p.peso_actual ? String(p.peso_actual) : "",
     condicionIdx: p.condicion_idx ?? 2,
     condicionTocado: true,
+    // Puede no venir: las fichas de antes del 25 de agosto no lo tienen, y
+    // tampoco viene si la columna aún no existe en Supabase. En los dos
+    // casos `objetivoVigente` lo calcula al vuelo y Evolución pide
+    // confirmarlo.
+    pesoObjetivoKg: p.peso_objetivo_kg ?? null,
     actividadIdx: p.actividad === "alta" ? 2 : p.actividad === "baja" ? 0 : 1,
     actividadTocado: true,
     esterilizado: p.castrado ? "si" : "no",
@@ -3474,10 +3703,16 @@ function datosDeUnPerro(perfil) {
     perfil.raza?.pesoMin, perfil.raza?.pesoMax
   ) || pesoAdultoMedioRaza;
   const etapaCalculada = determinarEtapa(edad, pesoAdultoEsperado);
+  // ⚠️ `objetivoVigente` y no `pesoIdealDesdeCondicion` (25 agosto): el
+  // objetivo se fija en kilos al marcar la condición y deja de moverse. Ver
+  // el comentario largo de esa función -- antes bajaba con el perro y la
+  // dieta no podía terminar nunca. Este es el ÚNICO sitio donde se calcula
+  // el DER de un perro, así que con cambiarlo aquí cambia en toda la app.
+  const objetivo = objetivoVigente(perfil, etapaCalculada);
   const derReal = calcularDER(Number(perfil.pesoActual), etapaCalculada, perfil.actividadIdx,
       perfil.esterilizado, {
         pesoAdultoKg: pesoAdultoEsperado,
-        pesoIdealKg: pesoIdealDesdeCondicion(Number(perfil.pesoActual), perfil.condicionIdx),
+        pesoIdealKg: objetivo.kg,
         raza: perfil.raza?.nombre,
         machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
       });
@@ -3485,6 +3720,7 @@ function datosDeUnPerro(perfil) {
   return {
     edad, especiesExcluidas, alimentosEvitados, pesoAdultoEsperado,
     etapaCalculada, etapaLabel: ETAPA_LABEL[etapaCalculada] || "Adulto", derReal,
+    objetivo, dieta: comoVaLaDieta(perfil, etapaCalculada),
   };
 }
 
@@ -3599,6 +3835,7 @@ function RawkuOnboardingInterna({
       pesoActual: "",
       condicionIdx: 2,
       condicionTocado: true,
+      pesoObjetivoKg: null,
       actividadIdx: 1,
       actividadTocado: true,
       esterilizado: null,
@@ -6102,7 +6339,16 @@ function RawkuOnboardingInterna({
             <div className="flex items-baseline gap-2">
               <input
                 type="number" inputMode="decimal" value={perfil.pesoActual}
-                onChange={(e) => set("pesoActual", e.target.value)}
+                onChange={(e) => {
+                  // ⚠️ EN LA FICHA el peso y la condición se dicen JUNTOS
+                  // -- el deslizador está dos dedos más abajo -- así que
+                  // aquí el objetivo se recalcula. En Evolución NO: allí
+                  // una pesada es una pesada, y si el objetivo se moviera
+                  // con ella volveríamos al fallo del 25 de agosto.
+                  set("pesoActual", e.target.value);
+                  set("pesoObjetivoKg",
+                      pesoIdealDesdeCondicion(Number(e.target.value), perfil.condicionIdx));
+                }}
                 placeholder="0"
                 className="text-3xl pb-2 outline-none bg-transparent w-28"
                 style={{ color: TINTA, fontFamily: fontDisplay, borderBottom: `2px solid ${perfil.pesoActual ? VIOLETA : "#E3DAF0"}` }}
@@ -6121,7 +6367,18 @@ function RawkuOnboardingInterna({
             </div>
             <input
               type="range" className="cnl-slider mb-3" min={0} max={4} step={1} value={perfil.condicionIdx}
-              onChange={(e) => { set("condicionIdx", Number(e.target.value)); set("condicionTocado", true); }}
+              onChange={(e) => {
+                const idx = Number(e.target.value);
+                set("condicionIdx", idx);
+                set("condicionTocado", true);
+                // ⚠️ AQUÍ SE FIJA EL OBJETIVO (25 agosto). La condición es
+                // una observación hecha EN UN MOMENTO, junto a un peso: de
+                // las dos juntas sale el objetivo, y a partir de ahí el
+                // objetivo ya no se mueve aunque el perro sí. Antes se
+                // recalculaba en cada pantalla dividiendo el peso de hoy,
+                // y por eso la dieta no podía terminar nunca.
+                set("pesoObjetivoKg", pesoIdealDesdeCondicion(Number(perfil.pesoActual), idx));
+              }}
             />
             <Puntitos total={5} activo={perfil.condicionIdx} tocado={perfil.condicionTocado} />
             <p className="text-center" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>{actual.label}</p>
