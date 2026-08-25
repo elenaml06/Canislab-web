@@ -203,17 +203,59 @@ export async function esPremium(userId) {
 // Supabase: el `perro_id` local (local-xxx) no existe allí, así que
 // copiarlo tal cual dejaría los menús huérfanos — guardados, sin dar
 // error, e invisibles para siempre porque getMenus filtra por perro.
+//
+// ⚠️ AÑADIDO (24 agosto) — NO SE DUPLICAN LOS QUE YA ESTÁN. CASO REAL:
+// "estaba sin perfil creando a Cairo y eso, y luego he iniciado sesión, y
+// tenía dos Cairo y un Rufo... porque en mi perfil ya tenía creado Cairo y
+// Rufo".
+//
+// Esto subía TODOS los perros del navegador sin mirar si ya estaban en la
+// cuenta, y el caso normal es justo ése: pruebas la app sin cuenta, haces
+// tu perro, y entras en la cuenta que YA lo tiene. A partir de ahí tienes
+// dos fichas del mismo animal, cada una con sus menús y sus pesos, y
+// ninguna es "la buena".
+//
+// POR QUÉ SE QUEDA EL DE LA CUENTA Y NO EL DEL MÓVIL: el de la cuenta
+// tiene historia -- menús guardados, pesos apuntados, una fecha de alta.
+// El del móvil casi siempre es el de la prueba de esa tarde. Pisar el
+// primero con el segundo sería cambiar datos buenos por datos de prueba.
+//
+// Y SE DICE. Lo del móvil NO sube, así que quien lo hizo tiene derecho a
+// enterarse en el momento, no días después al no encontrar su ficha. Por
+// eso se devuelve `noSubidos`, y quien llama lo enseña.
+//
+// Se compara por NOMBRE, normalizado (sin mayúsculas, sin acentos, sin
+// espacios de sobra): es lo único que hay en común -- el id local no
+// existe en Supabase. Dos perros distintos con el mismo nombre en la misma
+// casa es raro; dos fichas del mismo perro, no.
+const mismoNombre = (a, b) =>
+  String(a || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') ===
+  String(b || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+
 export async function migrarLocalACuenta(userId) {
-  if (!userId || esUsuarioLocal(userId)) return { perros: 0, menus: 0 }
+  if (!userId || esUsuarioLocal(userId)) return { perros: 0, menus: 0, noSubidos: [] }
 
   const perros = perrosLocales()
   const menus = menusLocales()
-  if (perros.length === 0 && menus.length === 0) return { perros: 0, menus: 0 }
+  if (perros.length === 0 && menus.length === 0) return { perros: 0, menus: 0, noSubidos: [] }
+
+  // Los que ya hay en la cuenta. Si esto falla, se prefiere NO migrar a
+  // migrar a ciegas: duplicar es peor que reintentar entrando otra vez, y
+  // lo local no se borra hasta que todo ha subido.
+  const yaEnLaCuenta = await getPerrosRemotos(userId)
 
   const equivalencias = new Map()
+  const noSubidos = []
   let subidos = 0
 
   for (const p of perros) {
+    const gemelo = (yaEnLaCuenta || []).find((q) => mismoNombre(q.nombre, p.nombre))
+    if (gemelo) {
+      // Sus menús locales van al perro de la cuenta: son del mismo animal.
+      equivalencias.set(p.id, gemelo.id)
+      noSubidos.push(p.nombre)
+      continue
+    }
     // Se pasa la FILA, no un perfil: guardarPerroRemoto vuelve a construirla
     // con filaDePerro, y esa función acepta tanto la forma de la app
     // (dia/mesIdx/anio, esterilizado, actividadIdx) como la ya guardada
@@ -263,5 +305,5 @@ export async function migrarLocalACuenta(userId) {
 
   vaciarLocal()
   salirDeSinCuenta()
-  return { perros: subidos, menus: menusSubidos }
+  return { perros: subidos, menus: menusSubidos, noSubidos }
 }
