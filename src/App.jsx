@@ -6715,11 +6715,25 @@ function RawkuOnboardingInterna({
         </div>
 
         <div className="flex-1 px-6 pt-6 pb-6 flex flex-col">
+          {/* ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO: "cuando entras en mis
+              menús, tiene que haber un botón para generar otro nuevo menú".
+              Tiene todo el sentido: es la pantalla donde ves los que ya
+              tienes, o sea justo donde piensas "pues me hace falta otro".
+              Antes había que salir a la ficha del perro para eso, que es
+              donde nadie lo va a buscar. */}
+          <button
+            onClick={() => { setMenuGuardadoAbierto(null); setFase("generador"); setPantalla("elegir"); }}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl mb-4"
+            style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
+          >
+            <Plus size={17} /> Hacer otro menú
+          </button>
+
           {cargandoMenusGuardados ? (
             <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>Cargando...</p>
           ) : menusGuardados.length === 0 ? (
             <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
-              Todavía no hay ningún menú guardado. En cuanto generes uno, aparecerá aquí.
+              Todavía no hay ningún menú guardado. En cuanto hagas uno, aparecerá aquí.
             </p>
           ) : (
             <div className="flex flex-col gap-2">

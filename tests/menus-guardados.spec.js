@@ -147,3 +147,25 @@ test.describe("menús guardados", () => {
     await expect(page.getByText(/Todavía no hay ningún menú guardado/)).toBeVisible();
   });
 });
+
+test("desde Mis menús se puede hacer otro menú", async ({ page, request }) => {
+  // ⚠️ PEDIDO EXPRESO (25 agosto): "cuando entras en mis menús, tiene que
+  // haber un botón para generar otro nuevo menú". Es la pantalla donde ves
+  // los que ya tienes, o sea justo donde te das cuenta de que te hace falta
+  // otro. Antes había que salir a la ficha del perro, que es el último
+  // sitio donde alguien lo va a buscar.
+  await configurarBackend(request, { menus: [], olvidarUltimoMenu: true });
+  await page.goto("/");
+  await iniciarSesion(page);
+
+  await abrirMenuLateral(page);
+  await page.getByRole("button", { name: /Mis menús/ }).click();
+  await expect(page.getByText(/Los menús de/)).toBeVisible();
+
+  await page.getByRole("button", { name: /Hacer otro menú/ }).click();
+
+  // Y lleva al generador de verdad, no a una pantalla en blanco: la
+  // primera pregunta es cómo quieres el menú.
+  await expect(page.getByRole("button", { name: /^Automático/ }),
+    "el botón no lleva al generador").toBeVisible();
+});
