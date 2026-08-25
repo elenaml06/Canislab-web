@@ -62,6 +62,91 @@ const PANTALLAS_DEL_PANEL = [
   "Por qué Rawku",
 ];
 
+// ⚠️ REHECHO (24 agosto) — CASO REAL: "el menú lateral está jodido, cuando
+// me meto en evolución y crecimiento cambia el menú lateral. Luego, desde
+// la compra no puedo moverme a algunas pantallas del menú lateral."
+//
+// Había DOS paneles: uno dentro de VistaMenus y otro fuera, cada uno con
+// sus entradas y su orden. Ahora hay uno solo, y esta lista es la suya, en
+// el orden que ella pidió. Si alguien la cambia, esta prueba se cae.
+const ENTRADAS_DEL_PANEL = [
+  "Perfil de Nala",
+  "Mis menús",
+  "Evolución y crecimiento",
+  "La compra",
+  "Analizar la dieta actual",
+];
+
+const abrirPanel = async (page) => {
+  const panel = page.getByRole("dialog", { name: "Panel lateral" });
+  // Si ya estaba abierto, volver a tocar la hamburguesa no hace nada y el
+  // resto de la prueba espera a un panel que nunca "aparece".
+  if (await panel.count()) return panel;
+  await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+  await expect(panel).toBeVisible();
+  return panel;
+};
+
+test.describe("el panel lateral es UNO y llega a todo", () => {
+  test.beforeEach(async ({ request }) => {
+    await configurar(request, {
+      retrasoPerrosMs: 50,
+      perros: [{ ...PERRO_DE_PRUEBA, dieta_actual: "barf" }],
+      menus: [], olvidarUltimoMenu: true,
+    });
+  });
+
+  test("las mismas entradas, en el mismo orden, en todas las pantallas", async ({ page }) => {
+    // Lo que ella vio: el panel CAMBIABA al entrar en una sección. Esto lo
+    // caza comparando la lista entera, no una entrada suelta.
+    await page.goto("/");
+    await entrarYGenerar(page);
+
+    const leerEntradas = async () => {
+      const panel = await abrirPanel(page);
+      const todas = (await panel.getByRole("button").allInnerTexts())
+        .map((t) => t.trim().split("\n")[0].trim()).filter(Boolean);
+      // Solo las cinco de navegación: fuera el cierre, el premium, la
+      // sesión y "Por qué Rawku", que va aparte y en pequeño.
+      const suyas = todas.filter((t) => ENTRADAS_DEL_PANEL.includes(t));
+      await panel.getByRole("button", { name: "Cerrar el menú" }).click();
+      await expect(panel).toHaveCount(0);
+      return suyas;
+    };
+
+    const enElMenu = await leerEntradas();
+    expect(enElMenu, "el panel del menú no tiene las cinco en orden")
+      .toEqual(ENTRADAS_DEL_PANEL);
+
+    // Y ahora desde una sección, que es donde ella vio que cambiaba.
+    await (await abrirPanel(page))
+      .getByRole("button", { name: "Evolución y crecimiento", exact: true }).click();
+
+    const enEvolucion = await leerEntradas();
+    expect(enEvolucion, "el panel CAMBIA al entrar en Evolución")
+      .toEqual(ENTRADAS_DEL_PANEL);
+  });
+
+  test("desde cada pantalla se llega a TODAS las demás", async ({ page }) => {
+    // "Y desde todas se tiene que poder abrir todas las demás sin
+    // problema". Antes no: las entradas de un panel eran acciones de una
+    // pantalla concreta, así que desde otra no hacían nada.
+    await page.goto("/");
+    await entrarYGenerar(page);
+
+    for (const desde of ENTRADAS_DEL_PANEL) {
+      await (await abrirPanel(page)).getByRole("button", { name: desde, exact: true }).click();
+      // Ya estamos en `desde`. Desde aquí tienen que estar las cinco.
+      const panel = await abrirPanel(page);
+      for (const hacia of ENTRADAS_DEL_PANEL) {
+        await expect(panel.getByRole("button", { name: hacia, exact: true }),
+          `desde «${desde}» no se puede ir a «${hacia}»`).toBeVisible();
+      }
+      await panel.getByRole("button", { name: "Perfil de Nala", exact: true }).click();
+    }
+  });
+});
+
 test.describe("la burbuja y el engranaje, en todas", () => {
   test("en todas las pantallas que abre el panel lateral", async ({ page, request }) => {
     // Un solo perro: con dos, llegar al menú pide contestar antes qué come

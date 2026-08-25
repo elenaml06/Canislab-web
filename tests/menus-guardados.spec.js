@@ -130,15 +130,20 @@ test.describe("menús guardados", () => {
     expect(llamadasAlGenerador, `se llamó al generador: ${llamadasAlGenerador.join(", ")}`).toEqual([]);
   });
 
-  test("sin menús guardados, Mis menús sigue sin poder abrirse", async ({ page, request }) => {
-    // Contrapeso: no vale con enseñar siempre la entrada del menú.
+  test("sin menús guardados, Mis menús se abre y dice que no hay ninguno", async ({ page, request }) => {
+    // ⚠️ CAMBIADO (24 agosto). Antes esta entrada salía en gris, sin poder
+    // abrirse. Ahora el panel es EL MISMO siempre -- pedido expreso -- así
+    // que la entrada está y la pantalla explica que aún no hay nada.
+    //
+    // Lo que vigila esta prueba no ha cambiado: que no te lleve a una
+    // pantalla en blanco donde no se entienda qué pasa.
     await configurarBackend(request, { menus: [] });
 
     await page.goto("/");
     await iniciarSesion(page);
     await abrirMenuLateral(page);
+    await page.getByRole("button", { name: "Mis menús", exact: true }).click();
 
-    await expect(page.getByText("Mis menús")).toBeVisible();          // se ve...
-    await expect(page.getByRole("button", { name: /Mis menús/ })).toHaveCount(0); // ...pero en gris
+    await expect(page.getByText(/Todavía no hay ningún menú guardado/)).toBeVisible();
   });
 });

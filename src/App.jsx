@@ -1188,7 +1188,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
-function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null }) {
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null, onMenuEditado = null, onAbrirPanel = null }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
   // pantalla del menú era un scroll larguísimo donde el plan de
@@ -1210,7 +1210,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // ⚠️ AÑADIDO (5 agosto, madrugada): mismo patrón que avisoNoForzado --
   // estado local para poder cerrarlo.
   const [avisoExtraEspecieVisible, setAvisoExtraEspecieVisible] = useState(avisoExtraEspecie);
-  const [menuLateralAbierto, setMenuLateralAbierto] = useState(false);
   // ⚠️ QUITADO (5 agosto, madrugada): el selector de mascotas no hacía
   // nada funcional (ni siquiera "Añadir mascota" tenía onClick), y tras
   // quitar el único botón que lo abría (para poner el menú siempre en
@@ -1542,6 +1541,15 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           avisoDelServidor: data.aviso || null,
         });
         setGramosRealesPorMenu((prev) => ({ ...prev, [tabActiva]: data.gramos }));
+        // ⚠️ AÑADIDO (24 agosto) — AVISAR HACIA FUERA DE QUE EL MENÚ CAMBIÓ.
+        //
+        // Al editar un alimento, el servidor recalcula el menú ENTERO y el
+        // resultado se guardaba SOLO aquí dentro (`gramosRealesPorMenu`).
+        // Fuera, `menuReal` seguía con el menú de antes -- y de `menuReal`
+        // sale la lista de la compra. O sea: editabas, la pantalla te
+        // enseñaba lo nuevo, y la compra te mandaba a comprar lo viejo. Sin
+        // ningún error y sin nada que lo delatara.
+        onMenuEditado?.(tabActiva, data.gramos);
         setFichaPorMenu((prev) => ({ ...prev, [tabActiva]: data.ficha }));
         // ⚠️ AÑADIDO (5 agosto, madrugada) — AUDITORÍA: al editar un
         // alimento, los avisos de seguridad pueden cambiar (un cambio
@@ -1628,7 +1636,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             quita de aquí la burbuja de mascota, que no hace nada
             funcional todavía (era solo una maqueta). */}
         <div className="flex items-center justify-between mb-4">
-          <BotonMenu onClick={() => setMenuLateralAbierto(true)} color="#FFFFFF" className="p-1" />
+          <BotonMenu onClick={() => onAbrirPanel?.()} color="#FFFFFF" className="p-1" />
           {burbuja || <p className="text-sm" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>Rawku</p>}
         </div>
         {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: una vez
@@ -2320,7 +2328,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                         concatenaba por separado -- ya no hace falta,
                         itemsMostrados es solo itemsBase, todo editable. */}
                     {(
-                      <button onClick={() => {
+                      <button
+                        // ⚠️ AÑADIDO (24 agosto) — sin nombre accesible, este
+                        // botón no se podía tocar desde una prueba: el lápiz
+                        // solo es un icono. Y editar es justo donde apareció
+                        // el fallo de que la compra se quedaba con el menú de
+                        // antes.
+                        aria-label={`Cambiar ${item.alimento}`}
+                        onClick={() => {
                           // ⚠️ CORREGIDO (5 agosto): antes se abría ya con la
                           // categoría del alimento actual fijada, así que solo
                           // se podía cambiar dentro de la misma categoría (pez
@@ -2591,7 +2606,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3 min-w-0">
-            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            <BotonMenu onClick={() => onAbrirPanel?.()} color={VIOLETA} className="p-1" />
             </div>
             {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
                 engranaje y el perfil en varias pantallas, se ve como arriba
@@ -2647,7 +2662,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3 min-w-0">
-            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            <BotonMenu onClick={() => onAbrirPanel?.()} color={VIOLETA} className="p-1" />
             </div>
             {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
                 engranaje y el perfil en varias pantallas, se ve como arriba
@@ -2756,7 +2771,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3 min-w-0">
-            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            <BotonMenu onClick={() => onAbrirPanel?.()} color={VIOLETA} className="p-1" />
             </div>
             {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
                 engranaje y el perfil en varias pantallas, se ve como arriba
@@ -2807,7 +2822,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3 min-w-0">
-            <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+            <BotonMenu onClick={() => onAbrirPanel?.()} color={VIOLETA} className="p-1" />
             </div>
             {/* ⚠️ CORREGIDO (24 agosto) — CASO REAL: "se ve raro lo del
                 engranaje y el perfil en varias pantallas, se ve como arriba
@@ -2847,7 +2862,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <div className="fixed inset-0 z-50 flex flex-col px-6 pt-10 pb-8 overflow-y-auto cnl-pantalla-scroll" style={{ background: PAPEL }}>
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3 min-w-0">
-              <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+              <BotonMenu onClick={() => onAbrirPanel?.()} color={VIOLETA} className="p-1" />
             </div>
             {burbujaClara}
           </div>
@@ -3214,7 +3229,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               en vez de tener que pasar por un botón de "volver". */}
           <div className="flex items-center justify-between gap-3 mb-6">
             <div className="flex items-center gap-3 min-w-0">
-              <BotonMenu onClick={() => setMenuLateralAbierto(true)} color={VIOLETA} className="p-1" />
+              <BotonMenu onClick={() => onAbrirPanel?.()} color={VIOLETA} className="p-1" />
               <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
                 Guardado
               </p>
@@ -3276,90 +3291,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           </div>
 
           <div className="flex-1" />
-        </div>
-      )}
-      {menuLateralAbierto && (
-        <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLateralAbierto(false)}>
-          <div role="dialog" aria-label="Panel lateral" className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
-            <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
-              <div>
-                <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombrePerro}</p>
-                <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>{etapaLabel}</p>
-              </div>
-              <button onClick={() => setMenuLateralAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
-            </div>
-            {/* El mismo selector de perros que el panel ligero. Se pasa ya
-                montado desde fuera porque toda la información de perros
-                vive en RawkuOnboardingInterna, no aquí. */}
-            {/* ⚠️ QUITADO DE AQUÍ (24 agosto) — pedido expreso: "que cambiar
-            de perro esté metido en una pestaña del panel es esconderlo".
-            Vive en la burbuja de la cabecera, que se ve sin abrir nada.
-            El panel se queda con lo que es: navegación. */}
-            <div className="flex-1 px-3 pt-4">
-              {[
-                // ⚠️ AÑADIDO (24 agosto) — CASO REAL: "lo de volver y volver
-                // al menú en las pantallas que se eligen desde el menú
-                // lateral, FUERA. Para algo hay una pestaña de menú para
-                // elegir a dónde te quieres mover".
-                //
-                // De acuerdo, pero entonces el panel tiene que llevar a
-                // TODOS los sitios, y al menú también: quitar los "volver"
-                // sin esto te dejaba dentro de una sección sin salida.
-                // Solo se pinta cuando hay un menú al que volver.
-                ...(soloSeccion
-                  ? [{ key: "__salir__", Icono: UtensilsCrossed, label: "Hacer el menú de la semana", isPremium: false }]
-                  : [{ key: null, Icono: UtensilsCrossed, label: "El menú de la semana", isPremium: false }]),
-                { key: "perfil", Icono: Dog, label: `Perfil de ${nombrePerro}`, isPremium: false },
-                { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true },
-                ...(soloSeccion ? [] : [{ key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false }]),
-                // ⚠️ AÑADIDO (24 agosto) — ESTE PANEL ES OTRO.
-                // Hay DOS paneles laterales: el ligero (perfil, asistente,
-                // mis menús...) y éste, el de dentro del menú. "La compra"
-                // se puso solo en el ligero, así que desde la pantalla del
-                // menú -- que es donde más falta hace -- no aparecía.
-                // Si añades una entrada a un panel, mira si va en los dos.
-                ...(onAbrirLaCompra
-                  ? [{ key: "compra", Icono: ShoppingBasket, label: "La compra", isPremium: false }]
-                  : []),
-                { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true },
-                { key: "porque", Icono: Heart, label: "Por qué Rawku", isPremium: false },
-              ].map((op) => {
-                const Icono = op.Icono;
-                const bloqueado = op.isPremium && !premium;
-                return (
-                  <button key={op.key ?? "__menu__"} onClick={() => {
-                    setMenuLateralAbierto(false);
-                    setSemanaConfirmada(false);
-                    // La compra no es una sección de esta pantalla: la
-                    // pinta el de fuera, para que sea la MISMA en todas.
-                    if (op.key === "compra") { onAbrirLaCompra?.(); return; }
-                    // En "sólo esta sección" no hay menú debajo al que
-                    // volver: hay que salir del todo, al generador.
-                    if (op.key === "__salir__") { onVolver?.(); return; }
-                    setSeccionActiva(op.key);
-                  }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
-                    <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                      <Icono size={17} strokeWidth={1.6} style={{ color: bloqueado ? MALVA : VIOLETA }} />
-                    </div>
-                    <span className="flex-1 text-left" style={{ color: bloqueado ? MALVA : TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{op.label}</span>
-                    {bloqueado
-                      ? <Lock size={13} style={{ color: MALVA }} />
-                      : <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-                    }
-                  </button>
-                );
-              })}
-            </div>
-            {/* ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL SIN RESOLVER,
-                MISMO PATRÓN QUE YA PASÓ CON EL BACKEND: si esto en
-                pantalla no dice esta fecha exacta, es que Vercel sigue
-                sirviendo una versión vieja de la app -- fuérzalo con
-                "Redeploy" desde el panel de Vercel, o revisa que el
-                último commit sea el que está en producción. */}
-            <p className="text-[10px] text-center pb-3" style={{ color: "#D8CFEC", fontFamily: "monospace" }}>
-              build 2026-08-22 · sin muro de pago
-            </p>
-          </div>
         </div>
       )}
     </div>
@@ -4451,140 +4382,101 @@ function RawkuOnboardingInterna({
   // solo "Editar perfil", que es lo único que tiene sentido ahí. El
   // panel completo (con Evolución, Mis menús...) sigue viviendo dentro
   // de VistaMenus, una vez ya hay un menú de verdad.
+  // ⚠️ LAS ENTRADAS DEL PANEL — UNA SOLA LISTA, UN SOLO ORDEN (24 agosto).
+  //
+  // El orden lo pidió ella y es éste, no otro: perfil, menús, evolución,
+  // compra, analizar.
+  //
+  // LO IMPORTANTE NO ES LA LISTA, ES QUE TODAS SON ACCIONES DE FUERA
+  // (`fase`, `seccionSuelta`, `abrirLaCompra`). Una entrada que dependa del
+  // estado interno de una pantalla solo funciona dentro de esa pantalla --
+  // que es exactamente por lo que "desde la compra no podía moverme a
+  // algunas pantallas del menú lateral".
+  //
+  // Si añades una entrada: que su acción viva AQUÍ, no dentro de una vista.
+  const ENTRADAS_DEL_PANEL = [
+    // El menú recién hecho no está guardado en ninguna parte todavía, así
+    // que si se sale sin esto se pierde. Solo aparece cuando hay uno.
+    ...(menuReal && menuReal.length
+      ? [{ key: "elmenu", Icono: UtensilsCrossed, label: "El menú de la semana",
+           isPremium: false,
+           ir: () => { setFase("generador"); setPantalla("resultado"); } }]
+      : []),
+    { key: "perfil", Icono: Dog, label: `Perfil de ${nombreMostrar}`, isPremium: false,
+      ir: () => { setSeccionSuelta(null); setFase("onboarding"); } },
+    { key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false,
+      ir: () => { setSeccionSuelta(null); setFase("misMenus"); } },
+    { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true,
+      ir: () => { setSeccionSuelta("evolucion"); setFase("seccion"); } },
+    { key: "compra", Icono: ShoppingBasket, label: "La compra", isPremium: false,
+      ir: () => abrirLaCompra() },
+    { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true,
+      ir: () => { setSeccionSuelta("analizar"); setFase("seccion"); } },
+  ];
+
   const panelLigero = menuLigeroAbierto && (
     <div className="fixed inset-0 z-[60] flex" style={{ background: "rgba(35,21,57,0.4)" }} onClick={() => setMenuLigeroAbierto(false)}>
       <div role="dialog" aria-label="Panel lateral" className="w-[78%] max-w-xs h-full flex flex-col" style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
         <div style={{ background: VIOLETA }} className="px-6 pt-10 pb-6 flex items-center justify-between">
           <p className="text-xl" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>{nombreMostrar}</p>
-          <button onClick={() => setMenuLigeroAbierto(false)}><X size={22} style={{ color: "#FFFFFF" }} /></button>
+          <button onClick={() => setMenuLigeroAbierto(false)} aria-label="Cerrar el menú"><X size={22} style={{ color: "#FFFFFF" }} /></button>
         </div>
         {/* ⚠️ QUITADO DE AQUÍ (24 agosto) — pedido expreso: "que cambiar
             de perro esté metido en una pestaña del panel es esconderlo".
             Vive en la burbuja de la cabecera, que se ve sin abrir nada.
             El panel se queda con lo que es: navegación. */}
+        {/* ⚠️ REHECHO (24 agosto) — CASO REAL: "el menú lateral está
+            jodido, cuando me meto en evolución y crecimiento cambia el
+            menú lateral. Luego, desde la compra no puedo moverme a algunas
+            pantallas del menú lateral."
+            Y la lista pedida, literal: "Perfil de <perro>, Mis menús,
+            Evolución y crecimiento, La compra y Analizar la dieta actual.
+            En ese orden. Y desde todas se tiene que poder abrir todas las
+            demás sin problema."
+
+            HABÍA DOS PANELES. Uno vivía dentro de VistaMenus (con sus
+            propias secciones) y otro aquí fuera, cada uno con sus entradas
+            y su orden. Por eso cambiaba al moverte, y por eso desde la
+            compra no se llegaba a todo: sus entradas eran de un panel que
+            en esa pantalla no existía.
+
+            Ahora hay UNO. El de dentro se ha borrado y su hamburguesa abre
+            éste. Y las cinco acciones son todas de FUERA (fase /
+            seccionSuelta / abrirLaCompra), que es lo que hace que
+            funcionen desde cualquier pantalla: una entrada que dependa del
+            estado interno de una pantalla solo sirve dentro de ella. */}
         <div className="flex-1 px-3 pt-4">
-          {/* ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL ENCONTRADO:
-              "Editar perfil de X" llevaba a la pantalla de RESUMEN
-              final (fase="onboarding"), que muestra los 6 pasos ya
-              completados -- pero si se pulsa DESDE DENTRO de los
-              propios pasos 1-6 (donde ya se está editando el perfil
-              en ese mismo momento), esa pantalla sale prácticamente
-              vacía ("—" en casi todo, porque nada se ha rellenado
-              aún). Esto es justo lo que se estaba percibiendo como
-              "error" al abrir el menú desde el paso 1 -- no era un
-              fallo técnico, era llevar a una pantalla que no tenía
-              ningún sentido mostrar ahí. Igual que las otras 3
-              opciones, ahora se ve en gris y sin poder pulsarse
-              mientras se está dentro de los pasos 1-6 -- solo se
-              activa en las pantallas de después (elegir/cuantos/
-              personalizar/resultado), donde sí tiene sentido volver a
-              revisar un perfil ya completado. */}
-          {/* ⚠️ AMPLIADO — antes esto solo contemplaba estar DENTRO de los
-              pasos 1-6. Ahora que el perfil es la pantalla de inicio, el
-              menú también se puede abrir estando ya en el resumen del
-              perfil (paso > TOTAL_PASOS con fase "onboarding"), donde
-              "Editar perfil de X" tampoco lleva a ningún sitio nuevo. */}
-          {(paso >= 1 && paso <= TOTAL_PASOS) || (fase === "onboarding" && paso > TOTAL_PASOS) ? (
-            <div className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl" style={{ opacity: 0.4 }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                <Dog size={17} strokeWidth={1.6} style={{ color: MALVA }} />
-              </div>
-              <span className="flex-1 text-left" style={{ color: MALVA, fontFamily: fontDisplay, fontSize: 16 }}>Editar perfil de {nombreMostrar}</span>
-              <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>ya estás aquí</span>
-            </div>
-          ) : (
-            <button onClick={() => { setMenuLigeroAbierto(false); setFase("onboarding"); }} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl">
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                <Dog size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
-              </div>
-              <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>Editar perfil de {nombreMostrar}</span>
-              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-            </button>
-          )}
-          {/* ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: antes,
-              durante el onboarding, el menú SOLO tenía "Editar perfil"
-              -- el resto de secciones (Evolución, Mis menús, Analizar)
-              ni siquiera se veían, como si no existieran. Ahora se ven
-              igual que en el menú completo, pero en gris y sin poder
-              pulsarlas, porque todavía no tiene sentido entrar ahí (no
-              hay ningún menú generado, ni perfil completo, hasta que se
-              termine este proceso) -- así se entiende que van a estar
-              ahí en cuanto termines, en vez de que simplemente no
-              existan. */}
-          {/* ⚠️ AÑADIDO — "Mis menús" ya no está siempre en gris: si hay
-              menús guardados de verdad y no estamos a mitad del asistente,
-              se puede entrar. Las otras dos siguen viviendo dentro de
-              VistaMenus y necesitan un menú recién generado. */}
-          {menusGuardados.length > 0 && !(paso >= 1 && paso <= TOTAL_PASOS) && (
-            <button
-              onClick={() => { setMenuLigeroAbierto(false); setFase("misMenus"); }}
-              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
-            >
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                <ClipboardList size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
-              </div>
-              <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>Mis menús</span>
-              <span className="text-[10px] mr-1" style={{ color: MALVA, fontFamily: "monospace" }}>{menusGuardados.length}</span>
-              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-            </button>
-          )}
-          {/* ⚠️ AÑADIDO (24 agosto) — LA COMPRA.
-              Se mira en la tienda, no al generar el menú: tiene que estar a
-              un toque desde cualquier pantalla. Solo aparece si hay algún
-              menú guardado del que sacarla. */}
-          {/* Basta con que haya ALGO de lo que sacarla: un menú en pantalla
-              aunque no lo hayas guardado, o alguno guardado de antes. */}
-          {(menusGuardados.length > 0 || (menuReal && menuReal.length) || menusDeLaCasa)
-            && !(paso >= 1 && paso <= TOTAL_PASOS) && (
-            <button
-              onClick={() => { setMenuLigeroAbierto(false); abrirLaCompra(); }}
-              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
-            >
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                <ShoppingBasket size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
-              </div>
-              <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>La compra</span>
-              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-            </button>
-          )}
-          {/* ⚠️ AÑADIDO — Evolución y Analizar dejan de estar en gris. No
-              es que faltaran: estaban programadas dentro de VistaMenus, que
-              sólo existe con un menú recién generado, así que desde el
-              perfil no había forma de llegar. Ahora se abren en modo
-              "sólo esta sección". Ninguna de las dos necesita un menú. */}
-          {!(paso >= 1 && paso <= TOTAL_PASOS) && [
-            { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento" },
-            { key: "analizar", Icono: Search, label: "Analizar la dieta actual" },
-          ].map((op) => (
-            <button
-              key={op.key}
-              onClick={() => { setMenuLigeroAbierto(false); setSeccionSuelta(op.key); setFase("seccion"); }}
-              className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
-            >
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                <op.Icono size={17} strokeWidth={1.6} style={{ color: VIOLETA }} />
-              </div>
-              <span className="flex-1 text-left" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{op.label}</span>
-              <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-            </button>
-          ))}
-          {[
-            ...(menusGuardados.length > 0 && !(paso >= 1 && paso <= TOTAL_PASOS)
-              ? []
-              : [{ Icono: ClipboardList, label: "Mis menús" }]),
-            ...((paso >= 1 && paso <= TOTAL_PASOS)
-              ? [{ Icono: TrendingUp, label: "Evolución y crecimiento" },
-                 { Icono: Search, label: "Analizar la dieta actual" }]
-              : []),
-          ].map((op) => (
-            <div key={op.label} className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl" style={{ opacity: 0.4 }}>
-              <div className="w-9 h-9 rounded-lg flex items-center justify-center" style={{ background: PAPEL }}>
-                <op.Icono size={17} strokeWidth={1.6} style={{ color: MALVA }} />
-              </div>
-              <span className="flex-1 text-left" style={{ color: MALVA, fontFamily: fontDisplay, fontSize: 16 }}>{op.label}</span>
-              <span className="text-[10px]" style={{ color: MALVA, fontFamily: "monospace" }}>aún no</span>
-            </div>
-          ))}
+          {ENTRADAS_DEL_PANEL.map((op) => {
+            const bloqueado = op.isPremium && !premium;
+            return (
+              <button
+                key={op.key}
+                onClick={() => { setMenuLigeroAbierto(false); op.ir(); }}
+                className="w-full flex items-center gap-3 px-3 py-3.5 rounded-xl"
+                style={{ background: "none", border: "none", cursor: "pointer" }}
+              >
+                <div className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style={{ background: PAPEL }}>
+                  <op.Icono size={17} strokeWidth={1.6} style={{ color: bloqueado ? MALVA : VIOLETA }} />
+                </div>
+                <span className="flex-1 text-left" style={{ color: bloqueado ? MALVA : TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                  {op.label}
+                </span>
+                {bloqueado && <span className="text-[10px] mr-1" style={{ color: MALVA, fontFamily: "monospace" }}>premium</span>}
+                <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+              </button>
+            );
+          })}
+
+          {/* "Por qué Rawku" no está en las cinco que pidió, pero tampoco
+              hay que perderlo: es informativo, no navegación. Va abajo y en
+              pequeño, no como una sexta entrada. */}
+          <button
+            onClick={() => { setMenuLigeroAbierto(false); setSeccionSuelta("porque"); setFase("seccion"); }}
+            className="w-full text-left px-3 py-3 mt-2"
+            style={{ background: "none", border: "none", borderTop: "1px solid #F0EAF8", cursor: "pointer" }}
+          >
+            <span style={{ color: MALVA, fontFamily: fontBody, fontSize: 13 }}>Por qué Rawku</span>
+          </button>
         </div>
         {/* ⚠️ AÑADIDO (5 agosto, madrugada) — mismo patrón que en el
             menú lateral completo: marca de versión visible para poder
@@ -4787,7 +4679,8 @@ function RawkuOnboardingInterna({
     // DEBAJO del panel lateral (z-60) y de la hoja de perros (z-70). Con
     // los tres al mismo nivel, abrir el panel desde aquí lo dejaba detrás
     // -- se veía el oscurecido y ningún panel.
-    <div className="fixed inset-0 z-[55] flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
+    <div role="dialog" aria-label="La compra"
+         className="fixed inset-0 z-[55] flex flex-col px-6 pt-10 pb-8 overflow-y-auto" style={{ background: PAPEL }}>
       {/* ⚠️ AÑADIDO (24 agosto) — CASO REAL: "en la pantalla de la compra no
           aparece la hamburguesa del menú lateral ni lo del perfil". Misma
           cabecera que el resto: hamburguesa IZQUIERDA, burbuja DERECHA. */}
@@ -6202,7 +6095,7 @@ function RawkuOnboardingInterna({
         avisoExtraEspecie={null}
         // Estas dos (Evolución y Analizar abiertas desde el perfil) tampoco
         // la tenían: mismo caso, mismo arreglo.
-        burbuja={burbujaDePerfil(true)}
+        burbuja={burbujaDePerfil(true)} onAbrirPanel={() => setMenuLigeroAbierto(true)}
         burbujaClara={burbujaDePerfil(false)}
         onAbrirLaCompra={abrirLaCompra}
         premium={premium}
@@ -6213,6 +6106,13 @@ function RawkuOnboardingInterna({
       />
       {/* VistaMenus pinta su propio panel lateral, no `drawerLigero`, así
           que los avisos hay que colgarlos aquí a mano. */}
+      {/* ⚠️ AÑADIDO (24 agosto) — esta rama no pintaba el panel porque
+          VistaMenus traía el suyo. Al borrar el interno (uno solo, pedido
+          expreso) se quedó sin ninguno: la hamburguesa de Evolución y
+          Analizar no abría NADA. Era justo lo que ella describía -- "cuando
+          me meto en evolución y crecimiento cambia el menú lateral". */}
+      {panelLigero}
+      {pantallaDeLaCompra}
       {avisoCambiarDePerro}
       {avisoBorrarPerro}
       {avisoDescartarLocal}
@@ -7317,7 +7217,18 @@ function RawkuOnboardingInterna({
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAbrirLaCompra={abrirLaCompra} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} burbuja={burbujaDePerfil(true)} burbujaClara={burbujaDePerfil(false)} />
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAbrirLaCompra={abrirLaCompra} onMenuEditado={(idMenu, gramos) => {
+          // `idMenu` es 1, 2, 3... (ver respuestaApiAMenu), así que el
+          // índice del array es uno menos.
+          setMenuReal((previos) => {
+            if (!previos) return previos;
+            const i = idMenu - 1;
+            if (i < 0 || i >= previos.length) return previos;
+            const copia = previos.slice();
+            copia[i] = { ...copia[i], menu: gramos, gramos };
+            return copia;
+          });
+        }} premium={premium} onMostrarSuscripcion={() => setMostrarSuscripcion(true)} onRegenerarConAlimentos={(alimentos) => { setAlimentosAPreservar(alimentos); setPantalla("resultado"); setMenuReal(null); }} usuario={usuario} onPerroGuardado={onPerroGuardado} onCrearCuenta={onCrearCuenta} burbuja={burbujaDePerfil(true)} onAbrirPanel={() => setMenuLigeroAbierto(true)} burbujaClara={burbujaDePerfil(false)} />
         {/* ⚠️ AÑADIDO (24 agosto) — la pantalla de la compra colgaba SOLO
             de `drawerLigero`, y ésta es la única pantalla que no lo pinta
             (VistaMenus trae su propio panel). Resultado: el botón "La

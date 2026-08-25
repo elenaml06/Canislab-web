@@ -167,6 +167,8 @@ export function crearFakeSupabase(opciones = {}) {
     // (`aviso` / `no_se_pudo_forzar`). La pantalla de la casa se lo comía:
     // los tenía puestos a null a mano. Con esto se puede probar.
     casaAvisos: false,
+    // Que cada menú pedido salga con un alimento distinto. Ver /menu/v2.
+    menusDistintos: false,
     casaFalla: false,
     // Última petición recibida en /menu/varios-perros, para poder
     // comprobar que la app manda lo que dice mandar.
@@ -241,6 +243,12 @@ export function crearFakeSupabase(opciones = {}) {
       if (cfg.revalidar) estado.revalidar = cfg.revalidar;
       if (typeof cfg.casaCompraUnica === "boolean") estado.casaCompraUnica = cfg.casaCompraUnica;
       if (typeof cfg.casaAvisos === "boolean") estado.casaAvisos = cfg.casaAvisos;
+      // ⚠️ Éste NO es pegajoso, a propósito, al revés que los demás
+      // interruptores: cambia el CONTENIDO de los menús, y quedarse
+      // encendido le mete alimentos inventados a la siguiente prueba. Pasó:
+      // "Alimento del menú 1" apareció en el menú de otra prueba y chocó
+      // con su selector. Si no lo pides, se apaga.
+      estado.menusDistintos = cfg.menusDistintos === true;
       if (typeof cfg.casaFalla === "boolean") estado.casaFalla = cfg.casaFalla;
       if (typeof cfg.premium === "boolean") estado.premium = cfg.premium;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
@@ -399,6 +407,20 @@ export function crearFakeSupabase(opciones = {}) {
 
     if (ruta === "/menu/v2") {
       estado.peticionesMenu.push(JSON.parse(cuerpo || "{}"));
+      // ⚠️ AÑADIDO (24 agosto) — con `menusDistintos`, cada llamada devuelve
+      // un alimento propio además del menú base. Sin esto no se puede
+      // distinguir "la compra suma los dos menús" de "suma uno dos veces":
+      // los dos menús de mentira eran idénticos y las cuentas cuadraban
+      // igual. Es justo el caso que ella reportó -- dos menús
+      // personalizados y la compra de uno solo.
+      if (estado.menusDistintos) {
+        const cual = estado.peticionesMenu.length;
+        return responder(200, {
+          ...MENU_FALSO,
+          menu: { ...MENU_FALSO.menu, [`Marcador de prueba ${cual}`]: 100 },
+          aviso_composicion: estado.avisoComposicion,
+        });
+      }
       return responder(200, { ...MENU_FALSO, aviso_composicion: estado.avisoComposicion });
     }
     // Los tres caminos de edición devuelven el menú en "gramos", no en
@@ -406,7 +428,14 @@ export function crearFakeSupabase(opciones = {}) {
     if (ruta === "/menu/cambiar" || ruta === "/menu/anadir" || ruta === "/menu/quitar") {
       return responder(200, {
         factible: true,
-        gramos: MENU_FALSO.menu,
+        // ⚠️ Con `menusDistintos`, editar devuelve un menú RECONOCIBLE. El
+        // backend de verdad recalcula el menú entero al editar, así que el
+        // resultado casi nunca coincide con el de antes; devolviendo lo
+        // mismo, una prueba no puede distinguir "se enteró del cambio" de
+        // "sigue con el de antes".
+        gramos: estado.menusDistintos
+          ? { ...MENU_FALSO.menu, "Marcador tras editar": 60 }
+          : MENU_FALSO.menu,
         ficha: { semaforo: "verde", correctos: 30, total: 30 },
         problemas_seguridad: [],
         aviso_composicion: estado.avisoComposicionAlEditar,
