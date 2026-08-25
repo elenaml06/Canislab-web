@@ -25,6 +25,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -96,7 +97,7 @@ test.describe("la ficha del perro sobrevive a guardar y volver", () => {
 
     // Entrar al generador es lo que dispara el guardado de la ficha. Es
     // justo lo que hizo la usuaria cuando se le borró la fecha de Ruffo.
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await expect(page.getByText(/¿Qué come .* ahora mismo\?/)).toBeVisible();
 
     await expect.poll(async () => {
@@ -121,7 +122,7 @@ test.describe("la ficha del perro sobrevive a guardar y volver", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
 
     // etapa y peso adulto NO se conservan: se RECALCULAN, y tienen que
     // salir bien. Un perro nacido en 2015 es senior.
@@ -136,7 +137,7 @@ test.describe("la ficha del perro sobrevive a guardar y volver", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
 
     // "Pienso" ya viene marcado, porque está guardado. Antes se preguntaba
     // en cada visita y la respuesta anterior se tiraba.

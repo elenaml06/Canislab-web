@@ -22,6 +22,7 @@
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "../src/instrucciones.js";
+import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -47,7 +48,7 @@ test.describe("el resultado se lee en dos pestañas", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.getByRole("button", { name: "Pienso", exact: true }).click();
     await page.getByRole("button", { name: /^Automático/ }).click();
     await page.getByRole("button", { name: /^Generar/ }).click();
@@ -111,7 +112,7 @@ test.describe("el resultado se lee en dos pestañas", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.getByRole("button", { name: /^Automático/ }).click();
     await page.getByRole("button", { name: /^Generar/ }).click();
     await page.getByText(/Menú 1|Carne muscular/).first().waitFor({ timeout: 30000 });

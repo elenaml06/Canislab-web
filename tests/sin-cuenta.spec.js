@@ -22,6 +22,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarLaFicha } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -372,7 +373,7 @@ test.describe("al entrar, un perro que ya tenías no se duplica", () => {
     //
     // La migración se espera ANTES de cargar la lista de perros (ver
     // AuthGate), así que si la app ya está en pie, la migración terminó.
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor({ timeout: 15000 });
+    await esperarLaFicha(page, { timeout: 15000 });
 
     const { perrosGuardados } = await configurarBackend(request, {});
     const ruffos = perrosGuardados.filter((p) => p.nombre === "Ruffo");
@@ -408,7 +409,7 @@ test.describe("al entrar, un perro que ya tenías no se duplica", () => {
 
     // Mismo motivo que arriba: esperar a que la app esté en pie y mirar
     // una vez, no ir preguntando hasta que salga lo que espero.
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor({ timeout: 15000 });
+    await esperarLaFicha(page, { timeout: 15000 });
 
     const { perrosGuardados } = await configurarBackend(request, {});
     expect(perrosGuardados.map((p) => p.nombre).sort()).toEqual(["Cairo", "Ruffo"]);

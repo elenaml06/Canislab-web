@@ -6,6 +6,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA } from "./fake-supabase.js";
+import { irAlGenerador, laFichaHaCargado } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -39,7 +40,7 @@ test.describe("bugs de producción", () => {
 
     await page.goto("/");
     await iniciarSesion(page);
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.getByRole("button", { name: "Pienso" }).click();
     await page.getByRole("button", { name: /Automático/ }).click();
     await page.getByRole("button", { name: /Generar/i }).first().click();
@@ -60,7 +61,7 @@ test.describe("bugs de producción", () => {
 
     await page.goto("/");
     await iniciarSesion(page);
-    await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
+    await expect(laFichaHaCargado(page)).toBeVisible();
 
     await expect(page.getByText("Pastor Alemán").first()).toBeVisible();
     // Y nada de llaves, comillas ni nombres de campo sueltos por la ficha.
@@ -83,7 +84,7 @@ test.describe("bugs de producción", () => {
 
     await page.goto("/");
     await iniciarSesion(page);
-    await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
+    await expect(laFichaHaCargado(page)).toBeVisible();
 
     // Nacido este año ⇒ menos de un año de edad.
     await expect(page.getByText(/0 años/)).toBeVisible();

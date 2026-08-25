@@ -23,6 +23,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -65,7 +66,7 @@ test.describe("personalizar con varios menús", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
 
     await page.getByRole("button", { name: /^Personalizar/ }).click();
     // dos menús para la semana (el selector es un +/-)
@@ -117,7 +118,7 @@ test.describe("personalizar con varios menús Y varios perros", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
 
     await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
     for (const nombre of [PERRO_DE_PRUEBA.nombre, SEGUNDO_PERRO_DE_PRUEBA.nombre]) {

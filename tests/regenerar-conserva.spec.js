@@ -24,6 +24,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -49,7 +50,7 @@ test("al regenerar por el peso, cada menú conserva SUS alimentos", async ({ pag
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+  await irAlGenerador(page);
   await page.getByRole("button", { name: /^Automático/ }).click();
   // Dos menús: con uno solo el fallo del "segundo" no puede aparecer.
   await page.getByRole("button", { name: "+", exact: true }).click();

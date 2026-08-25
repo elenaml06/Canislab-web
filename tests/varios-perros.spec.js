@@ -24,6 +24,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarLaFicha, irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -37,10 +38,10 @@ async function iniciarSesion(page) {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+  await esperarLaFicha(page);
 }
 
-// Sin perro guardado no existe el botón "Hacer el menú de la semana": se
+// Sin perro guardado el asistente termina en "ir al generador de menús": se
 // aterriza en el paso 1 del asistente.
 async function iniciarSesion2(page) {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
@@ -323,10 +324,6 @@ test.describe("los menús de toda la casa", () => {
       casaCompraUnica: true, casaFalla: false,
     });
   });
-
-  const irAlGenerador = async (page) => {
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
-  };
 
   test("con un solo perro no se ofrece nada de la casa", async ({ page, request }) => {
     await configurarBackend(request, { perros: [PERRO_DE_PRUEBA] });
@@ -633,7 +630,7 @@ test.describe("la ficha del perro se guarda entera", () => {
 
     // Esto es lo que hacía la usuaria: entrar al generador. Ahí se guarda
     // la ficha, y ahí era donde se vaciaba.
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await expect(page.getByText(/¿Qué come .* ahora mismo\?/)).toBeVisible();
 
     await expect.poll(async () => {
@@ -651,7 +648,7 @@ test.describe("la ficha del perro se guarda entera", () => {
   test("un perro de diez años sigue siendo senior, no cachorro", async ({ page, request }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
 
     // La etapa guardada es la que de verdad tiene, no la del perro
     // recién nacido que salía al perder la fecha. De aquí salen los 30
@@ -665,7 +662,7 @@ test.describe("la ficha del perro se guarda entera", () => {
   test("al volver, la ficha sigue diciendo su edad de verdad", async ({ page }) => {
     await page.goto("/");
     await iniciarSesion(page);
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.reload();
 
     // Los años se calculan aquí, no se escriben a mano: puesto a mano,
@@ -701,9 +698,6 @@ test.describe("para varios perros, el recorrido completo", () => {
       menus: [], olvidarUltimoMenu: true, casaFalla: false, casaCompraUnica: true,
     });
   });
-
-  const irAlGenerador = (page) =>
-    page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
 
   test("pregunta qué come CADA perro, no solo el que miras", async ({ page }) => {
     await page.goto("/");

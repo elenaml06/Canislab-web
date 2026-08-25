@@ -54,19 +54,19 @@ test.describe("ninguna pantalla enseña datos que no existen", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+    await esperarLaFicha(page);
   }
 
   test("la ficha del perro y el generador", async ({ page }) => {
     await entrar(page);
     await exigirLimpio(page, "la ficha del perro");
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await exigirLimpio(page, "el generador");
   });
 
   test("el menú, y 'cómo preparar' de CADA alimento", async ({ page }) => {
     await entrar(page);
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await irAlGenerador(page);
     await page.getByRole("button", { name: "Pienso", exact: true }).click();
     await page.getByRole("button", { name: /^Automático/ }).click();
     await page.getByRole("button", { name: /^Generar/ }).click();
@@ -115,6 +115,7 @@ test.describe("ninguna pantalla enseña datos que no existen", () => {
 
 import fs from "node:fs";
 import path from "node:path";
+import { esperarLaFicha, irAlGenerador } from "./ayudas.js";
 
 test("ningún texto pega dos palabras al partir la línea", () => {
   const ETIQUETA_FIN = /<\/(b|i|em|strong|span|a)>\s*$/;

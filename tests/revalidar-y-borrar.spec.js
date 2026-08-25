@@ -10,6 +10,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarLaFicha, laFichaHaCargado } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -23,7 +24,7 @@ async function iniciarSesion(page) {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+  await esperarLaFicha(page);
 }
 
 const menuGuardado = (extra = {}) => ({
@@ -68,7 +69,7 @@ test.describe("revalidación del menú", () => {
     await expect(page.getByText(/Mejillón de Nueva Zelanda/)).toBeVisible();
 
     // Y NO ha navegado sola a ningún sitio: seguimos en el perfil.
-    await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
+    await expect(laFichaHaCargado(page)).toBeVisible();
   });
 
   test("el botón del aviso enseña el menú corregido", async ({ page, request }) => {

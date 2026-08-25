@@ -3844,6 +3844,23 @@ function RawkuOnboardingInterna({
   const yaTienePerroGuardado = Boolean(perroInicial);
 
   const [paso, setPaso] = useState(yaTienePerroGuardado ? TOTAL_PASOS + 1 : 1);
+
+  // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
+  // que hacía falta: "cuando terminas de generar por primera vez el perfil
+  // del perro sí que tienes que tener ese botón, pero cuando entras a
+  // editar el perfil del perro desde el menú lateral ahí es donde no tiene
+  // que estar".
+  //
+  // O sea que no depende de si el perro existe: depende de CÓMO HAS LLEGADO
+  // a esta pantalla. Terminar el asistente y abrir la ficha para cambiar
+  // algo pintan lo mismo (`fase === "onboarding"`), y son dos momentos
+  // distintos: en el primero acabas de crear al perro y lo siguiente es
+  // hacerle el menú; en el segundo has venido a corregir un dato y para
+  // hacer menús ya está "Mis menús".
+  //
+  // Empieza en `true` cuando la app arranca con un perro ya guardado:
+  // abrir la app no es terminar un asistente.
+  const [editandoLaFicha, setEditandoLaFicha] = useState(yaTienePerroGuardado);
   const [perfil, setPerfil] = useState(() => {
     const base = {
       nombre: "", sexo: null, modoRaza: null, raza: null, tamanoManual: null,
@@ -4845,7 +4862,7 @@ function RawkuOnboardingInterna({
     // recién hecho no se pierde -- se guarda solo al generarlo, así que
     // está en "Mis menús". No había nada que rescatar.
     { key: "perfil", Icono: Dog, label: `Perfil de ${nombreMostrar}`, isPremium: false,
-      ir: () => { setSeccionSuelta(null); setFase("onboarding"); } },
+      ir: () => { setSeccionSuelta(null); setEditandoLaFicha(true); setFase("onboarding"); } },
     { key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false,
       ir: () => { setSeccionSuelta(null); setFase("misMenus"); } },
     { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true,
@@ -5599,7 +5616,14 @@ function RawkuOnboardingInterna({
   };
 
   const set = (campo, valor) => setPerfil((p) => ({ ...p, [campo]: valor }));
-  const siguiente = () => setPaso((p) => Math.min(TOTAL_PASOS + 1, p + 1));
+  const siguiente = () => setPaso((p) => {
+    const nuevo = Math.min(TOTAL_PASOS + 1, p + 1);
+    // Pasar del último paso al resumen es TERMINAR el asistente. A partir
+    // de aquí la ficha ya está hecha, así que la próxima vez que se abra
+    // será para editarla. Ver `editandoLaFicha`.
+    if (nuevo > TOTAL_PASOS) setEditandoLaFicha(false);
+    return nuevo;
+  });
   const atras = () => setPaso((p) => Math.max(1, p - 1));
 
   const resultadosRaza = useMemo(() => {
@@ -5624,6 +5648,47 @@ function RawkuOnboardingInterna({
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
     [especiesExcluidas]
   );
+
+  // ─── IR AL GENERADOR ────────────────────────────────────────────────────
+  //
+  // ⚠️ ESTO ESTABA METIDO DENTRO DEL onClick DE UN BOTÓN, y al quitar ese
+  // botón de la ficha (25 agosto) se perdía entero. Lo cazó el BLOQUE de
+  // pruebas de la ficha: un perro de diez años se guardaba con etapa
+  // "adulto" en vez de "senior". De la etapa salen los 30 requisitos de
+  // FEDIAF, así que eso no es un detalle: es darle a un senior la comida de
+  // otro perro. No daba ningún error.
+  //
+  // Empezar un menú no es navegar: son tres cosas, y las tres hacen falta
+  // vengas por donde vengas.
+  const irAlGeneradorDeMenus = () => {
+    // 1. Limpiar el bloqueo de veterinario que hubiera quedado. ⚠️ CASO
+    //    REAL (5 agosto): "marco una patología que bloquea, luego la
+    //    desmarco y pongo que no, pero sigue sin dejarme generar menús" --
+    //    `pantalla` se quedaba en "veterinario_requerido" para siempre.
+    setMenuError(null);
+    setNecesitaVeterinario(false);
+    setPantalla("elegir");
+    setFase("generador");
+
+    // 2. Guardar la ficha CON SU ETAPA. La etapa y el peso adulto los
+    //    calcula la app, no salen de la ficha, así que hay que pasarlos a
+    //    mano: guardar sin ellos deja al perro con la etapa de antes.
+    if (!usuario) return;
+    guardarPerro(usuario.id, { ...perfil, id: perfil._id },
+                 { etapa: etapaCalculada, pesoAdultoEsperado, dietaActual })
+      .then((perroGuardado) => {
+        if (perroGuardado?.id && !perfil._id) {
+          setPerfil((p) => ({ ...p, _id: perroGuardado.id }));
+        }
+        // 3. Avisar arriba de que este perro existe (o de que cambió de
+        //    nombre). Sin esto, un perro recién creado no aparecía en el
+        //    selector hasta recargar: la lista solo se leía al entrar.
+        //    NO remonta la app a propósito: acabas de pedir el generador y
+        //    remontar te devolvería a la ficha.
+        if (perroGuardado?.id) onPerroGuardado(perroGuardado);
+      })
+      .catch((err) => capturarError(err, { donde: "irAlGeneradorDeMenus" }));
+  };
 
   // ═══ REVALIDACIÓN DEL MENÚ CUANDO CAMBIA EL PERRO ═══════════════════
   //
@@ -6722,7 +6787,10 @@ function RawkuOnboardingInterna({
               Antes había que salir a la ficha del perro para eso, que es
               donde nadie lo va a buscar. */}
           <button
-            onClick={() => { setMenuGuardadoAbierto(null); setFase("generador"); setPantalla("elegir"); }}
+            // ⚠️ La MISMA función que el botón del asistente. Aquí había
+            // una versión propia que solo navegaba, y por eso entrando por
+            // este camino la ficha se guardaba sin su etapa.
+            onClick={() => { setMenuGuardadoAbierto(null); irAlGeneradorDeMenus(); }}
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl mb-4"
             style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
           >
@@ -7032,51 +7100,18 @@ function RawkuOnboardingInterna({
         ) : null}
 
         <div className="flex-1" />
+        {/* Solo al TERMINAR el asistente. Abriendo la ficha para editarla
+            no sale: para hacer un menú está "Mis menús", que es donde ves
+            los que ya tienes. */}
+        {!editandoLaFicha && (
         <button
-          onClick={() => {
-            // ⚠️ CORREGIDO (5 agosto, madrugada) — CASO REAL GRAVE
-            // ENCONTRADO, pedido expreso: "marco una patología que
-            // bloquea, luego la desmarco y pongo que no, pero sigue sin
-            // dejarme generar menús". Causa real: este botón solo hacía
-            // setFase("generador") sin tocar "pantalla" -- así que si
-            // antes se había caído en la pantalla de aviso veterinario
-            // (bloqueada), pantalla se quedaba en "veterinario_requerido"
-            // de forma persistente, y aterrizaba ahí otra vez, con el
-            // MISMO mensaje de error viejo -- sin importar que la
-            // patología ya se hubiera corregido. Ahora se navega
-            // explícitamente a "elegir" (el punto de entrada real del
-            // generador) y se limpia cualquier aviso de veterinario
-            // que hubiera quedado de un intento anterior.
-            setMenuError(null);
-            setNecesitaVeterinario(false);
-            setPantalla("elegir");
-            setFase("generador");
-            // Guardar/actualizar perfil del perro en Supabase
-            if (usuario) {
-              guardarPerro(usuario.id, { ...perfil, id: perfil._id },
-                           { etapa: etapaCalculada, pesoAdultoEsperado, dietaActual }).then((perroGuardado) => {
-                if (perroGuardado?.id && !perfil._id) {
-                  setPerfil((p) => ({ ...p, _id: perroGuardado.id }));
-                }
-                // ⚠️ AÑADIDO — avisar arriba de que este perro existe (o
-                // de que cambió de nombre). Sin esto, un perro recién
-                // creado no aparecía en el selector hasta recargar la
-                // página: la lista se leía sólo al iniciar sesión.
-                //
-                // Ojo: esto NO remonta la app a propósito. Aquí la
-                // usuaria acaba de pulsar "ir al generador"; remontar la
-                // devolvería al perfil, deshaciéndolo. Ver AuthGate.
-                if (perroGuardado?.id) onPerroGuardado(perroGuardado);
-              }).catch(console.error);
-            }
-          }}
+          onClick={irAlGeneradorDeMenus}
           className="w-full py-4 rounded-2xl text-base"
           style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
         >
-          {yaTienePerroGuardado
-            ? "Hacer el menú de la semana →"
-            : "Todo bien, ir al generador de menús →"}
+          Todo bien, ir al generador de menús →
         </button>
+        )}
         {/* ⚠️ AÑADIDO — LA INVITACIÓN A AÑADIR OTRO PERRO.
             Pedido expreso: "cuando entras por primera vez tendría que
             verse algún botón de tengo más de un perro". Tenía razón: la

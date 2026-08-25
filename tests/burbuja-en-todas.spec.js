@@ -18,6 +18,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarLaFicha, irAlGenerador, laFichaHaCargado } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -31,7 +32,7 @@ async function entrarYGenerar(page) {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+  await irAlGenerador(page);
   await page.getByRole("button", { name: /^Automático/ }).click();
   await page.getByRole("button", { name: /^(Generar|Hacer)/ }).click();
   // Ya en la pantalla del menú.
@@ -147,7 +148,7 @@ test.describe("el panel lateral es UNO y llega a todo", () => {
 
     // La señal de que estás en cada sitio, no de que el botón exista.
     const LLEGADA = {
-      "Perfil de Nala": (p) => p.getByRole("button", { name: /Hacer el menú de la semana/ }),
+      "Perfil de Nala": (p) => laFichaHaCargado(p),
       "Mis menús": (p) => p.getByText(/Los menús de/),
       "Evolución y crecimiento": (p) => p.getByText(/Evolución de Nala/),
       // Con premium sale el analizador; sin él, el muro. Las dos valen:
@@ -339,7 +340,7 @@ test.describe("la burbuja y el engranaje, en todas", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+    await esperarLaFicha(page);
 
     await page.getByRole("button", { name: "Menú", exact: true }).click();
     await page.getByRole("button", { name: "Evolución y crecimiento", exact: true }).click();
@@ -381,7 +382,7 @@ test.describe("la hoja de perros, según la pantalla", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+    await esperarLaFicha(page);
 
     const caja = await (await abrirLaHoja(page)).boundingBox();
 
@@ -401,7 +402,7 @@ test.describe("la hoja de perros, según la pantalla", () => {
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
     await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+    await esperarLaFicha(page);
 
     const caja = await (await abrirLaHoja(page)).boundingBox();
     expect(caja.width, `la hoja mide ${Math.round(caja.width)}px de 390`).toBe(390);
