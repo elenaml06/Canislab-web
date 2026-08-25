@@ -137,6 +137,11 @@ export function crearFakeSupabase(opciones = {}) {
   // así un mismo servidor sirve para todos los escenarios.
   const estado = {
     retrasoPerrosMs,
+    // ⏱ Cuánto tarda GUARDAR un perro. En local es instantáneo y por eso
+    // no se ve nunca la carrera que reproduce: guardas, cambias de perro
+    // antes de que la respuesta vuelva, y esa respuesta llega cuando ya
+    // estás en otro perro. En un móvil con mala cobertura pasa a diario.
+    retrasoGuardarPerroMs: 0,
     perros: sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }],
     // Menús guardados, con su perro_id. El GET filtra de verdad por esa
     // columna: así, si la app volviera a guardarlos con perro_id vacío,
@@ -246,6 +251,13 @@ export function crearFakeSupabase(opciones = {}) {
     if (ruta === "/__control") {
       const cfg = cuerpo ? JSON.parse(cuerpo) : {};
       if (typeof cfg.retrasoPerrosMs === "number") estado.retrasoPerrosMs = cfg.retrasoPerrosMs;
+      // ⚠️ NO PERSISTENTE, a propósito y por experiencia: se apaga en cada
+      // llamada al control salvo que se vuelva a pedir. Un retraso de 2,5
+      // segundos que se cuela en las pruebas siguientes las hace fallar por
+      // tiempo, y el fallo aparece en OTRO archivo -- pasó exactamente eso
+      // al añadirlo. Mismo criterio que `menusDistintos`.
+      estado.retrasoGuardarPerroMs =
+        typeof cfg.retrasoGuardarPerroMs === "number" ? cfg.retrasoGuardarPerroMs : 0;
       if (typeof cfg.sinPerro === "boolean") {
         estado.perros = cfg.sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }];
       }
@@ -276,6 +288,7 @@ export function crearFakeSupabase(opciones = {}) {
       if (cfg.olvidarPeticionesMenu !== false) { estado.peticionesMenu = []; estado.peticionesCasa = []; estado.peticionesSemana = []; estado.peticionesEdicion = []; }
       return responder(200, {
         retrasoPerrosMs: estado.retrasoPerrosMs,
+        retrasoGuardarPerroMs: estado.retrasoGuardarPerroMs,
         perros: estado.perros.length,
         nombresDePerros: estado.perros.map((p) => p.nombre),
         // Cuántos menús guardados tiene CADA perro. Mirar solo el total
@@ -554,6 +567,14 @@ export function crearFakeSupabase(opciones = {}) {
     };
 
     if (ruta === "/rest/v1/perros") {
+      // ⏱ AÑADIDO (25 agosto) — retraso al GUARDAR, no al leer. Sirve para
+      // reproducir una carrera que en local no se ve nunca porque el
+      // guardado es instantáneo: guardas un perro, cambias de perro antes
+      // de que el guardado termine, y la respuesta llega cuando ya estás
+      // en otro. En un móvil con mala cobertura eso pasa constantemente.
+      if (req.method !== "GET" && estado.retrasoGuardarPerroMs) {
+        await dormir(estado.retrasoGuardarPerroMs);
+      }
       if (req.method === "GET") {
         // ⏱ El retraso es el corazón del test: reproduce que el perro
         // llegue DESPUÉS de que la app ya haya decidido qué pantalla pintar.
