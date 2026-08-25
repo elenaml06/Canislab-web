@@ -1627,6 +1627,11 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // Ahora no se guarda el número, se guarda la INTENCIÓN: "de un día" o "la
   // tanda entera". Los días salen del menú que estés mirando, así que no
   // pueden ser los de otro ni aunque se quiera.
+  // ⚠️ Se pregunta antes de quitar, y no es por prudencia genérica: un
+  // alimento quitado NO se puede volver a poner. "Añadir" solo existe para
+  // suplementos comerciales, así que si quitas el pollo no hay forma de
+  // devolverlo sin rehacer el menú entero.
+  const [alimentoAQuitar, setAlimentoAQuitar] = useState(null);
   const [verLaTanda, setVerLaTanda] = useState(false);
   const diasSeleccionados = verLaTanda && menu.dias > 1 ? menu.dias : 1;
   const multiplicador = diasSeleccionados;
@@ -1786,8 +1791,23 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
 
   // ⚠️ CORREGIDO (5 agosto, madrugada): recibe el NOMBRE del producto
   // directamente, no un índice sobre una lista que ya no existe.
-  const quitarSuplemento = async (producto) => {
-    const ok = await llamarRecalculo("/menu/quitar", { menu_actual: nombresActualesDelMenu(), alimento: producto });
+  // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO: "me gustaría también que
+  // existiese un botón de cruz o papelera para eliminar un alimento de una
+  // dieta cuando se edita la dieta".
+  //
+  // El servidor ya sabía hacerlo (/menu/quitar, que excluye el alimento y
+  // RESUELVE EL MENÚ ENTERO otra vez con el motor real, no le resta los
+  // gramos y ya). Lo que faltaba era el botón: esta función existía desde
+  // agosto para los suplementos y no la llamaba nadie.
+  //
+  // Importante que recalcule de verdad: quitar el hígado no es tener el
+  // mismo menú con menos hígado, es otro menú que tiene que volver a
+  // cumplir los 30 requisitos. Si con ese alimento fuera no hay menú
+  // posible, el servidor lo dice y no se cambia nada.
+  const quitarAlimento = async (alimento) => {
+    setEditorAbierto(null);
+    setAlimentoAQuitar(null);
+    const ok = await llamarRecalculo("/menu/quitar", { menu_actual: nombresActualesDelMenu(), alimento });
     if (!ok) return;
     setRecienRecalculado(true);
     setTimeout(() => setRecienRecalculado(false), 2500);
@@ -2540,6 +2560,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                         <Pencil size={15} style={{ color: editorAbierto && editorAbierto.alimentoViejo === item.alimento ? ROSA : "#C9BEDD" }} />
                       </button>
                     )}
+                    <button
+                      aria-label={`Quitar ${item.alimento}`}
+                      onClick={() => {
+                        setAlimentoAQuitar(alimentoAQuitar === item.alimento ? null : item.alimento);
+                        setEditorAbierto(null); setPorqueAbierto(null); setComoAbierto(null);
+                      }}>
+                      <Trash2 size={15} style={{ color: alimentoAQuitar === item.alimento ? ROSA : "#C9BEDD" }} />
+                    </button>
                     {INSTRUCCIONES_POR_CATEGORIA[item.categoria] && (
                       <button
                         aria-label={`Cómo preparar ${item.alimento}`}
@@ -2549,6 +2577,29 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                     )}
                   </div>
                 </div>
+                {alimentoAQuitar === item.alimento && (
+                  <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
+                    <p className="text-xs mb-2 leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                      ¿Quitar <b>{item.alimento}</b>? Se rehace el menú entero sin él, y{" "}
+                      <b>no se puede volver a poner</b> sin generar otro.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        aria-label={`Confirmar quitar ${item.alimento}`}
+                        onClick={() => quitarAlimento(item.alimento)}
+                        className="px-3 py-1.5 rounded-lg text-xs"
+                        style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}>
+                        Quitar
+                      </button>
+                      <button
+                        onClick={() => setAlimentoAQuitar(null)}
+                        className="px-3 py-1.5 rounded-lg text-xs"
+                        style={{ background: PAPEL, color: MALVA, fontFamily: fontBody }}>
+                        Dejarlo
+                      </button>
+                    </div>
+                  </div>
+                )}
                 {editorAbierto && editorAbierto.alimentoViejo === item.alimento && !editorAbierto.categoria && (
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>CAMBIAR A QUÉ CATEGORÍA</p>
