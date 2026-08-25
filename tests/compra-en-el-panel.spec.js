@@ -49,22 +49,38 @@ async function entrar(page) {
   await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
 }
 
+async function elegirEnCategoria(page, categoria, especie, alimento) {
+  await page.getByRole("button", { name: `${categoria}: elijo yo` }).click();
+  await page.getByRole("button", { name: `${categoria}: elegir alimento` }).click();
+  await page.getByRole("button", { name: new RegExp(`^${especie}`) }).first().click();
+  await page.getByRole("button", { name: alimento, exact: true }).click();
+  await expect(page.getByText(alimento, { exact: true }).first()).toBeVisible();
+}
+
 const abrirLaCompra = async (page) => {
   await page.getByRole("button", { name: "Menú", exact: true }).click();
   await page.getByRole("button", { name: "La compra", exact: true }).click();
 };
 
 test.describe("la compra desde el panel", () => {
-  test("no se ofrece si no hay ningún menú guardado", async ({ page, request }) => {
-    // Sin nada que sumar, el botón sería una promesa vacía.
+  test("sin nada que comprar, la entrada sigue estando y lo EXPLICA", async ({ page, request }) => {
+    // ⚠️ CAMBIADO (24 agosto). Antes esta entrada se escondía cuando no
+    // había menús: "el botón sería una promesa vacía". Pero el panel tiene
+    // que ser EL MISMO en todas las pantallas y en todo momento -- pedido
+    // expreso, después de que el panel cambiara según dónde estuvieras.
+    //
+    // Un panel que cambia de contenido es peor que una entrada que abre
+    // una pantalla que explica que todavía no hay nada. Lo que NO puede
+    // pasar es que abra una pantalla en blanco, y eso es lo que se
+    // comprueba aquí.
     await configurar(request, {
       retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA], menus: [], olvidarUltimoMenu: true,
     });
     await page.goto("/");
     await entrar(page);
-    await page.getByRole("button", { name: "Menú", exact: true }).click();
+    await abrirLaCompra(page);
 
-    await expect(page.getByRole("button", { name: "La compra", exact: true })).toHaveCount(0);
+    await expect(page.getByText(/Todavía no hay ningún menú guardado/)).toBeVisible();
   });
 
   test("suma el último menú de TODOS los perros, no solo el abierto", async ({ page, request }) => {
@@ -199,5 +215,104 @@ test.describe("para cuántos días", () => {
     await page.getByRole("button", { name: "3 días" }).click();
     await expect(page.getByText("300 g")).toBeVisible();
     await expect(page.getByText("700 g")).toHaveCount(0);
+  });
+});
+
+test.describe("con varios menús en la semana", () => {
+  // ⚠️ CASO REAL (24 agosto): "la compra está mal, porque he hecho dos
+  // menús personalizados para la semana y solo me pone la compra de lo que
+  // tiene uno".
+  //
+  // Hasta ahora los dos menús de mentira eran IDÉNTICOS, así que sumar los
+  // dos o sumar uno dos veces daba lo mismo y las pruebas pasaban en los
+  // dos casos. Con `menusDistintos` cada menú trae un alimento propio: si
+  // falta uno, se ve.
+  test("los DOS menús están en la compra, no solo el primero", async ({ page, request }) => {
+    await configurar(request, {
+      retrasoPerrosMs: 50,
+      perros: [{ ...PERRO_DE_PRUEBA, dieta_actual: "barf" }],
+      menus: [], olvidarUltimoMenu: true, menusDistintos: true,
+    });
+    await page.goto("/");
+    await entrar(page);
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await page.getByRole("button", { name: /^Personalizar/ }).click();
+    await page.getByRole("button", { name: "+", exact: true }).click();   // dos menús
+    await page.getByRole("button", { name: /^(Elegir los ingredientes|Personalizar los)/ }).click();
+
+    await elegirEnCategoria(page, "Carne muscular", "Conejo", "Conejo");
+    await page.getByRole("button", { name: /Siguiente: Menú 2/ }).click();
+    await elegirEnCategoria(page, "Carne muscular", "Pollo", "Pollo muslo con piel");
+    await page.getByRole("button", { name: /Generar los menús/ }).click();
+
+    await page.getByRole("button", { name: /Perro actual/ }).waitFor({ timeout: 40000 });
+
+    await abrirLaCompra(page);
+
+    // Acotado a la pantalla de la compra: el nombre del alimento también
+    // sale en el menú de detrás, y sin acotar la prueba mide otra cosa.
+    const compra = page.getByRole("dialog", { name: "La compra" });
+    await expect(compra.getByText("Marcador de prueba 1")).toBeVisible();
+    await expect(compra.getByText("Marcador de prueba 2"),
+      "falta el segundo menú: la compra solo ha sumado uno").toBeVisible();
+  });
+
+  test("y también cuando vienen de lo GUARDADO", async ({ page, request }) => {
+    // El otro camino: no estás mirando ningún menú, así que la compra sale
+    // de la última fila guardada -- que lleva los dos menús dentro.
+    await configurar(request, {
+      retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA],
+      menus: [menuGuardado(PERRO_DE_PRUEBA.id, [
+        { menu: { Conejo: 100, "Solo del menú 1": 50 }, dias: 4 },
+        { menu: { Conejo: 100, "Solo del menú 2": 50 }, dias: 3 },
+      ])],
+      olvidarUltimoMenu: true,
+    });
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+
+    const compra = page.getByRole("dialog", { name: "La compra" });
+    await expect(compra.getByText("Solo del menú 1")).toBeVisible();
+    await expect(compra.getByText("Solo del menú 2"),
+      "falta el segundo menú guardado").toBeVisible();
+    // Y el conejo son los 7 días, no los 4 del primero.
+    await expect(compra.getByText("700 g")).toBeVisible();
+  });
+});
+
+test.describe("si editas un alimento, la compra se entera", () => {
+  // ⚠️ FALLO ENCONTRADO (24 agosto) buscando por qué "la compra está mal".
+  //
+  // Al editar un alimento, el servidor recalcula el menú ENTERO y el
+  // resultado se guardaba SOLO dentro de VistaMenus (`gramosRealesPorMenu`).
+  // Fuera, `menuReal` seguía con el menú de antes -- y de ahí sale la lista
+  // de la compra. O sea: editabas, la pantalla te enseñaba lo nuevo, y la
+  // compra te mandaba a comprar lo VIEJO. Sin error y sin nada que lo
+  // delatara: los números eran correctos, del menú equivocado.
+  test("lo editado sale en la compra, no el menú de antes", async ({ page, request }) => {
+    await configurar(request, {
+      retrasoPerrosMs: 50,
+      perros: [{ ...PERRO_DE_PRUEBA, dieta_actual: "barf" }],
+      menus: [], olvidarUltimoMenu: true, menusDistintos: true,
+    });
+    await page.goto("/");
+    await entrar(page);
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).click();
+    await page.getByRole("button", { name: /^Automático/ }).click();
+    await page.getByRole("button", { name: /^(Generar|Hacer)/ }).click();
+    await page.getByRole("button", { name: /Perro actual/ }).waitFor();
+
+    // Editar un alimento cualquiera: el de mentira devuelve un menú con
+    // "Marcador tras editar" dentro.
+    await page.getByRole("button", { name: /^Cambiar / }).first().click();
+    await page.getByRole("button", { name: "Verduras y frutas", exact: true }).click();
+    await page.getByRole("button", { name: /^Calabacín/ }).first().click();
+    await expect(page.getByText("Marcador tras editar").first()).toBeVisible({ timeout: 20000 });
+
+    await abrirLaCompra(page);
+    const compra = page.getByRole("dialog", { name: "La compra" });
+    await expect(compra.getByText("Marcador tras editar"),
+      "la compra se ha quedado con el menú de ANTES de editar").toBeVisible();
   });
 });

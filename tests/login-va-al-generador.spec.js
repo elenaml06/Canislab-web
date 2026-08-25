@@ -82,7 +82,9 @@ test.describe("login → generador", () => {
     await iniciarSesion(page);
 
     await page.getByRole("button", { name: "Menú", exact: true }).click();
-    await expect(page.getByText(/Editar perfil de/)).toBeVisible();
+    // ⚠️ Se llamaba "Editar perfil de X" hasta el 24 de agosto. Ahora
+    // "Perfil de X": el panel tiene una sola lista y ella dio los nombres.
+    await expect(page.getByText(/Perfil de/)).toBeVisible();
   });
 
   test("sigue funcionando aunque Supabase tarde mucho en devolver el perro", async ({ page, request }) => {

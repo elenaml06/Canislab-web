@@ -89,8 +89,12 @@ test.describe("secciones desde el perfil", () => {
     // justamente lo que hay: no un menú hecho, sino el generador.
     await expect(page.getByRole("button", { name: /^← Volver/ })).toHaveCount(0);
 
+    // ⚠️ El panel es UNO solo desde el 24 de agosto, con cinco entradas
+    // fijas. Aquí no hay ningún menú hecho, así que la salida a un sitio
+    // que EXISTE -- que es lo que esta prueba vigila desde el principio --
+    // es el perfil del perro.
     await abrirMenuLateral(page);
-    await page.getByRole("button", { name: "Hacer el menú de la semana", exact: true }).click();
+    await page.getByRole("button", { name: /^Perfil de/ }).click();
     await expect(page.getByRole("button", { name: /Hacer el menú de la semana/ })).toBeVisible();
   });
 });
