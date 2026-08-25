@@ -220,3 +220,59 @@ test.describe("la burbuja y el engranaje, en todas", () => {
       .toBeVisible();
   });
 });
+
+test.describe("la hoja de perros, según la pantalla", () => {
+  // ⚠️ CASO REAL (24 agosto): "en el ordenador necesito que cuando se
+  // despliega esté abajo en pequeñito".
+  //
+  // En el móvil una hoja a todo lo ancho es lo natural: ahí el ancho ES la
+  // pantalla. En un monitor de 1200px la misma hoja son 1200px de blanco
+  // para enseñar dos nombres.
+  //
+  // Esto mide ANCHOS y no busca clases: lo que importa es cómo se ve, y
+  // una clase de Tailwind puede estar puesta y no aplicarse.
+  const abrirLaHoja = async (page) => {
+    await page.getByRole("button", { name: /Perro actual/ }).last().click();
+    return page.getByRole("dialog", { name: "Tus perros" });
+  };
+
+  test.beforeEach(async ({ request }) => {
+    await configurar(request, {
+      retrasoPerrosMs: 50,
+      perros: [{ ...PERRO_DE_PRUEBA, dieta_actual: "barf" }, SEGUNDO_PERRO_DE_PRUEBA],
+      menus: [], olvidarUltimoMenu: true,
+    });
+  });
+
+  test("en el ordenador es pequeña y va abajo a la derecha", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+    await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+
+    const caja = await (await abrirLaHoja(page)).boundingBox();
+
+    // Pequeña: menos de la mitad de la pantalla. Antes ocupaba los 1280.
+    expect(caja.width, `la hoja mide ${Math.round(caja.width)}px de 1280: sigue a todo lo ancho`)
+      .toBeLessThan(640);
+    // Abajo: pegada al borde inferior.
+    expect(800 - (caja.y + caja.height)).toBeLessThan(60);
+    // Y a la derecha, que es donde está la burbuja que la abre.
+    expect(1280 - (caja.x + caja.width)).toBeLessThan(60);
+  });
+
+  test("en el móvil sigue ocupando todo el ancho", async ({ page }) => {
+    // Acotarla en el móvil sería el error contrario: ahí sobra el hueco.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+    await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+
+    const caja = await (await abrirLaHoja(page)).boundingBox();
+    expect(caja.width, `la hoja mide ${Math.round(caja.width)}px de 390`).toBe(390);
+  });
+});
