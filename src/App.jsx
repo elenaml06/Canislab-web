@@ -3647,16 +3647,41 @@ function RawkuOnboardingInterna({
   // inmensa mayoría de las veces nadie la abre.
   const [compraAbierta, setCompraAbierta] = useState(false);
   const [compraDeQuien, setCompraDeQuien] = useState(null);   // null = toda la casa
-  // ⚠️ PEDIDO EXPRESO: "y para cuántos días". La cesta sale de UNA SEMANA
-  // porque es lo que cubren los menús, pero nadie compra siempre para
-  // siete días: se preparan tandas de tres para la nevera o de dos semanas
-  // para congelar (el panel de congelación ya cuenta cómo).
+  // ⚠️ AÑADIDO (24 agosto) — MARCAR LO QUE YA TIENES. Pedido expreso:
+  // "molaría que tuviera casillas de marcaje, como para saber cuándo has
+  // comprado algo o lo tienes y cuándo te falta, y luego un botón para
+  // regenerar y dejarlo todo a cero".
   //
-  // Se escala en proporción a la semana (dias/7), que es exacto para los
-  // múltiplos y proporcional para el resto. No se intenta adivinar "para 3
-  // días te toca el menú 1": la rotación está pensada por semanas, y
-  // repartirla a ojo daría cantidades que no cuadran con ningún menú.
-  const [compraDias, setCompraDias] = useState(7);
+  // Se guarda en el NAVEGADOR, no en Supabase: es de este móvil y de esta
+  // compra. Vas por el pasillo marcando, te llaman, cierras la app, vuelves
+  // -- y lo marcado sigue ahí. Si viviera solo en memoria se perdería en el
+  // primer despiste, que es justo cuando hace falta.
+  const CLAVE_MARCADOS = "rawku.compra.marcados";
+  const [marcados, setMarcados] = useState(() => {
+    try {
+      const guardado = window.localStorage.getItem(CLAVE_MARCADOS);
+      return new Set(guardado ? JSON.parse(guardado) : []);
+    } catch { return new Set(); }
+  });
+
+  const marcar = (alimento) => {
+    setMarcados((antes) => {
+      const nuevo = new Set(antes);
+      if (nuevo.has(alimento)) nuevo.delete(alimento); else nuevo.add(alimento);
+      try { window.localStorage.setItem(CLAVE_MARCADOS, JSON.stringify([...nuevo])); } catch { /* modo privado */ }
+      return nuevo;
+    });
+  };
+
+  const desmarcarTodo = () => {
+    setMarcados(new Set());
+    try { window.localStorage.removeItem(CLAVE_MARCADOS); } catch { /* modo privado */ }
+  };
+
+  // null = todos los menús juntos. Un número = solo ese menú.
+  const [compraMenu, setCompraMenu] = useState(null);
+  // Cuántas veces: semanas si están todos juntos, tandas si es uno solo.
+  const [compraTandas, setCompraTandas] = useState(1);
   const [compraGuardada, setCompraGuardada] = useState(null); // [{nombre, menus}]
   const [cargandoCompra, setCargandoCompra] = useState(false);
   // Para poder decir en pantalla de dónde salen los números: del menú que
@@ -3668,7 +3693,8 @@ function RawkuOnboardingInterna({
   const abrirLaCompra = async () => {
     setCompraAbierta(true);
     setCompraDeQuien(null);
-    setCompraDias(7);
+    setCompraMenu(null);
+    setCompraTandas(1);
     setErrorCompra(null);
     setCargandoCompra(true);
     try {
@@ -3742,19 +3768,64 @@ function RawkuOnboardingInterna({
     }
   };
 
+  // ⚠️ REHECHO (24 agosto) — LOS DÍAS ESTABAN MAL PLANTEADOS, y era un
+  // fallo de concepto, no de cuentas. Sus palabras: "no debería poner para
+  // 3 días, 1 semana, y multiplicar por 7 días, porque hay menús que pone
+  // que se den 3 días y otro 4 — entonces si cocinas para 1 semana uno de 3
+  // días tienes para más de dos".
+  //
+  // Tenía razón. La cesta salía de UNA SEMANA y todo se escalaba por
+  // dias/7. Con los menús juntos eso funciona: la semana es la semana. Pero
+  // mirando UN menú suelto, "1 semana" no significa nada — ¿siete días de
+  // comida, o los 3 que le tocan dentro de la semana?
+  //
+  // Ahora son dos preguntas distintas según lo que estés mirando:
+  //   · Todos juntos → SEMANAS. Multiplicar una semana por 2 es exacto.
+  //   · Un menú solo → TANDAS DE ESE MENÚ, y cada opción dice cuántos DÍAS
+  //     DE COMIDA te da, que es lo que de verdad quieres saber en la tienda.
+  //
+  // Así ningún número sale sin explicación.
+  const menusDeLaCompra = useMemo(() => {
+    // Cuántos menús hay y cuántos días cubre cada uno. Se toman del primer
+    // perro: en una casa todos reciben el mismo número de menús y el mismo
+    // reparto de días (lo decide /menu/varios-perros).
+    const primero = (compraGuardada || [])[0];
+    return ((primero && primero.menus) || []).map((m, i) => ({
+      indice: i,
+      dias: m.dias > 0 ? m.dias : 1,
+      etiqueta: `Menú ${i + 1}`,
+    }));
+  }, [compraGuardada]);
+
+  // Cuántos días de comida sale la lista que se está viendo. Es el número
+  // que hay que enseñar: "2 semanas" y "8 días" no son lo mismo si el menú
+  // dura 4 días.
+  const diasDeLaCompra = useMemo(() => {
+    if (compraMenu === null) return 7 * compraTandas;
+    const m = menusDeLaCompra.find((x) => x.indice === compraMenu);
+    return (m ? m.dias : 7) * compraTandas;
+  }, [compraMenu, compraTandas, menusDeLaCompra]);
+
   const cestaDelPanel = useMemo(() => {
     if (!compraGuardada) return [];
-    const elegidos = compraDeQuien
+    const perrosElegidos = compraDeQuien
       ? compraGuardada.filter((p) => p.nombre === compraDeQuien)
       : compraGuardada;
-    const semanas = (compraDias || 7) / 7;
-    const cesta = cestaDeLaCompra(elegidos, categoriaDeAlimento);
-    if (semanas === 1) return cesta;
+    // Y de cada perro, el menú elegido o todos.
+    const conElMenu = perrosElegidos.map((p) => ({
+      ...p,
+      menus: compraMenu === null
+        ? p.menus
+        : (p.menus || []).filter((_, i) => i === compraMenu),
+    })).filter((p) => (p.menus || []).length);
+
+    const cesta = cestaDeLaCompra(conElMenu, categoriaDeAlimento);
+    if (compraTandas === 1) return cesta;
     return cesta.map((z) => ({
       ...z,
-      lineas: z.lineas.map((l) => ({ ...l, gramos: l.gramos * semanas })),
+      lineas: z.lineas.map((l) => ({ ...l, gramos: l.gramos * compraTandas })),
     }));
-  }, [compraGuardada, compraDeQuien, compraDias]);
+  }, [compraGuardada, compraDeQuien, compraMenu, compraTandas]);
   const [cargandoMenusGuardados, setCargandoMenusGuardados] = useState(false);
   // Fila de Supabase que se está viendo ahora mismo, si se ha abierto uno
   // guardado. Sirve para dos cosas: saber que NO hay que regenerar nada, y
@@ -4736,27 +4807,71 @@ function RawkuOnboardingInterna({
             </div>
           )}
 
-          {/* ⚠️ PEDIDO EXPRESO: "y para cuántos días". Tres días es una
-              tanda de nevera; dos semanas o un mes, una de congelador. */}
+          {/* ⚠️ REHECHO (24 agosto) — QUÉ MENÚ Y CUÁNTO.
+              Pedido: "se debería poder elegir el menú en la compra para ver
+              los alimentos de cada menú por separado o en conjunto, como
+              elija el usuario". */}
+          {menusDeLaCompra.length > 1 && (
+            <>
+              <p className="text-[10px] tracking-[0.14em] uppercase mb-1.5" style={{ color: MALVA, fontFamily: "monospace" }}>
+                ¿Qué menú?
+              </p>
+              <div className="flex gap-2 flex-wrap mb-4">
+                {[{ indice: null, texto: "Todos juntos" },
+                  ...menusDeLaCompra.map((m) => ({
+                    indice: m.indice,
+                    texto: `${m.etiqueta} · ${m.dias} ${m.dias === 1 ? "día" : "días"}`,
+                  }))].map((op) => {
+                  const activo = compraMenu === op.indice;
+                  return (
+                    <button key={op.texto}
+                      onClick={() => { setCompraMenu(op.indice); setCompraTandas(1); }}
+                      aria-pressed={activo}
+                      className="px-3 py-1.5 rounded-full text-xs"
+                      style={{ background: activo ? VIOLETA : "#FFFFFF",
+                               color: activo ? "#FFFFFF" : VIOLETA,
+                               border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                               fontFamily: fontBody, fontWeight: activo ? 700 : 400 }}>
+                      {op.texto}
+                    </button>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          {/* ⚠️ Y AQUÍ EL ARREGLO DE CONCEPTO. Antes ponía "3 días / 1
+              semana / 2 semanas / 1 mes" y multiplicaba la semana. Con los
+              menús juntos eso vale; mirando UN menú de 3 días, "1 semana" no
+              significa nada. Ahora la pregunta cambia con lo que estás
+              mirando, y CADA OPCIÓN DICE CUÁNTOS DÍAS DE COMIDA da. */}
           <p className="text-[10px] tracking-[0.14em] uppercase mb-1.5" style={{ color: MALVA, fontFamily: "monospace" }}>
-            ¿Para cuántos días?
+            {compraMenu === null ? "¿Para cuántas semanas?" : "¿Cuántas tandas?"}
           </p>
           <div className="flex gap-2 flex-wrap mb-4">
-            {[{ dias: 3, texto: "3 días" }, { dias: 7, texto: "1 semana" },
-              { dias: 14, texto: "2 semanas" }, { dias: 30, texto: "1 mes" }].map((op) => {
-              const activo = compraDias === op.dias;
-              return (
-                <button key={op.dias} onClick={() => setCompraDias(op.dias)}
-                  aria-pressed={activo}
-                  className="px-3 py-1.5 rounded-full text-xs"
-                  style={{ background: activo ? VIOLETA : "#FFFFFF",
-                           color: activo ? "#FFFFFF" : VIOLETA,
-                           border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
-                           fontFamily: fontBody, fontWeight: activo ? 700 : 400 }}>
-                  {op.texto}
-                </button>
-              );
-            })}
+            {(() => {
+              const diasPorTanda = compraMenu === null
+                ? 7
+                : (menusDeLaCompra.find((m) => m.indice === compraMenu)?.dias || 7);
+              return [1, 2, 4].map((veces) => {
+                const dias = diasPorTanda * veces;
+                const texto = compraMenu === null
+                  ? `${veces} ${veces === 1 ? "semana" : "semanas"}`
+                  : `${veces} ${veces === 1 ? "tanda" : "tandas"} · ${dias} días`;
+                const activo = compraTandas === veces;
+                return (
+                  <button key={veces} onClick={() => setCompraTandas(veces)}
+                    aria-pressed={activo}
+                    className="px-3 py-1.5 rounded-full text-xs"
+                    style={{ background: activo ? VIOLETA : "#FFFFFF",
+                             color: activo ? "#FFFFFF" : VIOLETA,
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                             fontFamily: fontBody, fontWeight: activo ? 700 : 400 }}>
+                    {texto}
+                  </button>
+                );
+              });
+            })()}
           </div>
 
           <p className="text-xs mb-4 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -4767,10 +4882,14 @@ function RawkuOnboardingInterna({
                 : compraDeLoQueMiras
                   ? "Del menú que tienes en pantalla."
                   : "De tu último menú guardado."}
-            {compraDias !== 7 && (
-              <> Los menús cubren una semana, así que esto es esa semana
-              {" "}{compraDias > 7 ? "multiplicada" : "en proporción"} a {compraDias} días.</>
-            )}
+            {" "}
+            {/* El número que de verdad importa en la tienda: para cuántos
+                días de comida es esta lista. Nunca una cifra sin explicar. */}
+            <b style={{ color: TINTA }}>
+              {compraMenu === null
+                ? `${diasDeLaCompra} días de comida`
+                : `${menusDeLaCompra.find((m) => m.indice === compraMenu)?.etiqueta} — ${diasDeLaCompra} días de comida`}
+            </b>.
           </p>
 
           {cestaDelPanel.map((zona) => (
@@ -4781,24 +4900,59 @@ function RawkuOnboardingInterna({
               {zona.lineas.map((linea) => {
                 const deQuien = deQuienEs(linea.deQuien,
                   compraDeQuien ? 1 : (compraGuardada || []).length);
+                const hecho = marcados.has(linea.alimento);
                 return (
-                  <div key={linea.alimento} className="flex items-baseline justify-between gap-3 mb-1.5">
-                    <span className="text-sm" style={{ color: TINTA, fontFamily: fontBody }}>
-                      {linea.alimento}
-                      {deQuien && (
-                        <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
-                          {deQuien}
-                        </span>
-                      )}
+                  // ⚠️ La línea ENTERA es el botón, no una casilla de 20px:
+                  // esto se usa de pie en una tienda, con una mano.
+                  <button key={linea.alimento}
+                    onClick={() => marcar(linea.alimento)}
+                    aria-pressed={hecho}
+                    aria-label={`${linea.alimento}: ${hecho ? "ya lo tienes" : "te falta"}`}
+                    className="w-full flex items-center justify-between gap-3 mb-1.5 text-left"
+                    style={{ background: "none", border: "none", padding: 0, cursor: "pointer" }}
+                  >
+                    <span className="flex items-center gap-2 min-w-0">
+                      <span aria-hidden="true"
+                        className="w-5 h-5 rounded-md flex items-center justify-center shrink-0"
+                        style={{ background: hecho ? VIOLETA : "#FFFFFF",
+                                 border: `1.5px solid ${hecho ? VIOLETA : "#C9BEDD"}` }}>
+                        {hecho && <Check size={13} strokeWidth={3} style={{ color: "#FFFFFF" }} />}
+                      </span>
+                      <span className="text-sm truncate"
+                            style={{ color: hecho ? MALVA : TINTA, fontFamily: fontBody,
+                                     textDecoration: hecho ? "line-through" : "none" }}>
+                        {linea.alimento}
+                        {deQuien && (
+                          <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                            {deQuien}
+                          </span>
+                        )}
+                      </span>
                     </span>
-                    <span className="text-sm shrink-0" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700 }}>
+                    <span className="text-sm shrink-0"
+                          style={{ color: hecho ? MALVA : VIOLETA, fontFamily: fontBody, fontWeight: 700,
+                                   textDecoration: hecho ? "line-through" : "none" }}>
                       {formatearCompra(linea.gramos)}
                     </span>
-                  </div>
+                  </button>
                 );
               })}
             </div>
           ))}
+
+          {/* ⚠️ "Un botón para regenerar y dejarlo todo a cero como si no
+              tuvieras nada". Solo se pinta si hay algo marcado: un botón de
+              borrar siempre visible se pulsa sin querer. */}
+          {marcados.size > 0 && (
+            <button
+              onClick={desmarcarTodo}
+              className="w-full py-3 rounded-xl mb-3"
+              style={{ background: "#FFFFFF", color: VIOLETA, border: "1.5px solid #E3DAF0",
+                       fontFamily: fontBody, fontSize: 14, fontWeight: 700, cursor: "pointer" }}
+            >
+              Empezar de cero ({marcados.size} {marcados.size === 1 ? "marcado" : "marcados"})
+            </button>
+          )}
 
           <p className="text-[11px] leading-snug mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
             Compra un poco de más en lo fresco: al deshuesar y limpiar se pierde

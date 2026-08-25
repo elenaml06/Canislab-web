@@ -178,43 +178,165 @@ test.describe("la compra desde el panel", () => {
   });
 });
 
-test.describe("para cuántos días", () => {
-  // PEDIDO EXPRESO: "y para cuántos días". Nadie compra siempre para siete:
-  // se preparan tandas de tres días para la nevera o de dos semanas para
-  // congelar. La cesta sale de una SEMANA, así que lo demás se escala en
-  // proporción -- y eso es aritmética, o sea que se comprueba con números.
+test.describe("qué menú y para cuánto", () => {
+  // ⚠️ REHECHO (24 agosto) — CASO REAL: "no debería poner para 3 días, 1
+  // semana, y multiplicar por 7 días, porque hay menús que pone que se den
+  // 3 días y otro 4 — entonces si cocinas para 1 semana uno de 3 días
+  // tienes para más de dos".
+  //
+  // Tenía razón, y era un fallo de CONCEPTO. La cesta salía de una semana y
+  // todo se escalaba por dias/7. Con los menús juntos eso vale. Mirando UN
+  // menú de 3 días, "1 semana" no significa nada.
+  //
+  // Ahora: juntos → semanas; uno solo → tandas de ESE menú, y cada opción
+  // dice cuántos DÍAS DE COMIDA da.
+  const DOS_MENUS = [
+    { menu: { Conejo: 100, "Solo del 1": 10 }, dias: 4 },
+    { menu: { Conejo: 200, "Solo del 2": 20 }, dias: 3 },
+  ];
+
   test.beforeEach(async ({ request }) => {
     await configurar(request, {
       retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA],
-      menus: [menuGuardado(PERRO_DE_PRUEBA.id, [{ menu: { Conejo: 100 }, dias: 7 }])],
+      menus: [menuGuardado(PERRO_DE_PRUEBA.id, DOS_MENUS)],
       olvidarUltimoMenu: true,
     });
   });
 
-  test("por defecto, la semana", async ({ page }) => {
+  test("por defecto, todos juntos y la semana entera", async ({ page }) => {
     await page.goto("/");
     await entrar(page);
     await abrirLaCompra(page);
-    await expect(page.getByText("700 g")).toBeVisible();
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    // 100x4 + 200x3 = 1000 g de conejo.
+    await expect(compra.getByText("1 kg")).toBeVisible();
+    await expect(compra.getByText(/7 días de comida/)).toBeVisible();
   });
 
-  test("dos semanas es el doble", async ({ page }) => {
+  test("se puede ver UN menú solo, con sus días", async ({ page }) => {
     await page.goto("/");
     await entrar(page);
     await abrirLaCompra(page);
-    await page.getByRole("button", { name: "2 semanas" }).click();
-    await expect(page.getByText("1,4 kg")).toBeVisible();
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    await compra.getByRole("button", { name: /^Menú 1 · 4 días/ }).click();
+
+    // Solo el menú 1: 100 x 4 = 400 g. Y su alimento propio, no el del otro.
+    await expect(compra.getByText("400 g")).toBeVisible();
+    await expect(compra.getByText("Solo del 1")).toBeVisible();
+    await expect(compra.getByText("Solo del 2")).toHaveCount(0);
   });
 
-  test("tres días es menos, no lo mismo", async ({ page }) => {
-    // Que el selector se pinte no basta: si no multiplicara, el número
-    // seguiría siendo 700 g y la pantalla se vería idéntica de correcta.
+  test("con un menú solo, las opciones son TANDAS y dicen los días", async ({ page }) => {
+    // Aquí está el fallo que ella describió: "1 semana" de un menú de 3
+    // días no se entiende. Ahora pone "2 tandas · 6 días".
     await page.goto("/");
     await entrar(page);
     await abrirLaCompra(page);
-    await page.getByRole("button", { name: "3 días" }).click();
-    await expect(page.getByText("300 g")).toBeVisible();
-    await expect(page.getByText("700 g")).toHaveCount(0);
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    await compra.getByRole("button", { name: /^Menú 2 · 3 días/ }).click();
+
+    await expect(compra.getByRole("button", { name: "1 tanda · 3 días" })).toBeVisible();
+    await expect(compra.getByRole("button", { name: "2 tandas · 6 días" })).toBeVisible();
+    // Y NO se ofrece "1 semana", que es lo que no significaba nada.
+    await expect(compra.getByRole("button", { name: /semana/ })).toHaveCount(0);
+  });
+
+  test("dos tandas de un menú de 3 días son el doble, y 6 días", async ({ page }) => {
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    await compra.getByRole("button", { name: /^Menú 2 · 3 días/ }).click();
+    // Menú 2 solo: 200 x 3 = 600 g.
+    await expect(compra.getByText("600 g")).toBeVisible();
+
+    await compra.getByRole("button", { name: "2 tandas · 6 días" }).click();
+    await expect(compra.getByText("1,2 kg")).toBeVisible();
+    await expect(compra.getByText(/6 días de comida/)).toBeVisible();
+  });
+
+  test("juntos, las opciones son SEMANAS", async ({ page }) => {
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    await expect(compra.getByRole("button", { name: "2 semanas" })).toBeVisible();
+    await compra.getByRole("button", { name: "2 semanas" }).click();
+    await expect(compra.getByText("2 kg")).toBeVisible();
+    await expect(compra.getByText(/14 días de comida/)).toBeVisible();
+  });
+});
+
+test.describe("marcar lo que ya tienes", () => {
+  // PEDIDO EXPRESO: "molaría que tuviera casillas de marcaje, como para
+  // saber cuándo has comprado algo o lo tienes y cuándo te falta, y luego un
+  // botón para regenerar y dejarlo todo a cero. Esto tiene que ser user
+  // friendly".
+  test.beforeEach(async ({ request }) => {
+    await configurar(request, {
+      retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA],
+      menus: [menuGuardado(PERRO_DE_PRUEBA.id, [{ menu: { Conejo: 100, Zanahoria: 20 }, dias: 7 }])],
+      olvidarUltimoMenu: true,
+    });
+  });
+
+  test("se marca y se desmarca tocando la línea entera", async ({ page }) => {
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    const conejo = compra.getByRole("button", { name: /^Conejo:/ });
+    await expect(conejo).toHaveAttribute("aria-pressed", "false");
+    await conejo.click();
+    await expect(conejo).toHaveAttribute("aria-pressed", "true");
+    await conejo.click();
+    await expect(conejo).toHaveAttribute("aria-pressed", "false");
+  });
+
+  test("lo marcado sobrevive a cerrar la app", async ({ page }) => {
+    // Esto se usa de pie en una tienda: te llaman, cierras, vuelves. Si lo
+    // marcado viviera solo en memoria se perdería justo cuando hace falta.
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+    await page.getByRole("dialog", { name: "La compra" })
+              .getByRole("button", { name: /^Conejo:/ }).click();
+
+    // Cerrar y volver a abrir NO es volver a entrar: la sesión sigue viva,
+    // así que tras recargar no hay pantalla de login que rellenar. Esperar
+    // aquí el formulario era esperar algo que no llega nunca.
+    await page.reload();
+    await page.getByRole("button", { name: /Hacer el menú de la semana/ }).waitFor();
+    await abrirLaCompra(page);
+
+    await expect(page.getByRole("dialog", { name: "La compra" })
+                     .getByRole("button", { name: /^Conejo:/ }),
+      "lo marcado se ha perdido al recargar").toHaveAttribute("aria-pressed", "true");
+  });
+
+  test("el botón de empezar de cero desmarca todo, y solo sale si hay algo", async ({ page }) => {
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    // Sin nada marcado no se ofrece: un botón de borrar siempre visible se
+    // pulsa sin querer.
+    await expect(compra.getByRole("button", { name: /Empezar de cero/ })).toHaveCount(0);
+
+    await compra.getByRole("button", { name: /^Conejo:/ }).click();
+    await compra.getByRole("button", { name: /^Zanahoria:/ }).click();
+    await expect(compra.getByRole("button", { name: /Empezar de cero \(2 marcados\)/ })).toBeVisible();
+
+    await compra.getByRole("button", { name: /Empezar de cero/ }).click();
+    await expect(compra.getByRole("button", { name: /^Conejo:/ })).toHaveAttribute("aria-pressed", "false");
+    await expect(compra.getByRole("button", { name: /Empezar de cero/ })).toHaveCount(0);
   });
 });
 
