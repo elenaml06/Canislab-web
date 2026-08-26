@@ -316,6 +316,14 @@ export function crearFakeSupabase(opciones = {}) {
           return cuenta;
         }, {}),
         menus: estado.menus.length,
+        // ⚠️ AÑADIDO (26 agosto) — LAS FILAS, no solo cuántas hay.
+        // `menus` es un contador desde siempre, y para renombrar hacía
+        // falta poder mirar lo que quedó GUARDADO: una prueba que solo
+        // mire la pantalla aprueba un renombrado que se pierde al
+        // recargar, que es la familia de fallos de "la ficha se guardaba
+        // vacía en silencio". Se llama distinto para no cambiar lo que ya
+        // usaban otras pruebas.
+        menusGuardados: estado.menus.map((m) => JSON.parse(JSON.stringify(m))),
         ultimoMenuGuardado: estado.ultimoMenuGuardado,
       });
     }
@@ -651,6 +659,24 @@ export function crearFakeSupabase(opciones = {}) {
         if (perroId) estado.menus = estado.menus.filter((m) => String(m.perro_id) !== perroId);
         else if (id) estado.menus = estado.menus.filter((m) => String(m.id) !== id);
         return responder(200, []);
+      }
+      // ⚠️ AÑADIDO (26 agosto) — PATCH DE VERDAD, NO UN ALTA MÁS.
+      // Renombrar un menú (o borrar uno de los de dentro) es un PATCH, y
+      // aquí todo lo que no fuera GET o DELETE caía en el alta de abajo: la
+      // fila vieja se quedaba y aparecía una nueva. La prueba habría visto
+      // el nombre nuevo en la lista y habría pasado en verde con un menú
+      // duplicado detrás.
+      if (req.method === "PATCH") {
+        const id = idDelFiltro(url, "id");
+        const cambios = JSON.parse(cuerpo || "{}");
+        let actualizada = null;
+        estado.menus = estado.menus.map((m) => {
+          if (String(m.id) !== id) return m;
+          actualizada = { ...m, ...cambios };
+          return actualizada;
+        });
+        if (!actualizada) return responder(404, { message: `fake-supabase: no hay menú ${id}` });
+        return responder(200, unSoloObjeto ? actualizada : [actualizada]);
       }
       const datos = JSON.parse(cuerpo || "{}");
       const fila = {

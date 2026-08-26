@@ -95,6 +95,127 @@ test.describe("menús guardados", () => {
     await expect(page.getByText("Semana de julio")).toBeVisible();
   });
 
+  // ─── LOS TRES PUNTOS ──────────────────────────────────────────────────────
+  //
+  // Pedido expreso (26 agosto): "en vez de la papelera debería haber tres
+  // puntitos para poder renombrar y borrar; y tienes que tener en cuenta si
+  // es un menú que tiene varios menús dentro -- cada menú individual de la
+  // semana y el global, desde dentro y desde fuera".
+  //
+  // Son DOS niveles guardados en la MISMA fila:
+  //   · el conjunto -> la columna `nombre`
+  //   · cada menú   -> `menus_data[i].nombre`
+  // Y lo que hay que vigilar no es que el botón esté, sino que lo que se
+  // escriba llegue a la base de datos y siga ahí al recargar: renombrar y
+  // que solo cambie la pantalla es exactamente el fallo de la ficha que se
+  // guardaba vacía en silencio.
+
+  test("los tres puntos renombran el menú guardado, y se queda guardado", async ({ page, request }) => {
+    await configurarBackend(request, { menus: [menuDeEjemplo({ id: "m1", nombre: "Semana de agosto" })] });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await abrirMenuLateral(page);
+    await page.getByRole("button", { name: /Mis menús/ }).click();
+
+    // Ya no hay papelera suelta: hay tres puntos, y dentro las dos cosas.
+    await expect(page.getByRole("button", { name: /^Borrar el menú del/ })).toHaveCount(0);
+    await page.getByRole("button", { name: /^Opciones del menú/ }).click();
+    const hoja = page.getByRole("dialog", { name: /^Opciones de/ });
+    await expect(hoja.getByRole("button", { name: "Renombrar" })).toBeVisible();
+    await expect(hoja.getByRole("button", { name: /^Eliminar/ })).toBeVisible();
+
+    await hoja.getByRole("button", { name: "Renombrar" }).click();
+    await page.getByLabel("Nombre del menú").fill("El de la playa");
+    await page.getByRole("button", { name: "Guardar" }).click();
+
+    await expect(page.getByText("El de la playa")).toBeVisible();
+
+    // ⚠️ LO QUE DE VERDAD IMPORTA: que haya llegado a la base de datos. Mirar
+    // solo la pantalla aprobaría un renombrado que se pierde al recargar,
+    // que es la familia de fallos de "la ficha se guardaba vacía".
+    const estado = await configurarBackend(request, {});
+    const fila = estado.menusGuardados.find((m) => m.id === "m1");
+    expect(fila, "el menú ha desaparecido de la base de datos").toBeTruthy();
+    expect(fila.nombre).toBe("El de la playa");
+    // Y no se ha duplicado: renombrar es un PATCH, no un alta.
+    expect(estado.menusGuardados.filter((m) => m.id === "m1")).toHaveLength(1);
+  });
+
+  test("dentro de un guardado con varios, se renombra UN menú de la semana", async ({ page, request }) => {
+    // El caso que el pedido señala: "tienes que tener en cuenta si es un menú
+    // que tiene varios menús dentro". Renombrar el segundo no puede tocar al
+    // primero, y tiene que escribirse en `menus_data[1]`, no en la columna
+    // `nombre` del conjunto.
+    await configurarBackend(request, { menus: [menuDeEjemplo({
+      id: "m1", nombre: "Semana de agosto", num_menus: 2,
+      menus_data: [
+        { menu: { "Carne muscular de pollo": 420, "Hueso carnoso de pollo": 150 } },
+        { menu: { "Carne muscular de ternera": 400, "Hueso carnoso de pollo": 140 } },
+      ],
+    })] });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await abrirMenuLateral(page);
+    await page.getByRole("button", { name: /Mis menús/ }).click();
+    await page.getByText("Semana de agosto").click();
+    await expect(page.getByText(/SEMANA DE/i)).toBeVisible();
+
+    // ⚠️ LOS TRES PUNTOS DE LA CABECERA, sobre el menú que se está viendo.
+    // La primera versión de esta prueba iba a la lista de "Mis menús" de
+    // dentro de VistaMenus, y ahí es donde saltó que esa sección NO SE PUEDE
+    // ABRIR: solo aparece con `soloSeccion="menus"` y nadie lo pasa -- el
+    // "Mis menús" del panel va a la pantalla de FUERA. Los botones estaban
+    // puestos en código muerto: se veían perfectos y no los alcanzaba nadie.
+    await page.getByRole("button", { name: "Menú 2" }).click();
+    await page.getByRole("button", { name: "Opciones de Menú 2" }).click();
+    await page.getByRole("dialog", { name: "Opciones de Menú 2" })
+              .getByRole("button", { name: "Renombrar" }).click();
+    await page.getByLabel("Nombre del menú").fill("El de pescado");
+    await page.getByRole("button", { name: "Guardar" }).click();
+
+    const estado = await configurarBackend(request, {});
+    const fila = estado.menusGuardados.find((m) => m.id === "m1");
+    expect(fila.menus_data[1].nombre).toBe("El de pescado");
+    // El primero, intacto. Y el nombre del CONJUNTO, intacto: son dos sitios
+    // distintos y escribir en el que no toca sería invisible hasta que
+    // alguien abriera la lista de fuera.
+    expect(fila.menus_data[0].nombre ?? null).toBeNull();
+    expect(fila.nombre).toBe("Semana de agosto");
+  });
+
+  test("borrar UN menú de dentro deja el resto, y no borra el guardado", async ({ page, request }) => {
+    await configurarBackend(request, { menus: [menuDeEjemplo({
+      id: "m1", nombre: "Semana de agosto", num_menus: 2,
+      menus_data: [
+        { menu: { "Carne muscular de pollo": 420 }, nombre: "El de pollo" },
+        { menu: { "Carne muscular de ternera": 400 }, nombre: "El de ternera" },
+      ],
+    })] });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await abrirMenuLateral(page);
+    await page.getByRole("button", { name: /Mis menús/ }).click();
+    await page.getByText("Semana de agosto").click();
+    await expect(page.getByText(/SEMANA DE/i)).toBeVisible();
+
+    await page.getByRole("button", { name: "El de ternera" }).click();
+    await page.getByRole("button", { name: "Opciones de El de ternera" }).click();
+    await page.getByRole("dialog", { name: "Opciones de El de ternera" })
+              .getByRole("button", { name: /^Eliminar/ }).click();
+    // Dice qué queda antes de borrar: enterarse después no vale.
+    await expect(page.getByText(/Se quedan 1 menú en este guardado/)).toBeVisible();
+    await page.getByRole("button", { name: "Borrar", exact: true }).click();
+
+    const estado = await configurarBackend(request, {});
+    const fila = estado.menusGuardados.find((m) => m.id === "m1");
+    expect(fila, "se ha borrado el guardado entero, y solo se pedía uno de dentro").toBeTruthy();
+    expect(fila.menus_data).toHaveLength(1);
+    expect(fila.menus_data[0].nombre).toBe("El de pollo");
+    // ⚠️ Y `num_menus` BAJA con él. Si se queda en 2, la lista de fuera dice
+    // "2 menús" de algo que ya solo lleva uno -- y no da error, solo miente.
+    expect(fila.num_menus).toBe(1);
+  });
+
   test("se puede abrir un menú guardado y ver su contenido", async ({ page, request }) => {
     await configurarBackend(request, { menus: [menuDeEjemplo({ nombre: "Semana de agosto" })] });
 

@@ -23,7 +23,7 @@
 
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
-import { irAlGenerador } from "./ayudas.js";
+import { irAlGenerador, pedirLosDeLaCasa } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -120,7 +120,7 @@ test.describe("personalizar con varios menús Y varios perros", () => {
     await page.getByRole("button", { name: "Entrar" }).click();
     await irAlGenerador(page);
 
-    await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
+    await pedirLosDeLaCasa(page);
     for (const nombre of [PERRO_DE_PRUEBA.nombre, SEGUNDO_PERRO_DE_PRUEBA.nombre]) {
       await page.getByRole("group", { name: `Qué come ${nombre}` })
                 .getByRole("button", { name: "BARF", exact: true }).click();
