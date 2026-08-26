@@ -37,3 +37,20 @@ export async function irAlGenerador(page) {
   // Que haya llegado de verdad: la primera pregunta del generador.
   await expect(page.getByRole("button", { name: /^Automático/ })).toBeVisible();
 }
+
+// ⚠️ AÑADIDO (26 agosto) — "¿PARA QUIÉN?" ES LA PRIMERA PREGUNTA.
+//
+// Entrando por "Mis menús" → "Hacer otro menú" se aterriza en "solo para
+// este perro", y con eso las dos formas de hacer los menús de la casa ni se
+// pintan (pedido expreso: "no quiero las tres opciones siempre; si dice solo
+// para Cairo, no tienes por qué estar leyendo el que sea igual para los dos
+// o distinto").
+//
+// Así que para pedir los de la casa hay que decirlo primero, que es lo que
+// haría una persona. Solo si el botón está: viniendo del asistente ya viene
+// elegido "para todos" y no hay nada que tocar.
+export async function pedirLosDeLaCasa(page, forma = /Los mismos alimentos para todos/) {
+  const paraTodos = page.getByRole("button", { name: /^(Para los dos|Para todos)$/ });
+  if (await paraTodos.count()) await paraTodos.click();
+  await page.getByRole("button", { name: forma }).click();
+}

@@ -438,4 +438,38 @@ test.describe("si editas un alimento, la compra se entera", () => {
     await expect(compra.getByText("Marcador tras editar"),
       "la compra se ha quedado con el menú de ANTES de editar").toBeVisible();
   });
+
+  test("los menús con nombre salen con SU NOMBRE en la compra", async ({ page, request }) => {
+    // ⚠️ CASO REAL — pedido expreso (26 agosto): "dentro de la compra, donde
+    // aparecen los nombres de los menús que pone menú uno o menú tres días,
+    // ahí tiene que aparecer el nombre de cada menú si lo tiene".
+    //
+    // No era cambiar un texto: el nombre NO LLEGABA hasta aquí. `compraGuardada`
+    // se arma en tres ramas (los menús de varios perros en pantalla, el menú
+    // recién hecho del perro abierto, y el último guardado leído de la base de
+    // datos) y ninguna arrastraba más que los gramos y los días. La etiqueta se
+    // construía con el número porque era lo único que había.
+    //
+    // Se comprueba EN LA COMPRA a propósito, no en la pantalla del menú: ahí
+    // el nombre ya se veía de antes, así que una prueba allí pasaría en verde
+    // con este fallo puesto.
+    await configurar(request, {
+      perros: [PERRO_DE_PRUEBA],
+      menus: [menuGuardado(PERRO_DE_PRUEBA.id, [
+        { menu: { "Carne muscular de pollo": 400 }, dias: 4, nombre: "El de pollo" },
+        { menu: { "Carne muscular de ternera": 380 }, dias: 3 },
+      ])],
+      olvidarUltimoMenu: true,
+    });
+    await page.goto("/");
+    await entrar(page);
+    await abrirLaCompra(page);
+    const compra = page.getByRole("dialog", { name: "La compra" });
+
+    // El que tiene nombre, con su nombre y sus días.
+    await expect(compra.getByRole("button", { name: /^El de pollo · 4 días/ })).toBeVisible();
+    // Y el que NO lo tiene sigue con el número: el respaldo no puede perderse
+    // por el camino, o los menús sin renombrar se quedarían sin etiqueta.
+    await expect(compra.getByRole("button", { name: /^Menú 2 · 3 días/ })).toBeVisible();
+  });
 });

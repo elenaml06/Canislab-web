@@ -37,6 +37,7 @@ import {
   getMenus as getMenusRemotos,
   guardarMenu as guardarMenuRemoto,
   eliminarMenu as eliminarMenuRemoto,
+  actualizarMenu as actualizarMenuRemoto,
   esPremium as esPremiumRemoto,
 } from './supabase'
 
@@ -183,6 +184,31 @@ export async function guardarMenu(userId, perroId, datos) {
 export async function eliminarMenu(menuId) {
   if (!esIdLocal(menuId)) return eliminarMenuRemoto(menuId)
   escribir(CLAVE_MENUS, menusLocales().filter((m) => m.id !== menuId))
+}
+
+// ⚠️ AÑADIDO (26 agosto) — RENOMBRAR Y REORGANIZAR, TAMBIÉN SIN CUENTA.
+//
+// Los tres puntitos de "Mis menús" (renombrar / eliminar) tienen que
+// funcionar igual usando la app sin cuenta que con ella: quien todavía no se
+// ha registrado tiene sus menús en el navegador y no hay ningún motivo para
+// que ahí no pueda ponerles nombre.
+//
+// Devuelve la fila entera, como la de Supabase, para que quien llama pueda
+// meterla en la lista sin volver a leer nada.
+export async function actualizarMenu(menuId, cambios) {
+  if (!esIdLocal(menuId)) return actualizarMenuRemoto(menuId, cambios)
+  let actualizada = null
+  const filas = menusLocales().map((m) => {
+    if (m.id !== menuId) return m
+    actualizada = { ...m }
+    if ('nombre' in cambios) actualizada.nombre = cambios.nombre || null
+    if ('menusData' in cambios) actualizada.menus_data = cambios.menusData
+    if ('numMenus' in cambios) actualizada.num_menus = cambios.numMenus
+    return actualizada
+  })
+  if (!actualizada) return null
+  escribir(CLAVE_MENUS, filas)
+  return actualizada
 }
 
 // ─── PREMIUM ──────────────────────────────────────────────────────────────────

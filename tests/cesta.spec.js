@@ -192,7 +192,7 @@ test.describe("las cantidades, como se piden en la tienda", () => {
 // rompe cada vez que se mueve un margen.
 
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
-import { irAlGenerador } from "./ayudas.js";
+import { irAlGenerador, pedirLosDeLaCasa } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 const configurar = async (request, opciones) => {
@@ -251,7 +251,7 @@ test.describe("la compra en pantalla", () => {
     });
     await page.goto("/");
     await entrar(page);
-    await page.getByRole("button", { name: /Los mismos alimentos para todos/ }).click();
+    await pedirLosDeLaCasa(page);
     for (const nombre of [PERRO_DE_PRUEBA.nombre, SEGUNDO_PERRO_DE_PRUEBA.nombre]) {
       await page.getByRole("group", { name: `Qué come ${nombre}` })
                 .getByRole("button", { name: "Pienso", exact: true }).click();

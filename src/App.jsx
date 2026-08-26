@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, MoreVertical, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import { onAuthChange, logout, cambiarPassword, cambiarCorreo } from "./supabase";
@@ -12,7 +12,7 @@ import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // comentario de cabecera de almacen.js — ahí está decidido cuándo se da
 // de alta el usuario y por qué.
 import {
-  guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, eliminarPerro,
+  guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
   USUARIO_LOCAL, estaSinCuenta, entrarSinCuenta, salirDeSinCuenta,
   hayDatosLocales, migrarLocalACuenta, vaciarLocal,
 } from "./almacen";
@@ -930,7 +930,11 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
     });
     return {
       id: i + 1,
-      nombre: `Menú ${i + 1}`,
+      // ⚠️ EL NOMBRE GUARDADO MANDA (26 agosto). Antes esto era siempre
+      // "Menú 1", "Menú 2"... calculado al vuelo, así que renombrar uno no
+      // se veía en ninguna parte: el nombre existía en la base de datos y la
+      // pantalla lo pisaba con el número cada vez que se abría.
+      nombre: data.nombre || `Menú ${i + 1}`,
       dias: diasPorMenuArr[i],
       kcal: Math.round(derObjetivo),
       items,
@@ -1338,7 +1342,13 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
-function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null, onMenuEditado = null, onAbrirPanel = null }) {
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null, onMenuEditado = null, onAbrirPanel = null,
+  // ⚠️ AÑADIDO (26 agosto) — los tres puntos de CADA menú de la semana.
+  // Pedido expreso: "se tiene que poder borrar y editar desde dentro y desde
+  // fuera; cada menú individual de la semana y el global". Solo llega con
+  // valor si el menú está GUARDADO: renombrar uno recién generado que
+  // todavía no se ha guardado no tendría dónde escribirse.
+  onAccionesDeMenu = null }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
   // pantalla del menú era un scroll larguísimo donde el plan de
@@ -1866,9 +1876,35 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
           Semana de {nombrePerro}
         </p>
-        <h1 className="text-3xl leading-tight mb-5" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
-          {menus.length === 1 ? "Tu menú" : `Tus ${menus.length} menús`}
-        </h1>
+        {/* ⚠️ AQUÍ, Y NO EN LA LISTA DE DENTRO (26 agosto). Los puse primero
+            en la sección "Mis menús" que VistaMenus tiene dentro, y esa
+            sección NO SE PUEDE ABRIR: solo aparece si el padre pasa
+            `soloSeccion="menus"`, y nadie lo pasa -- el "Mis menús" del panel
+            va a la pantalla de FUERA. Es código muerto desde hace tiempo. El
+            botón se habría visto perfecto en el código y no lo habría
+            encontrado nadie.
+            Aquí está donde se está mirando el menú de verdad, al lado de su
+            nombre. Solo con el menú GUARDADO: renombrar uno recién generado
+            que aún no se ha guardado no tendría dónde escribirse. */}
+        <div className="flex items-start justify-between gap-3 mb-5">
+          <h1 className="text-3xl leading-tight min-w-0" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+            {menus.length === 1 ? "Tu menú" : `Tus ${menus.length} menús`}
+          </h1>
+          {onAccionesDeMenu && (() => {
+            const i = menus.findIndex((m) => m.id === tabActiva);
+            if (i < 0) return null;
+            return (
+              <button
+                onClick={() => onAccionesDeMenu(i)}
+                aria-label={`Opciones de ${menus[i].nombre}`}
+                className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center mt-1"
+                style={{ background: "rgba(255,255,255,0.14)", border: "none" }}
+              >
+                <MoreVertical size={16} style={{ color: "#FFFFFF" }} />
+              </button>
+            );
+          })()}
+        </div>
         {menus.length > 1 && (
           <div className="flex gap-2">
             {menus.map((m, idx) => {
@@ -3157,19 +3193,42 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           </div>
           <p className="text-2xl mb-4" style={{ color: TINTA, fontFamily: fontDisplay }}>Mis menús</p>
           <div className="flex flex-col gap-2">
-            {menus.map((m) => (
-              <button key={m.id} onClick={() => { setTabActiva(m.id); setSeccionActiva(null); }} className="flex items-center gap-3 p-4 rounded-2xl text-left" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
-                <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: VIOLETA }}>
-                  <ClipboardList size={16} style={{ color: ROSA }} />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{m.nombre} · {m.kcal}kcal</p>
-                  <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>
-                    {ETIQUETA_MODO[modo] || "AUTOMÁTICO"}
-                  </p>
-                </div>
-                <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
-              </button>
+            {menus.map((m, i) => (
+              /* ⚠️ REHECHO (26 agosto) — TRES PUNTOS EN CADA MENÚ DE LA
+                 SEMANA. Pedido expreso: "se tiene que poder borrar y editar
+                 desde dentro y desde fuera; cada menú individual de la
+                 semana y el global".
+                 Era un solo <button> con toda la fila dentro, así que no
+                 cabía otro botón: un botón dentro de otro no es HTML válido
+                 y el navegador lo desmonta. Ahora la fila es un div con dos
+                 botones hermanos, igual que en la lista de "Mis menús" de
+                 fuera. */
+              <div key={m.id} className="flex items-center gap-2 p-4 rounded-2xl"
+                   style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <button onClick={() => { setTabActiva(m.id); setSeccionActiva(null); }}
+                        className="flex items-center gap-3 flex-1 min-w-0 text-left">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0" style={{ background: VIOLETA }}>
+                    <ClipboardList size={16} style={{ color: ROSA }} />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{m.nombre} · {m.kcal}kcal</p>
+                    <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5" style={{ color: MALVA, fontFamily: "monospace" }}>
+                      {ETIQUETA_MODO[modo] || "AUTOMÁTICO"}
+                    </p>
+                  </div>
+                  <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+                </button>
+                {/* Solo si el menú está GUARDADO: renombrar uno que todavía
+                    no se ha guardado no tendría dónde escribirse. */}
+                {onAccionesDeMenu && (
+                  <button onClick={() => onAccionesDeMenu(i)}
+                          aria-label={`Opciones de ${m.nombre}`}
+                          className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
+                          style={{ background: PAPEL, border: "none" }}>
+                    <MoreVertical size={16} style={{ color: MALVA }} />
+                  </button>
+                )}
+              </div>
             ))}
             <button
               onClick={() => { setSeccionActiva(null); onVolver(); }}
@@ -3643,7 +3702,15 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 >
                   <div className="flex items-center justify-between mb-2">
                     <span style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16, fontWeight: 600 }}>
-                      {menus.length > 1 ? `Menú ${i + 1}` : "Menú"}
+                      {/* ⚠️ EL NOMBRE, no el número (26 agosto). Pedido
+                          expreso: "donde aparezcan los nombres de los menús
+                          que pone menú uno o menú tres días, ahí tiene que
+                          aparecer el nombre de cada menú si lo tiene".
+                          `m.nombre` ya cae al número cuando no hay nombre
+                          guardado (ver `respuestaApiAMenu`), así que esto
+                          sigue diciendo "Menú 2" en los que no se han
+                          renombrado. */}
+                      {menus.length > 1 ? m.nombre : (m.nombre || "Menú")}
                     </span>
                     <span className="text-xs" style={{ color: MALVA, fontFamily: "monospace" }}>
                       {totalGramos} g
@@ -3835,6 +3902,10 @@ function RawkuOnboardingInterna({
   perroInicial,
   perros = [],
   onCambiarDePerro = () => {},
+  // Dónde arrancar tras un cambio de perro CON INTENCIÓN. Hoy solo
+  // "generador_solo": el generador, con el menú pedido para este perro y no
+  // para la casa. Ver el comentario de `arranqueTrasCambio`.
+  arrancarEn = null,
   onAnadirPerro = () => {},
   onPerroGuardado = () => {},
   onPerroEliminado = () => {},
@@ -3964,7 +4035,10 @@ function RawkuOnboardingInterna({
   // Con perro guardado, paso vale TOTAL_PASOS + 1 y se pinta el resumen.
   // Sin perro, paso vale 1 y gana el asistente (el `if (paso === 1)` va
   // antes). Por eso aquí ya no hace falta mirar yaTienePerroGuardado.
-  const [fase, setFase] = useState("onboarding");
+  // ⚠️ `arrancarEn` (26 agosto): si se llegó aquí eligiendo "Solo para <otro
+  // perro>", el componente acaba de montarse de cero con ESE perro y hay que
+  // volver al generador. Sin esto, elegirlo te devolvía al perfil.
+  const [fase, setFase] = useState(arrancarEn === "generador_solo" ? "generador" : "onboarding");
 
   // Deja constancia en Sentry de la decisión de arranque. Si algún día
   // vuelve a fallar la navegación, en el error se verá con qué datos se
@@ -4148,7 +4222,10 @@ function RawkuOnboardingInterna({
           .filter((p) => p.factible && (p.menus || []).length)
           .map((p) => ({
             nombre: p.nombre,
-            menus: (p.menus || []).map((m) => ({ gramos: m.menu, dias: m.dias })),
+            // ⚠️ `nombre` (26 agosto): la compra pintaba "Menú 1", "Menú 2"
+            // a mano porque aquí solo llegaban los gramos y los días. Si el
+            // menú tiene nombre, tiene que llegar hasta allí.
+            menus: (p.menus || []).map((m) => ({ gramos: m.menu, dias: m.dias, nombre: m.nombre || null })),
           })));
         setCompraDeLoQueMiras(true);
         setCargandoCompra(false);
@@ -4167,6 +4244,7 @@ function RawkuOnboardingInterna({
             menus: menuReal.map((r, i) => ({
               gramos: r.menu || r.gramos || {},
               dias: diasAhora[i],
+              nombre: r.nombre || null,
             })),
           });
           hayEnPantalla = true;
@@ -4188,6 +4266,9 @@ function RawkuOnboardingInterna({
           menus: trozos.map((m, i) => ({
             gramos: m.menu || m.gramos || {},
             dias: m.dias > 0 ? m.dias : dias[i],
+            // El nombre vive en `menus_data[i].nombre`, que es donde lo
+            // escribe el renombrado de dentro.
+            nombre: m.nombre || null,
           })),
         });
       }
@@ -4227,7 +4308,11 @@ function RawkuOnboardingInterna({
     return ((primero && primero.menus) || []).map((m, i) => ({
       indice: i,
       dias: m.dias > 0 ? m.dias : 1,
-      etiqueta: `Menú ${i + 1}`,
+      // ⚠️ EL NOMBRE SI LO TIENE (26 agosto). Antes era siempre el número,
+      // así que renombrar un menú no se veía en la compra -- que es
+      // justamente donde hace falta distinguirlos, porque es la pantalla
+      // desde la que se va a comprar.
+      etiqueta: m.nombre || `Menú ${i + 1}`,
     }));
   }, [compraGuardada]);
 
@@ -4293,7 +4378,11 @@ function RawkuOnboardingInterna({
   const [borrandoMenu, setBorrandoMenu] = useState(false);
 
   const confirmarBorrarMenu = async () => {
-    const fila = menuAConfirmarBorrado;
+    // ⚠️ Desde el 26 de agosto esto puede llevar dentro un menú de los de
+    // DENTRO ({fila, indice}). Ese caso tiene su propia función porque no es
+    // un borrado: es reescribir la fila con un menú menos.
+    if (menuAConfirmarBorrado?.indice != null) return confirmarBorrarMenuInterno();
+    const fila = menuAConfirmarBorrado?.fila || menuAConfirmarBorrado;
     if (!fila) return;
     setBorrandoMenu(true);
     try {
@@ -4310,6 +4399,275 @@ function RawkuOnboardingInterna({
       setBorrandoMenu(false);
     }
   };
+
+  // ⚠️ AÑADIDO (26 agosto) — RENOMBRAR, Y LOS DOS NIVELES.
+  //
+  // Pedido expreso: "en vez de la papelera debería haber tres puntitos para
+  // poder renombrar y borrar; y tienes que tener en cuenta si es un menú que
+  // tiene varios menús dentro -- cada menú individual de la semana y el
+  // global, desde dentro y desde fuera".
+  //
+  // Los dos niveles viven en la MISMA fila de la tabla:
+  //   · el conjunto guardado -> la columna `nombre`
+  //   · cada menú de dentro  -> `menus_data[i].nombre`
+  //
+  // `accionesDeMenu` es lo que abre la hoja de los tres puntos, y lleva
+  // dentro a qué se refiere:
+  //   { fila }            -> el conjunto entero
+  //   { fila, indice }    -> el menú número `indice` de dentro
+  const [accionesDeMenu, setAccionesDeMenu] = useState(null);
+  const [renombrando, setRenombrando] = useState(null);   // { fila, indice?, valor }
+  const [guardandoNombre, setGuardandoNombre] = useState(false);
+
+  // El nombre que se ve hoy de un menú de dentro. Los guardados antiguos no
+  // tienen ninguno (se generaba al vuelo como "Menú 1"), así que se cae al
+  // número -- sin esto, renombrar el segundo dejaría el primero en blanco.
+  const nombreDelMenuInterno = (fila, i) =>
+    (fila?.menus_data?.[i]?.nombre) || `Menú ${i + 1}`;
+
+  const guardarNombreDeMenu = async () => {
+    const p = renombrando;
+    if (!p) return;
+    const limpio = (p.valor || "").trim();
+    setGuardandoNombre(true);
+    try {
+      let actualizada;
+      if (p.indice == null) {
+        // El conjunto. Vacío = volver a la fecha, que es lo que se enseña
+        // cuando no hay nombre: borrar el texto tiene que poder deshacerlo.
+        actualizada = await actualizarMenu(p.fila.id, { nombre: limpio });
+      } else {
+        const datos = (p.fila.menus_data || []).map((m, i) =>
+          i === p.indice ? { ...m, nombre: limpio || null } : m);
+        actualizada = await actualizarMenu(p.fila.id, { menusData: datos });
+      }
+      const nueva = actualizada || p.fila;
+      setMenusGuardados((previos) => previos.map((m) => (m.id === nueva.id ? nueva : m)));
+      // Si es el que está abierto, que el cambio se vea sin salir y entrar.
+      setMenuGuardadoAbierto((abierto) => (abierto && abierto.id === nueva.id ? nueva : abierto));
+      if (p.indice != null) setMenuReal(nueva.menus_data);
+      migaDePan("Menú renombrado", { id: p.fila.id, interno: p.indice ?? null });
+      setRenombrando(null);
+    } catch (err) {
+      capturarError(err, { donde: "renombrarMenu", menuId: p.fila.id });
+      setRenombrando((r) => ({ ...r, error: "No se ha podido guardar el nombre. Inténtalo otra vez." }));
+    } finally {
+      setGuardandoNombre(false);
+    }
+  };
+
+  // Borrar UN menú de los de dentro. No es un borrado normal: hay que quitar
+  // la entrada Y bajar `num_menus`, y las dos cosas en la misma llamada --
+  // en dos, la fila se quedaría un rato diciendo que tiene tres menús
+  // cuando ya solo lleva dos, y la lista de fuera lo enseñaría mal.
+  //
+  // ⚠️ Y si era el ÚLTIMO, lo que toca es borrar la fila entera: dejar un
+  // menú guardado con cero menús dentro es dejar basura que se abre en una
+  // pantalla vacía.
+  const confirmarBorrarMenuInterno = async () => {
+    const p = menuAConfirmarBorrado;
+    if (!p || p.indice == null) return;
+    setBorrandoMenu(true);
+    try {
+      const restantes = (p.fila.menus_data || []).filter((_, i) => i !== p.indice);
+      if (restantes.length === 0) {
+        await eliminarMenu(p.fila.id);
+        setMenusGuardados((previos) => previos.filter((m) => m.id !== p.fila.id));
+        migaDePan("Menú guardado borrado al quitar el último de dentro", { id: p.fila.id });
+        setMenuAConfirmarBorrado(null);
+        salirDeMenuGuardado();
+        return;
+      }
+      const actualizada = await actualizarMenu(p.fila.id, {
+        menusData: restantes, numMenus: restantes.length });
+      const nueva = actualizada || { ...p.fila, menus_data: restantes, num_menus: restantes.length };
+      setMenusGuardados((previos) => previos.map((m) => (m.id === nueva.id ? nueva : m)));
+      setMenuGuardadoAbierto((abierto) => (abierto && abierto.id === nueva.id ? nueva : abierto));
+      setMenuReal(nueva.menus_data);
+      migaDePan("Menú de dentro borrado", { id: p.fila.id, indice: p.indice });
+      setMenuAConfirmarBorrado(null);
+    } catch (err) {
+      capturarError(err, { donde: "borrarMenuInterno", menuId: p.fila.id, indice: p.indice });
+      setMenuAConfirmarBorrado((x) => ({ ...x, error: "No se ha podido borrar. Inténtalo otra vez." }));
+    } finally {
+      setBorrandoMenu(false);
+    }
+  };
+
+  // ⚠️ SUBIDA AQUÍ (26 agosto). Vivía dentro de la pantalla de "Mis menús",
+  // y desde que la hoja de los tres puntos también la necesita -- y esa se
+  // dibuja fuera, porque hace falta dentro de un menú abierto igual que en
+  // la lista -- tiene que estar donde la vean las dos. Lo cazó ESLint, que
+  // para eso está: `fecha is not defined` en dos líneas, antes de ejecutar
+  // nada. Es el mismo fallo que `setMenuReal is not defined`.
+  const fecha = (iso) => {
+    if (!iso) return "";
+    try {
+      return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
+    } catch { return ""; }
+  };
+
+  // La hoja de los tres puntos, y el diálogo de renombrar. Se dibujan
+  // aparte porque hacen falta en DOS sitios: en la lista de "Mis menús"
+  // (el conjunto guardado) y dentro de un menú abierto (cada uno de los de
+  // la semana). Pedido expreso: "se tiene que poder borrar y editar desde
+  // dentro y desde fuera".
+  //
+  // ⚠️ Las opciones son una LISTA, no dos botones escritos a mano. Pedido
+  // expreso: "ya se nos irán ocurriendo más cosas que meter ahí" -- meter
+  // una más tiene que ser añadir una entrada, no rehacer la hoja.
+  const hojaDeAccionesDeMenu = accionesDeMenu && (() => {
+    const { fila, indice } = accionesDeMenu;
+    const esDeDentro = indice != null;
+    const titulo = esDeDentro
+      ? nombreDelMenuInterno(fila, indice)
+      : (fila.nombre || fecha(fila.created_at));
+    const cuantosDentro = (fila.menus_data || []).length;
+
+    const opciones = [
+      { key: "renombrar", icono: Pencil, texto: "Renombrar",
+        onClick: () => {
+          setRenombrando({ fila, indice, valor: esDeDentro ? (fila.menus_data?.[indice]?.nombre || "") : (fila.nombre || "") });
+          setAccionesDeMenu(null);
+        } },
+      { key: "borrar", icono: Trash2, peligro: true,
+        // Decir QUÉ se borra, que no es lo mismo: desde dentro se borra un
+        // menú de la semana; desde fuera, el conjunto entero.
+        texto: esDeDentro
+          ? (cuantosDentro > 1 ? "Eliminar este menú" : "Eliminar (es el único que queda)")
+          : (cuantosDentro > 1 ? `Eliminar los ${cuantosDentro} menús` : "Eliminar"),
+        onClick: () => { setMenuAConfirmarBorrado({ fila, indice }); setAccionesDeMenu(null); } },
+    ];
+
+    return (
+      <div className="fixed inset-0 z-[80] flex items-end justify-center sm:items-center"
+           style={{ background: "rgba(35,21,57,0.45)" }}
+           onClick={() => setAccionesDeMenu(null)}>
+        <div role="dialog" aria-label={`Opciones de ${titulo}`}
+             className="w-full sm:max-w-sm rounded-t-3xl sm:rounded-3xl px-5 pt-5 pb-8 sm:pb-5"
+             style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="min-w-0">
+              <p className="text-[11px] tracking-[0.14em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
+                {esDeDentro ? "Este menú" : "Menú guardado"}
+              </p>
+              <p className="truncate" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 17 }}>{titulo}</p>
+            </div>
+            <button onClick={() => setAccionesDeMenu(null)} aria-label="Cerrar"
+                    style={{ background: "none", border: "none", cursor: "pointer" }}>
+              <X size={20} style={{ color: MALVA }} />
+            </button>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            {opciones.map((op) => (
+              <button key={op.key} onClick={op.onClick}
+                      className="flex items-center gap-3 w-full text-left px-4 py-3.5 rounded-xl"
+                      style={{ background: PAPEL, border: "none" }}>
+                <op.icono size={16} style={{ color: op.peligro ? ROSA : VIOLETA }} />
+                <span className="text-sm" style={{ color: op.peligro ? ROSA : TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+                  {op.texto}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  })();
+
+  // El diálogo de "¿seguro que lo borro?" para un menú DE DENTRO. La lista
+  // de fuera ya tenía el suyo escrito dentro de su pantalla; éste hace falta
+  // aparte porque se pulsa desde dentro de un menú abierto, que es otra
+  // pantalla, y porque lo que dice no es lo mismo: ahí se borra un menú de
+  // la semana, no el conjunto.
+  const dialogoDeBorrarMenuInterno = menuAConfirmarBorrado?.indice != null && (() => {
+    const { fila, indice, error } = menuAConfirmarBorrado;
+    const quedan = (fila.menus_data || []).length - 1;
+    return (
+      <div className="fixed inset-0 z-[85] flex items-center justify-center px-6"
+           style={{ background: "rgba(35,21,57,0.45)" }}
+           onClick={() => !borrandoMenu && setMenuAConfirmarBorrado(null)}>
+        <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: "#FFFFFF" }}
+             onClick={(e) => e.stopPropagation()}>
+          <p className="mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 19 }}>
+            {quedan > 0 ? "¿Borrar este menú?" : "¿Borrar el menú guardado?"}
+          </p>
+          <p className="text-sm mb-1" style={{ color: MALVA, fontFamily: fontBody }}>
+            {nombreDelMenuInterno(fila, indice)}
+          </p>
+          {/* Decir qué queda después. Borrar el último de dentro se lleva el
+              conjunto entero por delante, y eso no se puede descubrir
+              después de haberlo pulsado. */}
+          <p className="text-xs mt-2 mb-4 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+            {quedan > 0
+              ? `Se quedan ${quedan} ${quedan === 1 ? "menú" : "menús"} en este guardado. El resto de la semana se reparte entre los que queden.`
+              : "Es el único que queda, así que se borra el menú guardado entero."}
+          </p>
+          {error && (
+            <p className="text-xs mb-3" style={{ color: ROSA, fontFamily: fontBody }}>{error}</p>
+          )}
+          <div className="flex gap-2">
+            <button onClick={() => setMenuAConfirmarBorrado(null)} disabled={borrandoMenu}
+                    className="flex-1 py-3 rounded-xl text-sm"
+                    style={{ background: PAPEL, color: TINTA, fontFamily: fontBody, fontWeight: 600, border: "none" }}>
+              Cancelar
+            </button>
+            <button onClick={confirmarBorrarMenuInterno} disabled={borrandoMenu}
+                    className="flex-1 py-3 rounded-xl text-sm"
+                    style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}>
+              {borrandoMenu ? "Borrando..." : "Borrar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  })();
+
+  const dialogoDeRenombrar = renombrando && (
+    <div className="fixed inset-0 z-[85] flex items-center justify-center px-6"
+         style={{ background: "rgba(35,21,57,0.45)" }}
+         onClick={() => !guardandoNombre && setRenombrando(null)}>
+      <div className="w-full max-w-sm rounded-2xl p-6" style={{ background: "#FFFFFF" }}
+           onClick={(e) => e.stopPropagation()}>
+        <p className="mb-1" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 19 }}>
+          {renombrando.indice != null ? "Nombre de este menú" : "Nombre del menú guardado"}
+        </p>
+        <p className="text-xs mb-4 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+          {renombrando.indice != null
+            ? "Para distinguirlo del resto de la semana: «el de pescado», «el del finde»..."
+            : "Déjalo vacío y volverá a verse la fecha."}
+        </p>
+        <input
+          autoFocus
+          value={renombrando.valor}
+          maxLength={60}
+          onChange={(e) => setRenombrando((r) => ({ ...r, valor: e.target.value, error: null }))}
+          onKeyDown={(e) => { if (e.key === "Enter" && !guardandoNombre) guardarNombreDeMenu(); }}
+          aria-label="Nombre del menú"
+          placeholder={renombrando.indice != null
+            ? nombreDelMenuInterno(renombrando.fila, renombrando.indice)
+            : fecha(renombrando.fila.created_at)}
+          className="w-full px-4 py-3 rounded-xl mb-4 text-sm"
+          style={{ border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody, outline: "none" }}
+        />
+        {renombrando.error && (
+          <p className="text-xs mb-3" style={{ color: ROSA, fontFamily: fontBody }}>{renombrando.error}</p>
+        )}
+        <div className="flex gap-2">
+          <button onClick={() => setRenombrando(null)} disabled={guardandoNombre}
+                  className="flex-1 py-3 rounded-xl text-sm"
+                  style={{ background: PAPEL, color: TINTA, fontFamily: fontBody, fontWeight: 600, border: "none" }}>
+            Cancelar
+          </button>
+          <button onClick={guardarNombreDeMenu} disabled={guardandoNombre}
+                  className="flex-1 py-3 rounded-xl text-sm"
+                  style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700, border: "none" }}>
+            {guardandoNombre ? "Guardando..." : "Guardar"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 
   const abrirMenuGuardado = (fila) => {
     setMenuGuardadoAbierto(fila);
@@ -4414,7 +4772,7 @@ function RawkuOnboardingInterna({
   // cuando la generación de la casa falla entera ("Hacer solo el de X").
   // Sin ese valor, ese botón devolvería a la misma pantalla que acaba de
   // fallar. Se puede llegar, pero ya no se elige.
-  const [paraQuien, setParaQuien] = useState("parecidos");
+  const [paraQuien, setParaQuien] = useState(arrancarEn === "generador_solo" ? "solo" : "parecidos");
   // ⚠️ Qué come AHORA cada perro, por separado: uno puede venir de pienso
   // y el otro llevar años en BARF, y de ahí sale si cada uno necesita
   // transición. Arranca con lo que tenga guardado cada ficha.
@@ -5723,7 +6081,30 @@ function RawkuOnboardingInterna({
   //
   // Empezar un menú no es navegar: son tres cosas, y las tres hacen falta
   // vengas por donde vengas.
-  const irAlGeneradorDeMenus = () => {
+  // ⚠️ AÑADIDO (26 agosto) — DE DÓNDE VIENES DECIDE PARA QUIÉN ES EL MENÚ.
+  //
+  // CASO REAL: "he entrado a mi cuenta desde mis menús y quiero hacer uno
+  // solo para Cairo y no puedo". Con dos perros solo se ofrecían las dos
+  // formas de hacer los menús de LA CASA, así que pedir otro menú desde
+  // dentro de Cairo te regeneraba también el de Lola -- que puede tener la
+  // compra hecha y la comida ya porcionada en el congelador.
+  //
+  // La opción "Solo para X" existió y se quitó el 23 de agosto por pedido
+  // expreso: "si metes otro perro es porque también quieres hacerle un
+  // menú, si no, no lo meterías". Eso es verdad AL CREAR EL PERFIL por
+  // primera vez, y ahí sigue sin aparecer. Pero no lo es al REHACER uno
+  // desde la ficha de un perro concreto: ahí ya has elegido el perro por el
+  // hecho de estar dentro de él, y volver a preguntarlo sobra.
+  //
+  // Por eso no es un botón más en la pantalla: es de dónde vienes.
+  //   · Asistente, al terminar de crear el perfil  → los menús de la casa
+  //   · "Hacer otro menú", dentro de un perro       → el menú de ESE perro
+  const irAlGeneradorDeMenus = (soloParaEstePerro = false) => {
+    // ⚠️ Ojo con el valor de partida: se pone SIEMPRE, en los dos sentidos.
+    // Dejarlo sin tocar en el camino del asistente heredaría el "solo" de
+    // una visita anterior, y crear el perfil por primera vez con dos perros
+    // dejaría a uno sin menú sin que nadie lo pidiera.
+    setParaQuien(soloParaEstePerro ? "solo" : "parecidos");
     // 1. Limpiar el bloqueo de veterinario que hubiera quedado. ⚠️ CASO
     //    REAL (5 agosto): "marco una patología que bloquea, luego la
     //    desmarco y pongo que no, pero sigue sin dejarme generar menús" --
@@ -6822,12 +7203,6 @@ function RawkuOnboardingInterna({
   // no existía ninguna: se guardaban y no había forma de volver a verlos.
   if (fase === "misMenus") {
     const ETIQUETAS_MODO = { automatico: "Automático", personalizar: "Personalizado" };
-    const fecha = (iso) => {
-      if (!iso) return "";
-      try {
-        return new Date(iso).toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" });
-      } catch { return ""; }
-    };
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
@@ -6853,7 +7228,7 @@ function RawkuOnboardingInterna({
             // ⚠️ La MISMA función que el botón del asistente. Aquí había
             // una versión propia que solo navegaba, y por eso entrando por
             // este camino la ficha se guardaba sin su etapa.
-            onClick={() => { setMenuGuardadoAbierto(null); irAlGeneradorDeMenus(); }}
+            onClick={() => { setMenuGuardadoAbierto(null); irAlGeneradorDeMenus(true); }}
             className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl mb-4"
             style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
           >
@@ -6893,13 +7268,18 @@ function RawkuOnboardingInterna({
                     </div>
                     <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
                   </button>
+                  {/* ⚠️ CAMBIADO (26 agosto) — LA PAPELERA PASA A SER TRES
+                      PUNTOS. Pedido expreso: "en vez de la papelera debería
+                      haber tres puntitos para poder renombrar y borrar".
+                      Un icono de papelera solo puede hacer una cosa, y hacen
+                      falta dos -- y desde el mismo sitio. */}
                   <button
-                    onClick={() => setMenuAConfirmarBorrado(fila)}
-                    aria-label={`Borrar el menú del ${fecha(fila.created_at)}`}
+                    onClick={() => setAccionesDeMenu({ fila })}
+                    aria-label={`Opciones del menú ${fila.nombre || fecha(fila.created_at)}`}
                     className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
                     style={{ background: PAPEL }}
                   >
-                    <Trash2 size={15} style={{ color: MALVA }} />
+                    <MoreVertical size={16} style={{ color: MALVA }} />
                   </button>
                 </div>
               ))}
@@ -6911,7 +7291,12 @@ function RawkuOnboardingInterna({
         {/* Confirmación de borrado. Borrar sin preguntar un menú que
             costó una llamada al servidor y que la usuaria puede estar
             usando esta semana es demasiado fácil de hacer sin querer. */}
-        {menuAConfirmarBorrado && (
+        {/* ⚠️ `indice == null` (26 agosto): desde que los tres puntos también
+            existen DENTRO de un menú, `menuAConfirmarBorrado` puede referirse
+            a un menú de la semana en vez de al conjunto. Ese caso tiene su
+            propio diálogo (`dialogoDeBorrarMenuInterno`), porque lo que se
+            borra y lo que hay que decir no son lo mismo. */}
+        {menuAConfirmarBorrado?.indice == null && menuAConfirmarBorrado && (
           <div
             className="fixed inset-0 z-[70] flex items-center justify-center px-6"
             style={{ background: "rgba(35,21,57,0.45)" }}
@@ -6923,10 +7308,21 @@ function RawkuOnboardingInterna({
               onClick={(e) => e.stopPropagation()}
             >
               <p className="mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 19 }}>
-                ¿Borrar este menú?
+                {((menuAConfirmarBorrado.fila || menuAConfirmarBorrado).menus_data || []).length > 1
+                  ? "¿Borrar el menú guardado entero?"
+                  : "¿Borrar este menú?"}
               </p>
               <p className="text-sm mb-1" style={{ color: MALVA, fontFamily: fontBody }}>
-                {menuAConfirmarBorrado.nombre || fecha(menuAConfirmarBorrado.created_at)}
+                {(() => {
+                  // ⚠️ `.fila` (26 agosto): desde los tres puntos esto llega
+                  // envuelto. Sin el desenvuelto, el diálogo enseñaba el
+                  // nombre en blanco -- y preguntar "¿borro esto?" sin decir
+                  // qué es exactamente lo que no puede pasar aquí.
+                  const f = menuAConfirmarBorrado.fila || menuAConfirmarBorrado;
+                  const cuantos = (f.menus_data || []).length;
+                  const nombre = f.nombre || fecha(f.created_at);
+                  return cuantos > 1 ? `${nombre} · ${cuantos} menús dentro` : nombre;
+                })()}
               </p>
               <p className="text-sm mb-5" style={{ color: MALVA, fontFamily: fontBody }}>
                 No se puede deshacer.
@@ -6957,6 +7353,8 @@ function RawkuOnboardingInterna({
             </div>
           </div>
         )}
+        {hojaDeAccionesDeMenu}
+        {dialogoDeRenombrar}
         {drawerLigero}
       </div>
     );
@@ -7168,7 +7566,11 @@ function RawkuOnboardingInterna({
             los que ya tienes. */}
         {!editandoLaFicha && (
         <button
-          onClick={irAlGeneradorDeMenus}
+          // ⚠️ `() => irAlGeneradorDeMenus()` y NO `irAlGeneradorDeMenus` a
+          // secas: React le pasa el EVENTO como primer argumento, y un
+          // evento es truthy -- o sea que terminar de crear el perfil
+          // habría pedido el menú de un solo perro sin que nadie lo dijera.
+          onClick={() => irAlGeneradorDeMenus()}
           className="w-full py-4 rounded-2xl text-base"
           style={{ background: ROSA, color: "#FFFFFF", fontFamily: fontBody, fontWeight: 700 }}
         >
@@ -7497,9 +7899,71 @@ function RawkuOnboardingInterna({
               Con un solo perro esto no se pinta: no hay nada que elegir. */}
           {listaDePerros.length > 1 && (
             <>
-              <p className="text-[11px] tracking-[0.14em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
-                ¿Cómo?
+              {/* ⚠️ El rótulo vuelve a ser "¿Para quién?" (26 agosto). Pasó
+                  a "¿Cómo?" el 23 de agosto, cuando para quién dejó de
+                  elegirse -- eran todos. Ahora se elige otra vez, así que la
+                  primera pregunta vuelve a ser esa. "¿Cómo?" no desaparece:
+                  baja a su sitio, encima de las dos formas de hacer los de
+                  la casa, que es lo único a lo que se refería. */}
+              <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+                ¿Para quién?
               </p>
+              {/* ⚠️ REHECHO (26 agosto) — PEDIDO EXPRESO: "no quiero las
+                  tres opciones siempre. Si dice solo para Cairo, no tienes
+                  por qué estar leyendo el que sea igual para los dos o
+                  distinto, no tienes por qué leer eso".
+
+                  Tiene razón: son DOS preguntas, no tres respuestas a la
+                  misma. Primero PARA QUIÉN, en una fila de botoncitos; y
+                  solo si es para todos aparece CÓMO, que es donde vive el
+                  párrafo largo de la compra. Eligiendo "Solo para Cairo" ese
+                  párrafo ni se pinta, porque no le afecta.
+
+                  Un botón por perro, no uno solo del que estás mirando:
+                  "para todos los perros que tengan". El que no está montado
+                  obliga a remontar con intención (ver `arrancarEn`) -- sin
+                  eso, esos botones te sacaban de la pantalla. */}
+              <div className="flex flex-wrap gap-2 mb-5">
+                {[
+                  ...listaDePerros.map((p) => ({
+                    key: `solo:${p.id ?? "__nuevo__"}`,
+                    etiqueta: `Solo para ${p.nombre}`,
+                    activo: paraQuien === "solo" && p.esElDeAhora,
+                    elegir: () => {
+                      // El que ya está montado: basta con cambiar la
+                      // elección, no hay nada que remontar.
+                      if (p.esElDeAhora) { setParaQuien("solo"); return; }
+                      onCambiarDePerro(p.id, "generador_solo");
+                    },
+                  })),
+                  { key: "todos",
+                    etiqueta: listaDePerros.length === 2 ? "Para los dos" : "Para todos",
+                    activo: paraQuien !== "solo",
+                    // Se vuelve al valor de partida de la casa. Si ya se
+                    // había elegido "cada uno con lo suyo" y se va y se
+                    // vuelve, se recupera abajo: aquí solo se sale de "solo".
+                    elegir: () => setParaQuien((q) => (q === "solo" ? "parecidos" : q)) },
+                ].map((op) => (
+                  <button
+                    key={op.key}
+                    onClick={op.elegir}
+                    aria-pressed={op.activo}
+                    className="rounded-full px-4 py-2 text-sm"
+                    style={{ background: op.activo ? VIOLETA : "#FFFFFF",
+                             color: op.activo ? "#FFFFFF" : TINTA,
+                             border: `1.5px solid ${op.activo ? VIOLETA : "#E3DAF0"}`,
+                             fontFamily: fontBody, fontWeight: op.activo ? 700 : 600 }}
+                  >
+                    {op.etiqueta}
+                  </button>
+                ))}
+              </div>
+
+              {paraQuien === "solo" ? (
+                <p className="text-xs mb-6 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Se rehace el menú de <b>{nombreMostrar}</b> y el de {nombresDeLosPerros(listaDePerros.filter((p) => !p.esElDeAhora))} se queda como está.
+                </p>
+              ) : (<>
               {/* ⚠️ AÑADIDO — pedido expreso: "creo que tendrías que
                   explicar mejor la diferencia". Los títulos solos no la
                   explicaban: "lo más parecidos posible" y "cada uno el
@@ -7507,6 +7971,9 @@ function RawkuOnboardingInterna({
                   dos da un menú peor -- las dos cumplen los 30 requisitos
                   igual. Lo que cambia es la COMPRA, y eso es lo primero
                   que hay que decir, antes de los dos botones. */}
+              <p className="text-[11px] tracking-[0.14em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                ¿Cómo?
+              </p>
               <p className="text-xs mb-3 leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
                 Los dos cumplen igual los 30 requisitos de cada perro. Lo que cambia es <b>la compra</b>.
               </p>
@@ -7536,6 +8003,7 @@ function RawkuOnboardingInterna({
                   );
                 })}
               </div>
+              </>)}
             </>
           )}
 
@@ -7897,7 +8365,7 @@ function RawkuOnboardingInterna({
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAbrirLaCompra={abrirLaCompra} onMenuEditado={(idMenu, gramos) => {
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAccionesDeMenu={menuGuardadoAbierto ? ((i) => setAccionesDeMenu({ fila: menuGuardadoAbierto, indice: i })) : null} onAbrirLaCompra={abrirLaCompra} onMenuEditado={(idMenu, gramos) => {
           // `idMenu` es 1, 2, 3... (ver respuestaApiAMenu), así que el
           // índice del array es uno menos.
           setMenuReal((previos) => {
@@ -7914,6 +8382,13 @@ function RawkuOnboardingInterna({
             (VistaMenus trae su propio panel). Resultado: el botón "La
             compra" cerraba el panel y no pasaba nada. Va aquí también. */}
         {pantallaDeLaCompra}
+        {/* Mismo motivo (26 agosto): los tres puntos de cada menú de la
+            semana se pulsan AQUÍ DENTRO, así que la hoja que abren y el
+            diálogo de renombrar tienen que dibujarse aquí también. Estando
+            solo en la lista de fuera, el botón se veía y no pasaba nada. */}
+        {hojaDeAccionesDeMenu}
+        {dialogoDeRenombrar}
+        {menuAConfirmarBorrado?.indice != null && dialogoDeBorrarMenuInterno}
         {/* El panel que abre la hamburguesa de la compra. El de VistaMenus
             vive dentro de VistaMenus y desde aquí no se puede abrir, así
             que en esta pantalla se usa el ligero -- que lleva las mismas
@@ -8682,7 +9157,22 @@ function AuthGate() {
   // Remonta el componente de dentro (sube `montaje`), que es la única
   // forma de que recalcule perfil, menús, pantalla de arranque... con
   // los datos del perro nuevo. Ver el comentario largo de arriba.
-  const cambiarDePerro = (perroId) => {
+  // ⚠️ AÑADIDO (26 agosto) — ELEGIR "SOLO PARA <EL OTRO PERRO>" SIN PERDER
+  // LA PANTALLA.
+  //
+  // El generador calcula perfil, kcal, etapa y menús UNA SOLA VEZ, al
+  // montarse, así que cambiar de perro obliga a remontar (ver `montaje`) --
+  // y eso te devolvía al perfil. Sin esto, en la fila de "¿para quién?" solo
+  // se podía elegir el perro que ya estabas mirando: el resto de botones te
+  // sacaban de la pantalla.
+  //
+  // Con esto, cambiar de perro puede llevar una intención, y al remontar el
+  // componente de dentro arranca donde toca. Se guarda SIEMPRE (null cuando
+  // no hay) para que un cambio normal desde la burbuja no herede la
+  // intención de la vez anterior.
+  const [arranqueTrasCambio, setArranqueTrasCambio] = useState(null);
+
+  const cambiarDePerro = (perroId, arranque = null) => {
     // ⚠️ Antes esto era `if (!usuario ...)`: sin cuenta no se podía
     // cambiar de perro, aunque los perros existieran en el navegador.
     // `cuentaEfectiva` es la cuenta de verdad si la hay y la local si no.
@@ -8700,6 +9190,7 @@ function AuthGate() {
     if (!cuentaEfectiva) return;
     recordarPerroActivo(cuentaEfectiva.id, perroId);
     apuntarPerroMontado(perroId);
+    setArranqueTrasCambio(arranque);
     setMontaje((m) => m + 1);
   };
 
@@ -8859,6 +9350,7 @@ function AuthGate() {
         perroInicial={perroMontado}
         perros={perros ?? []}
         onCambiarDePerro={cambiarDePerro}
+        arrancarEn={arranqueTrasCambio}
         onAnadirPerro={anadirPerro}
         onPerroGuardado={perroGuardado}
         onPerroEliminado={perroEliminado}

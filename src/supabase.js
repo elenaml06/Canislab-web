@@ -292,3 +292,35 @@ export async function eliminarMenu(menuId) {
     .eq('id', menuId)
   if (error) throw error
 }
+
+// ⚠️ AÑADIDO (26 agosto) — RENOMBRAR Y REORGANIZAR UN MENÚ GUARDADO.
+//
+// Pedido expreso: "en vez de la papelera debería haber tres puntitos para
+// poder renombrar y borrar; y tienes que tener en cuenta si es un menú que
+// tiene varios menús dentro -- cada menú individual de la semana y el
+// global".
+//
+// O sea que hay DOS niveles, y los dos viven en la misma fila de la tabla:
+//   · el conjunto guardado  -> la columna `nombre`
+//   · cada menú de dentro   -> `menus_data[i].nombre`
+//
+// Por eso una sola función que actualiza lo que se le pase, en vez de dos:
+// borrar un menú de dentro cambia `menus_data` Y `num_menus` a la vez, y
+// hacerlo en dos llamadas dejaría la fila un rato diciendo que tiene tres
+// menús cuando ya solo lleva dos.
+export async function actualizarMenu(menuId, cambios) {
+  const parche = {}
+  if ('nombre' in cambios) parche.nombre = cambios.nombre || null
+  if ('menusData' in cambios) parche.menus_data = cambios.menusData
+  if ('numMenus' in cambios) parche.num_menus = cambios.numMenus
+  if (Object.keys(parche).length === 0) return null
+
+  const { data, error } = await supabase
+    .from('menus')
+    .update(parche)
+    .eq('id', menuId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}

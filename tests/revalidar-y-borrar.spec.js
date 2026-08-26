@@ -105,6 +105,20 @@ test.describe("revalidación del menú", () => {
   });
 });
 
+// ⚠️ CAMBIADO (26 agosto) — LA PAPELERA PASÓ A SER TRES PUNTOS.
+// Pedido expreso: "en vez de la papelera debería haber tres puntitos para
+// poder renombrar y borrar". El botón suelto ya no existe, así que borrar
+// son dos toques: abrir las opciones y elegir eliminar.
+//
+// Lo que estas pruebas comprueban NO cambia -- que pregunte antes, y que el
+// borrado llegue a la base de datos y no solo a la pantalla. Solo cambia
+// por dónde se llega.
+const pedirBorrarElMenu = async (page) => {
+  await page.getByRole("button", { name: /^Opciones del menú/ }).click();
+  await page.getByRole("dialog", { name: /^Opciones de/ })
+            .getByRole("button", { name: /^Eliminar/ }).click();
+};
+
 test.describe("borrar menús guardados", () => {
   test.beforeEach(async ({ request }) => {
     await configurarBackend(request, {
@@ -120,7 +134,7 @@ test.describe("borrar menús guardados", () => {
     await page.getByRole("button", { name: /Mis menús/ }).click();
     await expect(page.getByText("Semana de agosto")).toBeVisible();
 
-    await page.getByRole("button", { name: /Borrar el menú/ }).click();
+    await pedirBorrarElMenu(page);
     await expect(page.getByText(/¿Borrar este menú\?/)).toBeVisible();
 
     // Cancelar no borra nada.
@@ -128,7 +142,7 @@ test.describe("borrar menús guardados", () => {
     await expect(page.getByText("Semana de agosto")).toBeVisible();
 
     // Confirmar sí.
-    await page.getByRole("button", { name: /Borrar el menú/ }).click();
+    await pedirBorrarElMenu(page);
     await page.getByRole("button", { name: "Borrar", exact: true }).click();
     await expect(page.getByText("Semana de agosto")).toHaveCount(0);
     await expect(page.getByText(/Todavía no hay ningún menú guardado/)).toBeVisible();
@@ -139,7 +153,7 @@ test.describe("borrar menús guardados", () => {
     await iniciarSesion(page);
     await page.getByRole("button", { name: "Menú", exact: true }).click();
     await page.getByRole("button", { name: /Mis menús/ }).click();
-    await page.getByRole("button", { name: /Borrar el menú/ }).click();
+    await pedirBorrarElMenu(page);
     await page.getByRole("button", { name: "Borrar", exact: true }).click();
     await expect(page.getByText(/Todavía no hay ningún menú guardado/)).toBeVisible();
 
