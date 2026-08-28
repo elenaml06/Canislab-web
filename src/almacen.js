@@ -39,6 +39,7 @@ import {
   eliminarMenu as eliminarMenuRemoto,
   actualizarMenu as actualizarMenuRemoto,
   esPremium as esPremiumRemoto,
+  esProfesional as esProfesionalRemoto,
 } from './supabase'
 
 // El usuario de mentira que representa "estoy usando la app sin cuenta".
@@ -218,6 +219,17 @@ export async function actualizarMenu(menuId, cambios) {
 export async function esPremium(userId) {
   if (esUsuarioLocal(userId)) return false
   return esPremiumRemoto(userId)
+}
+
+// ─── PROFESIONAL ──────────────────────────────────────────────────────────────
+// Mismo motivo que el premium, y más fuerte: sin cuenta no hay perfil, así
+// que no hay nada que acreditar. Si "sin cuenta" respondiera que sí, el
+// modo profesional se encendería sin que nadie hubiera aprobado a nadie --
+// y de ese modo va a colgar poder firmar una pauta con un número de
+// colegiado.
+export async function esProfesional(userId) {
+  if (esUsuarioLocal(userId)) return false
+  return esProfesionalRemoto(userId)
 }
 
 // ─── MIGRAR AL CREAR LA CUENTA ────────────────────────────────────────────────
