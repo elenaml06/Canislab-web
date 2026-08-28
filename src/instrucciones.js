@@ -87,6 +87,13 @@ export const COMO_DAR_ALIMENTO = {
   "Arándano": { como: "Enteros o chafados, crudos — son pequeños y blandos, no hace falta cocerlos." },
   "Berenjena": { como: "SIEMPRE cocida, nunca cruda — cruda puede irritar el estómago por la solanina de la piel." },
   "Boniato": { como: "Cocido y en puré o troceado — crudo es duro y casi no se digiere. Pélalo si lo das cocido en trozos grandes." },
+  // ⚠️ SE QUEDA aunque la borraja ya no esté en el catálogo (28 agosto).
+  // Ya no se puede elegir, pero si aparece en un menú viejo guardado y no
+  // tuviera entrada aquí, la app caería al texto de "Extras" -- "se añaden
+  // crudos por encima al final" --, que para la borraja es un consejo
+  // activamente malo. Es el mismo fallo del hígado que hizo nacer
+  // catalogo-app-y-motor.spec.js: lo que no se reconoce recibe el consejo
+  // de los aceites y las semillas, sin que salte ningún error.
   "Borraja": { como: "No se recomienda dar en ninguna cantidad ni forma — contiene alcaloides tóxicos para el hígado (ver aviso de seguridad)." },
   "Brócoli": { como: "Cocido al vapor o muy troceado — crudo puede costarle de digerir y dar gases en cantidad." },
   "Calabacín": { como: "Cocido o muy rallado, con piel — es blando y se digiere bien así." },
