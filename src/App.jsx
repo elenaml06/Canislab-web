@@ -1249,7 +1249,7 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
-function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null, onMenuEditado = null, onAbrirPanel = null,
+function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, pesoObjetivoKg = null, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null, onMenuEditado = null, onAbrirPanel = null,
   // ⚠️ AÑADIDO (26 agosto) — los tres puntos de CADA menú de la semana.
   // Pedido expreso: "se tiene que poder borrar y editar desde dentro y desde
   // fuera; cada menú individual de la semana y el global". Solo llega con
@@ -1625,6 +1625,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           // razas grandes/gigantes en crecimiento se perdía al editar un
           // alimento -- solo se respetaba al generar el menú por primera vez.
           peso_adulto_esperado_kg: pesoAdultoEsperado || null,
+      peso_objetivo_kg: pesoObjetivoKg || null,
           ...cuerpoExtra,
         }),
       });
@@ -3800,6 +3801,7 @@ function cuerpoApiDeUnPerro(perfil) {
     patologias: perfil?.patologias || [],
     categorias_excluidas: perfil?.categoriasExcluidas || [],
     peso_adulto_esperado_kg: d.pesoAdultoEsperado || null,
+    peso_objetivo_kg: d.objetivo?.kg || null,
     tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
   };
 }
@@ -5970,8 +5972,11 @@ function RawkuOnboardingInterna({
   // algún día las dos versiones dieran kcal distintas para el mismo
   // perro, y nadie sabría cuál mira la app.
   const { edad, especiesExcluidas, alimentosEvitados, pesoAdultoEsperado,
-          etapaCalculada, etapaLabel, derReal } = useMemo(
+          etapaCalculada, etapaLabel, derReal, objetivo } = useMemo(
     () => datosDeUnPerro(perfil), [perfil]);
+  // El peso sobre el que se miden las kcal, y por tanto sobre el que hay que
+  // medir la densidad de nutrientes. Ver la nota de `peso_objetivo_kg`.
+  const pesoObjetivoKg = objetivo?.kg || null;
   const categoriasDisponibles = useMemo(
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
     [especiesExcluidas]
@@ -6101,6 +6106,7 @@ function RawkuOnboardingInterna({
       etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
+      peso_objetivo_kg: pesoObjetivoKg || null,
       nombres_excluidos: Array.from(alimentosEvitados || []),
       especies_excluidas: Array.from(especiesExcluidas || []),
       patologias: perfil?.patologias || [],
@@ -6272,6 +6278,18 @@ function RawkuOnboardingInterna({
           // mal estado...) -- se manda al servidor, que compensa el
           // calcio con suplementos comerciales en su lugar.
           categorias_excluidas: perfil?.categoriasExcluidas || [],
+                    // ⚠️ AÑADIDO (28 agosto) — EL PESO SOBRE EL QUE SE MIDE LA DENSIDAD.
+          // FEDIAF (apartado 7.2.5) dice que cuando un perro come menos de lo
+          // normal, los mínimos de nutrientes POR 1000 KCAL tienen que subir:
+          // necesita los mismos miligramos de zinc coma lo que coma, así que si
+          // caben en menos calorías, la densidad sube. El motor lo calcula con
+          // `kcal / peso^0,75`, y ese peso tiene que ser el MISMO que se usó
+          // para las kcal — que en un perro con sobrepeso es el OBJETIVO, no el
+          // real. Si no se manda, el motor usa el real y escala un poco de más.
+          //
+          // Sin esta línea el escalado está puesto en el servidor y apagado en
+          // la práctica, que es la peor forma de tener algo: parece hecho.
+          peso_objetivo_kg: pesoObjetivoKg || null,
           peso_adulto_esperado_kg: pesoAdultoEsperado || null,
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes esto solo se mandaba
           // en el primer menú, forzando que el 2º y 3º cayeran siempre a
@@ -6343,7 +6361,19 @@ function RawkuOnboardingInterna({
             peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
             patologias: perfil?.patologias || [],
             categorias_excluidas: perfil?.categoriasExcluidas || [],
-            peso_adulto_esperado_kg: pesoAdultoEsperado || null,
+                      // ⚠️ AÑADIDO (28 agosto) — EL PESO SOBRE EL QUE SE MIDE LA DENSIDAD.
+          // FEDIAF (apartado 7.2.5) dice que cuando un perro come menos de lo
+          // normal, los mínimos de nutrientes POR 1000 KCAL tienen que subir:
+          // necesita los mismos miligramos de zinc coma lo que coma, así que si
+          // caben en menos calorías, la densidad sube. El motor lo calcula con
+          // `kcal / peso^0,75`, y ese peso tiene que ser el MISMO que se usó
+          // para las kcal — que en un perro con sobrepeso es el OBJETIVO, no el
+          // real. Si no se manda, el motor usa el real y escala un poco de más.
+          //
+          // Sin esta línea el escalado está puesto en el servidor y apagado en
+          // la práctica, que es la peor forma de tener algo: parece hecho.
+          peso_objetivo_kg: pesoObjetivoKg || null,
+          peso_adulto_esperado_kg: pesoAdultoEsperado || null,
             tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
           };
           const res = await fetchConTimeout(`${API_BASE}/menu/semana?numero_de_menus=${cuantos}`, {
@@ -7065,7 +7095,7 @@ function RawkuOnboardingInterna({
         etapaLabel={etapaLabel}
         etapaCalculada={etapaCalculada}
         especiesExcluidas={especiesExcluidas}
-        pesoAdultoEsperado={pesoAdultoEsperado}
+        pesoAdultoEsperado={pesoAdultoEsperado} pesoObjetivoKg={pesoObjetivoKg}
         edad={edad}
         set={set}
         setFase={setFase}
@@ -8272,7 +8302,7 @@ function RawkuOnboardingInterna({
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAccionesDeMenu={menuGuardadoAbierto ? ((i) => setAccionesDeMenu({ fila: menuGuardadoAbierto, indice: i })) : null} onAbrirLaCompra={abrirLaCompra} onMenuEditado={(idMenu, gramos) => {
+        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} pesoObjetivoKg={pesoObjetivoKg} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAccionesDeMenu={menuGuardadoAbierto ? ((i) => setAccionesDeMenu({ fila: menuGuardadoAbierto, indice: i })) : null} onAbrirLaCompra={abrirLaCompra} onMenuEditado={(idMenu, gramos) => {
           // `idMenu` es 1, 2, 3... (ver respuestaApiAMenu), así que el
           // índice del array es uno menos.
           setMenuReal((previos) => {
