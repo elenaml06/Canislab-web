@@ -24,6 +24,13 @@ const PUERTO_SUPABASE = 54321;
 
 export default defineConfig({
   testDir: "./tests",
+  // ⚠️ LA DE PUNTA A PUNTA NO CORRE AQUÍ (28 agosto). Necesita la API real
+  // levantada, y esta configuración monta el servidor FALSO: si se cuela,
+  // falla siempre por el motivo equivocado. Y una batería que sale roja
+  // todos los días sin que nadie mire por qué es peor que no tenerla --
+  // enseña a ignorar el rojo, que es justo lo contrario de para lo que
+  // está. Corre con `playwright.real.config.js`, que sí levanta la API.
+  testIgnore: /de-punta-a-punta\.spec\.js/,
   // Un bug de orden de carga puede "colar" por suerte una vez. Con esto,
   // si el test pasa por casualidad en vez de por corrección, se nota.
   repeatEach: Number(process.env.REPETIR || 1),
