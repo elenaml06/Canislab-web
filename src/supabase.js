@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { esProfesional as esProfesionalSegunPerfil } from './rol'
 
 // Se pueden sobreescribir por variable de entorno (VITE_SUPABASE_URL /
 // VITE_SUPABASE_ANON_KEY). Si no existen, se usan los valores de
@@ -87,6 +88,20 @@ export async function esPremium(userId) {
   if (perfil.plan !== 'premium') return false
   if (!perfil.suscripcion_activa_hasta) return false
   return new Date(perfil.suscripcion_activa_hasta) > new Date()
+}
+
+// ⚠️ AÑADIDO (28 agosto) — EL ROL PROFESIONAL. La regla de quién es
+// veterinario vive en `rol.js` (pura, probada aparte); aquí sólo se va a
+// buscar el perfil.
+//
+// No hace falta tratar el caso de que las columnas no existan todavía:
+// getPerfil hace `select('*')`, así que si aún no se ha ejecutado el ALTER
+// TABLE simplemente no vienen, `perfil.rol` es undefined y esProfesional
+// devuelve false. Que es lo correcto: sin la migración, nadie es
+// profesional, y la app sigue funcionando igual para todo el mundo.
+export async function esProfesional(userId) {
+  const perfil = await getPerfil(userId)
+  return esProfesionalSegunPerfil(perfil)
 }
 
 // ─── PERROS ───────────────────────────────────────────────────────────────────
