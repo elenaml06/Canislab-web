@@ -146,10 +146,25 @@ test.describe("ningún camino se queda sin mandarlo", () => {
       expect(i, `no se encuentra en App.jsx el bloque de ${quien} ` +
                 `(buscando ${JSON.stringify(marca)}). Si se ha renombrado, hay que ` +
                 `actualizar esta prueba -- no borrarla`).toBeGreaterThan(-1);
-      // El cuerpo cabe de sobra en 3000 caracteres desde su marca; se corta
-      // para no encontrar el campo de OTRO cuerpo más abajo y darlo por
-      // bueno, que es como esta prueba dejaría de servir sin avisar.
-      const bloque = app.slice(i, i + 3000);
+      // ⚠️ CORREGIDO (28 agosto) — LA VENTANA FIJA DABA UN FALSO NEGATIVO.
+      // Antes se cortaba a 3000 caracteres desde la marca. El recorte existe
+      // por un motivo bueno: si el bloque llegara hasta el cuerpo siguiente,
+      // encontraría el campo de OTRO y daría este por bueno -- así es como
+      // esta prueba dejaría de servir sin avisar.
+      //
+      // Pero un número fijo caduca. Al entrar el peso objetivo, el cuerpo de
+      // /menu/v2 creció y `peso_adulto_esperado_kg` quedó a 3477 caracteres:
+      // se seguía mandando, y la prueba decía que no. Un falso negativo es
+      // tan malo como un falso positivo -- enseña a desconfiar de la prueba.
+      //
+      // Ahora el corte no es un número: es DONDE EMPIEZA EL CUERPO SIGUIENTE.
+      // Eso es lo que se quería decir desde el principio, no cabe crecer por
+      // encima, y no puede leer el campo de otro.
+      const otras = CUERPOS.map(([, m]) => m).filter((m) => m !== marca);
+      const siguientes = otras.map((m) => app.indexOf(m, i + marca.length))
+                              .filter((x) => x > -1);
+      const fin = siguientes.length ? Math.min(...siguientes) : app.length;
+      const bloque = app.slice(i, fin);
       expect(bloque,
         `el cuerpo de ${quien} no manda peso_adulto_esperado_kg. Sin él, un cachorro de ` +
         `raza grande pierde su mínimo de calcio reforzado por ese camino, y no da ningún ` +
