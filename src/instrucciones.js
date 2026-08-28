@@ -87,7 +87,6 @@ export const COMO_DAR_ALIMENTO = {
   "Arándano": { como: "Enteros o chafados, crudos — son pequeños y blandos, no hace falta cocerlos." },
   "Berenjena": { como: "SIEMPRE cocida, nunca cruda — cruda puede irritar el estómago por la solanina de la piel." },
   "Boniato": { como: "Cocido y en puré o troceado — crudo es duro y casi no se digiere. Pélalo si lo das cocido en trozos grandes." },
-  "Borraja": { como: "No se recomienda dar en ninguna cantidad ni forma — contiene alcaloides tóxicos para el hígado (ver aviso de seguridad)." },
   "Brócoli": { como: "Cocido al vapor o muy troceado — crudo puede costarle de digerir y dar gases en cantidad." },
   "Calabacín": { como: "Cocido o muy rallado, con piel — es blando y se digiere bien así." },
   "Calabaza": { como: "Cocida y en puré — cruda es dura y casi no se digiere." },
