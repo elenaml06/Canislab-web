@@ -208,6 +208,12 @@ export function crearFakeSupabase(opciones = {}) {
     // está detrás del muro de pago (varios menús en la semana), sin tener
     // que tocar Stripe ni nada real.
     premium: false,
+    // Si la cuenta de prueba pide el rol profesional, y si además está
+    // acreditada. Son dos banderas y no una a propósito: el caso que hay
+    // que poder montar es "lo pide y NO está aprobado", que es el que
+    // consigue quien se escriba el rol a sí mismo.
+    rolProfesional: false,
+    rolVerificado: false,
   };
 
   const servidor = http.createServer(async (req, res) => {
@@ -635,6 +641,14 @@ export function crearFakeSupabase(opciones = {}) {
           ? new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString()
           : null,
         nombre: "Cuenta de prueba",
+        // El rol profesional, con la misma forma que en Supabase. Por
+        // defecto la cuenta de prueba es tutora, como todo el mundo hoy.
+        rol: estado.rolProfesional ? "profesional" : "tutor",
+        num_colegiado: estado.rolProfesional ? "COLVET-12345" : null,
+        // Que el estado tenga que decir explícitamente que está verificado
+        // es a propósito: así el test que quiera el caso "lo pide y no está
+        // aprobado" puede montarlo sin tocar nada más.
+        rol_verificado_en: estado.rolVerificado ? "2026-08-28T10:00:00.000Z" : null,
       };
       return responder(200, unSoloObjeto ? perfil : [perfil]);
     }
