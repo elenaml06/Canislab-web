@@ -700,7 +700,7 @@ const CATEGORIAS_ALIMENTO = {
     // aparte. Confirmado que NO hay datos fiables de bazo/páncreas de
     // pollo, pavo ni conejo -- no se han inventado esas especies.
     // Timo y cerebro dan variedad adicional con datos USDA reales.
-    "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero", "Testículos de cordero"],
+    "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero"],
     "Ternera": ["Pulmón de ternera", "Riñón de ternera", "Timo de ternera", "Cerebro de ternera"],
     "Vaca": ["Bazo de vaca", "Páncreas de vaca"],
     // ⚠️ ELIMINADO (5 agosto, madrugada) — CASO REAL GRAVE, pedido
@@ -729,7 +729,6 @@ const CATEGORIAS_ALIMENTO = {
     "Arándano": ["Arándano"],
     "Berenjena": ["Berenjena"],
     "Boniato": ["Boniato"],
-    "Borraja": ["Borraja"],
     "Bruselas": ["Coles de Bruselas"],
     "Brócoli": ["Brócoli"],
     "Calabacín": ["Calabacín"],
@@ -780,13 +779,13 @@ const CATEGORIAS_ALIMENTO = {
   // Perro Adulto" (y cualquiera de los otros 3 que faltaban) caía en
   // "Extras" al no encontrarse aquí, aunque el motor SÍ lo usa de verdad.
   "Suplementos comerciales": {
-    "Calcio": ["Cáscara de huevo PAWS & PATCH", "Cáscara de huevo casera (en polvo)", "GRAU Harina de Hueso", "LUPO NATURAL BARF Huesos en polvo"],
+    "Calcio": ["Cáscara de huevo PAWS & PATCH", "Cáscara de huevo casera (en polvo)"],
     "Fibra": ["NaturGreen Psyllium Bio"],
     "Hierro": ["AniForte Beef Blood Powder"],
     "Multivitamínico": ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)", "napfcheck Novomineral proLEBER", "astoral MultiVital BARF", "V-INTEGRA Perro Adulto", "V-INTEGRA Cachorro", "V-INTEGRA Senior", "V-INTEGRA Epato", "V-INTEGRA Renal", "Nutratop Vitamínico-Mineral 7:1"],
-    "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Brit Care Aceite de Salmón", "Oleum Canis Aceite de Salmón", "Pets Purest Aceite de Salmón"],
+    "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Oleum Canis Aceite de Salmón"],
     "Levadura de cerveza": ["GRAU Levadura de cerveza", "PAWS & PATCH Levadura de cerveza"],
-    "Algas (Kelp)": ["AniForte Seaweed Meal", "Sonrisa de Diez Kelp"],
+    "Algas (Kelp)": ["AniForte Seaweed Meal"],
     "Yodo": ["Yoduro potásico (comprimidos 200 µg)"],
   },
 };
