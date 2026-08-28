@@ -104,6 +104,26 @@ export async function esProfesional(userId) {
   return esProfesionalSegunPerfil(perfil)
 }
 
+// Pedir el rol: la persona deja su número de colegiado y nada más.
+//
+// ⚠️ ESTO NO ACREDITA A NADIE, y es justo lo que tiene que pasar. El
+// disparador `proteger_el_rol` de Supabase deja escribir `num_colegiado`
+// (es su solicitud) pero RECHAZA tocar `rol` y `rol_verificado_en` a
+// cualquiera que no sea service_role. O sea que desde aquí no se puede
+// encender el modo profesional ni queriendo: lo enciende una persona a
+// mano, mirando el número.
+//
+// Si alguien edita esta función para escribir también `rol`, Supabase
+// devolverá error y la solicitud entera fallará. Es a propósito: preferimos
+// que se rompa a que se cuele.
+export async function pedirRolProfesional(userId, numColegiado) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ num_colegiado: (numColegiado || '').trim() || null })
+    .eq('id', userId)
+  if (error) throw error
+}
+
 // ─── PERROS ───────────────────────────────────────────────────────────────────
 
 export async function getPerros(userId) {

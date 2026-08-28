@@ -214,6 +214,9 @@ export function crearFakeSupabase(opciones = {}) {
     // consigue quien se escriba el rol a sí mismo.
     rolProfesional: false,
     rolVerificado: false,
+    // La ficha del menú de mentira, con nutrientes que fallan. Apagada por
+    // defecto: el menú de siempre sale en verde.
+    fichaConFallos: false,
   };
 
   const servidor = http.createServer(async (req, res) => {
@@ -273,6 +276,11 @@ export function crearFakeSupabase(opciones = {}) {
       if ("avisoComposicionAlEditar" in cfg) estado.avisoComposicionAlEditar = cfg.avisoComposicionAlEditar;
       if (cfg.revalidar) estado.revalidar = cfg.revalidar;
       if (typeof cfg.casaCompraUnica === "boolean") estado.casaCompraUnica = cfg.casaCompraUnica;
+      // El rol profesional: dos banderas separadas para poder montar el
+      // caso "lo pide y NO está aprobado", que es el que importa.
+      if (typeof cfg.rolProfesional === "boolean") estado.rolProfesional = cfg.rolProfesional;
+      if (typeof cfg.rolVerificado === "boolean") estado.rolVerificado = cfg.rolVerificado;
+      if (typeof cfg.fichaConFallos === "boolean") estado.fichaConFallos = cfg.fichaConFallos;
       if (typeof cfg.casaAvisos === "boolean") estado.casaAvisos = cfg.casaAvisos;
       // ⚠️ Éste NO es pegajoso, a propósito, al revés que los demás
       // interruptores: cambia el CONTENIDO de los menús, y quedarse
@@ -384,6 +392,34 @@ export function crearFakeSupabase(opciones = {}) {
         "Vísceras de ternera": 40,
         "Calabacín": 90,
       },
+      // ⚠️ AÑADIDO (28 agosto) — LA FICHA, con la forma REAL de verificar().
+      // Antes el menú de mentira no traía ninguna, así que la pantalla del
+      // veterinario -- que es la ficha entera pintada -- no se podía probar
+      // ni ver: salía su estado vacío y parecía que estaba rota.
+      //
+      // Por defecto va en verde, como el menú de siempre, para no cambiarle
+      // el escenario a ninguna prueba que ya existía. Los nutrientes que
+      // FALLAN se piden aparte con `fichaConFallos`.
+      ficha: estado.fichaConFallos
+        ? {
+            semaforo: "ambar", correctos: 27, total: 30,
+            ratio_ca_p: 1.42, gramos: 740, kcal: 1120.4, densidad_kcal_g: 1.51,
+            faltan: [
+              { nutriente: "Cinc", clave: "cinc", tiene: 14.8, necesita: 18.4, cubre_pct: 80, falta: 3.6 },
+              { nutriente: "Vitamina E", clave: "vitE", tiene: 6.1, necesita: 9.4, cubre_pct: 65, falta: 3.3 },
+            ],
+            se_pasa: [
+              { nutriente: "Vitamina A", clave: "vitA", tiene: 21800, maximo: 16000, veces: 1.36 },
+            ],
+            datos_incompletos: { manganeso: ["Calabacín"] },
+            datos_dudosos: { linolenico: ["Hígado de ternera"] },
+          }
+        : {
+            semaforo: "verde", correctos: 30, total: 30,
+            ratio_ca_p: 1.38, gramos: 740, kcal: 1120.4, densidad_kcal_g: 1.51,
+            faltan: [], se_pasa: [],
+            datos_incompletos: {}, datos_dudosos: {},
+          },
     };
 
     if (estado.colgarGenerador && (ruta === "/menu/v2" || ruta === "/menu/semana")) {

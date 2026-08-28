@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, MoreVertical, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
-import { onAuthChange, logout, cambiarPassword, cambiarCorreo } from "./supabase";
+import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesional } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -14,10 +14,11 @@ import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 import {
   guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
   USUARIO_LOCAL, estaSinCuenta, entrarSinCuenta, salirDeSinCuenta,
-  hayDatosLocales, migrarLocalACuenta, vaciarLocal,
+  hayDatosLocales, migrarLocalACuenta, vaciarLocal, esProfesional,
 } from "./almacen";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
+import FichaClinica from "./fichaclinica";
 import { API_BASE, fetchConTimeout } from "./api.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
@@ -1263,7 +1264,13 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // fuera; cada menú individual de la semana y el global". Solo llega con
   // valor si el menú está GUARDADO: renombrar uno recién generado que
   // todavía no se ha guardado no tendría dónde escribirse.
-  onAccionesDeMenu = null }) {
+  onAccionesDeMenu = null,
+  // ⚠️ AÑADIDO (28 agosto) — el modo profesional. Llega como prop y no se
+  // calcula aquí a propósito: quién está acreditado lo decide Supabase y lo
+  // resuelve `rol.js` en un solo sitio. Por defecto false, así que cualquier
+  // camino que se olvide de pasarlo enseña la vista de tutor -- que es el
+  // lado seguro del error.
+  enModoProfesional = false }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
   // pantalla del menú era un scroll larguísimo donde el plan de
@@ -1874,6 +1881,10 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         {[
           { key: "menu", label: "El menú" },
           { key: "comoDarlo", label: "Cómo darlo" },
+          // La tercera solo existe en modo profesional. Un tutor no la ve:
+          // no es que se le esconda nada -- ve el menú entero y su semáforo
+          // --, es que la tabla de márgenes no le dice nada y le quita sitio.
+          ...(enModoProfesional ? [{ key: "fichaClinica", label: "Ficha clínica" }] : []),
         ].map((v) => {
           const activo = vistaActiva === v.key;
           return (
@@ -1905,6 +1916,10 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             medio de la pila de avisos (y con una X para cerrarla, o sea
             que se podía perder de vista para siempre), y la preparación
             de cada alimento detrás de su icono. */}
+        {vistaActiva === "fichaClinica" && enModoProfesional && (
+          <FichaClinica ficha={ficha} />
+        )}
+
         {vistaActiva === "comoDarlo" && (
           <div className="flex flex-col gap-3 mb-4">
           {necesitaTransicion && (
@@ -3851,6 +3866,34 @@ function RawkuOnboardingInterna({
     setMostrarSuscripcion(false);
   };
   const [mostrarSuscripcion, setMostrarSuscripcion] = useState(false);
+
+  // ─── EL ROL PROFESIONAL Y EL INTERRUPTOR DE MODO ───────────────────────
+  //
+  // Son DOS cosas distintas y hay que no confundirlas:
+  //   `acreditado`       — lo que dice Supabase. No se puede cambiar desde
+  //                        aquí: lo enciende una persona mirando el número
+  //                        de colegiado (ver el disparador en la migración).
+  //   `modoProfesional`  — en cuál de sus dos modos está mirando AHORA.
+  //
+  // Un veterinario acreditado con perro propio usa Rawku para las dos cosas:
+  // en modo tutor es un usuario normal con su perro, su cesta y su
+  // suscripción; en modo profesional ve a sus pacientes. El interruptor
+  // cambia la VISTA, nunca la cuenta.
+  //
+  // El modo se guarda en este navegador a propósito y no en Supabase: es de
+  // este móvil y de este rato, como la cesta de la compra.
+  const [acreditado, setAcreditado] = useState(false);
+  const [modoProfesional, setModoProfesional] = useState(() => {
+    try { return localStorage.getItem("rawku_modo_profesional") === "1"; } catch { return false; }
+  });
+  // Si la acreditación se retira, el modo se apaga solo. Si no, alguien que
+  // dejó de estar acreditado seguiría viendo la vista profesional hasta que
+  // se le ocurriera apagarla.
+  const enModoProfesional = acreditado && modoProfesional;
+  const cambiarModoProfesional = (valor) => {
+    setModoProfesional(valor);
+    try { localStorage.setItem("rawku_modo_profesional", valor ? "1" : "0"); } catch { /* navegador sin almacenamiento */ }
+  };
   const [cargandoPerfil] = useState(false); // ya no necesario, carga en AuthGate
 
   useEffect(() => {
@@ -3859,6 +3902,10 @@ function RawkuOnboardingInterna({
       if (PAYWALL_ACTIVO && !PAYWALL_ES_DEMO) {
         esPremium(usuario.id).then(setPremiumReal).catch(() => setPremiumReal(false));
       }
+      // Y si la cuenta está acreditada como profesional. Ante cualquier
+      // fallo, NO: preferimos no enseñar el modo a enseñarlo a quien no
+      // le corresponde.
+      esProfesional(usuario.id).then(setAcreditado).catch(() => setAcreditado(false));
     }
     const params = new URLSearchParams(window.location.search);
     if (params.get('pago') === 'ok') {
@@ -4983,6 +5030,28 @@ function RawkuOnboardingInterna({
     }
   };
 
+  // Mandar el número de colegiado. Solicitud, no acreditación: escribe
+  // `num_colegiado` y NADA MÁS. El disparador de Supabase rechaza que
+  // desde aquí se toque `rol` o `rol_verificado_en`, así que ni un fallo
+  // ni una mala idea pueden encender el modo desde el navegador.
+  const enviarColegiado = async () => {
+    if (ajusteGuardando || !ajusteValor.trim()) return;
+    setAjusteGuardando(true);
+    setAjusteEstado(null);
+    try {
+      await pedirRolProfesional(usuario.id, ajusteValor);
+      setAjusteEstado({ tipo: "ok",
+        texto: "Recibido. Comprobamos el número y te avisamos cuando el modo veterinario esté encendido." });
+      setAjusteCampo(null); setAjusteValor("");
+    } catch (err) {
+      capturarError(err, { donde: "ajustes.colegiado" });
+      setAjusteEstado({ tipo: "error",
+        texto: "No se ha podido enviar. Inténtalo otra vez en un momento." });
+    } finally {
+      setAjusteGuardando(false);
+    }
+  };
+
   const filaAjuste = (Icono, titulo, subtitulo, onClick, peligro = false) => (
     <button onClick={onClick} className="w-full flex items-center gap-3 px-4 py-3.5 rounded-2xl"
             style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0", cursor: "pointer" }}>
@@ -5074,6 +5143,81 @@ function RawkuOnboardingInterna({
               }, true)}
           </div>
         </div>
+
+        {/* ── PROFESIONAL ──
+            Dos cosas distintas en el mismo sitio: PEDIR la acreditación
+            (dejar el número de colegiado) y, si ya la tienes, el
+            INTERRUPTOR entre los dos modos. Nunca sale sin cuenta: sin
+            perfil no hay nada que acreditar. */}
+        {!sinCuenta && (
+          <div>
+            <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+              Profesional
+            </p>
+            {acreditado ? (
+              <button
+                onClick={() => cambiarModoProfesional(!modoProfesional)}
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left"
+                style={{ background: "#FFFFFF", border: `1.5px solid ${modoProfesional ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
+                <Award size={17} style={{ color: modoProfesional ? VIOLETA : MALVA, flexShrink: 0 }} />
+                <span className="flex-1">
+                  <span className="block" style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>
+                    Modo veterinario
+                  </span>
+                  <span className="block text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                    {modoProfesional
+                      ? "Encendido: ves la ficha clínica de cada menú"
+                      : "Apagado: usas Rawku como cualquier tutor"}
+                  </span>
+                </span>
+                {/* El interruptor, dibujado a mano para no meter una
+                    dependencia por un botón. */}
+                <span aria-hidden="true" className="shrink-0 rounded-full"
+                      style={{ width: 38, height: 22, padding: 3,
+                               background: modoProfesional ? VIOLETA : "#E3DAF0",
+                               display: "flex", justifyContent: modoProfesional ? "flex-end" : "flex-start" }}>
+                  <span style={{ width: 16, height: 16, borderRadius: "50%", background: "#FFFFFF" }} />
+                </span>
+              </button>
+            ) : ajusteCampo === "colegiado" ? (
+              <div className="px-4 py-4 rounded-2xl flex flex-col gap-2"
+                   style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+                  Tu número de colegiado
+                </p>
+                <p className="text-xs leading-snug mb-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Lo comprobamos a mano antes de encender el modo veterinario. Dejarlo
+                  aquí no lo enciende: te avisamos cuando esté.
+                </p>
+                <input
+                  type="text"
+                  value={ajusteValor}
+                  onChange={(e) => setAjusteValor(e.target.value)}
+                  placeholder="COLVET-00000"
+                  className="w-full px-3 py-2.5 rounded-xl"
+                  style={{ border: "1.5px solid #E3DAF0", fontFamily: fontBody, fontSize: 14, color: TINTA }} />
+                <div className="flex gap-2 mt-1">
+                  <button onClick={() => { setAjusteCampo(null); setAjusteEstado(null); }}
+                          className="flex-1 py-2.5 rounded-xl"
+                          style={{ background: "#F0EBF8", color: VIOLETA, border: "none", fontFamily: fontBody, fontSize: 14, cursor: "pointer" }}>
+                    Cancelar
+                  </button>
+                  <button onClick={enviarColegiado} disabled={!ajusteValor.trim()}
+                          className="flex-1 py-2.5 rounded-xl"
+                          style={{ background: ajusteValor.trim() ? VIOLETA : "#E3DAF0", color: "#FFFFFF",
+                                   border: "none", fontFamily: fontBody, fontSize: 14,
+                                   cursor: ajusteValor.trim() ? "pointer" : "default" }}>
+                    Enviar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              filaAjuste(Award, "Soy veterinario/a", "Pedir el modo profesional", () => {
+                setAjusteCampo("colegiado"); setAjusteValor(""); setAjusteEstado(null);
+              })
+            )}
+          </div>
+        )}
 
         {/* ── LA CUENTA ── */}
         <div>
@@ -5205,8 +5349,12 @@ function RawkuOnboardingInterna({
       ir: () => { setSeccionSuelta(null); setFase("misMenus"); } },
     { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true,
       ir: () => { setSeccionSuelta("evolucion"); setFase("seccion"); } },
-    { key: "compra", Icono: ShoppingBasket, label: "La compra", isPremium: false,
-      ir: () => abrirLaCompra() },
+    // ⚠️ EN MODO PROFESIONAL NO HAY CESTA. Un veterinario no hace la compra
+    // de un perro que no es suyo. La lista de la compra sigue existiendo --
+    // es de lo que el tutor se lleva --, pero no es una pantalla suya.
+    ...(enModoProfesional ? [] : [
+      { key: "compra", Icono: ShoppingBasket, label: "La compra", isPremium: false,
+        ir: () => abrirLaCompra() }]),
     { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true,
       ir: () => { setSeccionSuelta("analizar"); setFase("seccion"); } },
   ];
@@ -7088,6 +7236,7 @@ function RawkuOnboardingInterna({
     return (
       <>
       <VistaMenus
+        enModoProfesional={enModoProfesional}
         soloSeccion={seccionSuelta}
         menus={MENUS_EJEMPLO}
         onVolver={() => { setSeccionSuelta(null); setFase("onboarding"); }}
@@ -8310,7 +8459,7 @@ function RawkuOnboardingInterna({
             ))}
           </div>
         )}
-        <VistaMenus menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} pesoObjetivoKg={pesoObjetivoKg} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAccionesDeMenu={menuGuardadoAbierto ? ((i) => setAccionesDeMenu({ fila: menuGuardadoAbierto, indice: i })) : null} onAbrirLaCompra={abrirLaCompra} onMenuEditado={(idMenu, gramos) => {
+        <VistaMenus enModoProfesional={enModoProfesional} menus={menus} onVolver={menuGuardadoAbierto ? salirDeMenuGuardado : volverAElegir} modo={modo} alimentosEvitados={alimentosEvitados} patologias={perfil?.patologias || []} nombrePerro={nombreMostrar} necesitaTransicion={dietaActual === "pienso" || dietaActual === "cocinada"} dietaActual={dietaActual} categoriasDisponibles={categoriasDisponibles} perfil={perfil} derReal={derParaMostrar} etapaLabel={etapaParaMostrar} etapaCalculada={etapaCalculada} especiesExcluidas={especiesExcluidas} pesoAdultoEsperado={pesoAdultoEsperado} pesoObjetivoKg={pesoObjetivoKg} edad={edad} set={set} setFase={setFase} avisoNoForzado={avisoNoForzado} diagnosticoPersonalizar={diagnosticoPersonalizar} avisoExtraEspecie={avisoExtraEspecie} onAccionesDeMenu={menuGuardadoAbierto ? ((i) => setAccionesDeMenu({ fila: menuGuardadoAbierto, indice: i })) : null} onAbrirLaCompra={abrirLaCompra} onMenuEditado={(idMenu, gramos) => {
           // `idMenu` es 1, 2, 3... (ver respuestaApiAMenu), así que el
           // índice del array es uno menos.
           setMenuReal((previos) => {
