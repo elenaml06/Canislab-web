@@ -3,7 +3,8 @@ import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRigh
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import Formulador from "./formulador.jsx";
-import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesional } from "./supabase";
+import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesional,
+         getPerfil, firmarPauta, getPautasFirmadas } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -3969,6 +3970,12 @@ function RawkuOnboardingInterna({
   // El modo se guarda en este navegador a propósito y no en Supabase: es de
   // este móvil y de este rato, como la cesta de la compra.
   const [acreditado, setAcreditado] = useState(false);
+  // Nombre y número de colegiado de quien firma. Null mientras no se sabe.
+  const [perfilProfesional, setPerfilProfesional] = useState(null);
+  // El historial de pautas firmadas del paciente que se está mirando. Es una
+  // LISTA de documentos, no un documento que se va pisando: una pauta
+  // firmada no se edita, se firma otra y la anterior se queda con su fecha.
+  const [pautasFirmadas, setPautasFirmadas] = useState([]);
 
   // ⚠️ CORREGIDO (28 agosto) — UN VETERINARIO ACREDITADO ENTRA EN SU MODO.
   //
@@ -4006,6 +4013,13 @@ function RawkuOnboardingInterna({
       // fallo, NO: preferimos no enseñar el modo a enseñarlo a quien no
       // le corresponde.
       esProfesional(usuario.id).then(setAcreditado).catch(() => setAcreditado(false));
+      // Y quién es, para poder firmar con su nombre y su número. Se lee de
+      // `profiles` una vez y se COPIA en cada pauta al firmarla: un
+      // documento firmado no puede cambiar porque su autor edite su ficha.
+      getPerfil(usuario.id)
+        .then((p) => setPerfilProfesional(p ? { nombre: p.nombre || "",
+                                                num_colegiado: p.num_colegiado || "" } : null))
+        .catch(() => setPerfilProfesional(null));
     }
     const params = new URLSearchParams(window.location.search);
     if (params.get('pago') === 'ok') {
@@ -5519,8 +5533,23 @@ function RawkuOnboardingInterna({
         if (enModoProfesional) setPaso(1);
         setFase("onboarding");
       } },
-    { key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false,
+    { key: "menus", Icono: ClipboardList, label: enModoProfesional ? "Menús" : "Mis menús",
+      isPremium: false,
       ir: () => { setSeccionSuelta(null); setFase("misMenus"); } },
+    // Solo en modo veterinario: el historial de lo firmado. Un tutor no
+    // firma nada, así que para él esta entrada no significaría nada.
+    ...(enModoProfesional ? [{
+      key: "pautas", Icono: Award, label: "Pautas firmadas", isPremium: false,
+      ir: () => {
+        setSeccionSuelta(null);
+        setFase("pautas");
+        if (perfil._id) {
+          getPautasFirmadas(perfil._id)
+            .then(setPautasFirmadas)
+            .catch((err) => capturarError(err, { donde: "getPautasFirmadas" }));
+        }
+      },
+    }] : []),
     { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true,
       ir: () => { setSeccionSuelta("evolucion"); setFase("seccion"); } },
     // ⚠️ EN MODO PROFESIONAL NO HAY CESTA. Un veterinario no hace la compra
@@ -8014,6 +8043,79 @@ function RawkuOnboardingInterna({
 
   // ⚠️ AÑADIDO — pantalla para los menús ya guardados en Supabase. Antes
   // no existía ninguna: se guardaban y no había forma de volver a verlos.
+  // ─── EL HISTORIAL DE PAUTAS FIRMADAS ──────────────────────────────────
+  // Una lista de documentos, ordenados por fecha. No se edita ninguno: si
+  // hay que cambiar algo se firma otra pauta, y ésta se queda. Es además la
+  // única forma de poder mirar atrás y ver qué se le pautó y cuándo.
+  if (fase === "pautas") {
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+        <Fuentes />
+        <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
+          <div className="flex items-center justify-between mb-3">
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
+            {burbujaDePerfil(true)}
+          </div>
+          <p className="text-[11px] tracking-[0.18em] uppercase mb-2"
+             style={{ color: MALVA, fontFamily: "monospace" }}>Pautas firmadas</p>
+          <h1 className="text-3xl leading-tight"
+              style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+            {nombreMostrar}
+          </h1>
+        </div>
+        <div className="flex-1 px-6 pt-6 pb-6 overflow-y-auto">
+          {pautasFirmadas.length === 0 ? (
+            <p className="text-sm leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Todavía no hay ninguna pauta firmada de este paciente. Se firman desde el
+              formulador, cuando la ración cumple todo.
+            </p>
+          ) : pautasFirmadas.map((fila) => {
+            const doc = fila.documento || {};
+            const alimentos = Object.entries(doc.menu || {});
+            return (
+              <div key={fila.id} className="rounded-2xl px-4 py-4 mb-3"
+                   style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                  {new Date(fila.firmada_en).toLocaleDateString("es-ES",
+                    { day: "numeric", month: "long", year: "numeric" })}
+                </p>
+                <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
+                  {fila.nombre_firmante} · nº {fila.num_colegiado}
+                </p>
+                <div className="mt-2">
+                  {alimentos.map(([nombre, g]) => (
+                    <p key={nombre} className="text-sm" style={{ color: TINTA, fontFamily: fontBody }}>
+                      {nombre} <span style={{ color: MALVA }}>· {g} g</span>
+                    </p>
+                  ))}
+                </div>
+                {doc.contexto && (
+                  <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                    {Math.round(doc.contexto.der_objetivo || 0)} kcal/día ·{" "}
+                    {doc.contexto.etapa_requisitos}
+                    {doc.contexto.patologias?.length > 0 && ` · ${doc.contexto.patologias.join(", ")}`}
+                  </p>
+                )}
+                {/* Los huecos van EN el documento, no solo en pantalla: si se
+                    firmó con datos incompletos, eso se lee un año después. */}
+                {Object.keys(doc.huecos?.sin_dato || {}).length > 0 && (
+                  <p className="text-xs mt-1 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                    Firmada con huecos del catálogo en:{" "}
+                    {Object.keys(doc.huecos.sin_dato).join(", ")}
+                  </p>
+                )}
+                <p className="text-[11px] mt-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+                  sello {fila.sello}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        {drawerLigero}
+      </div>
+    );
+  }
+
   if (fase === "misMenus") {
     const ETIQUETAS_MODO = { automatico: "Automático", personalizar: "Personalizado" };
     return (
@@ -8709,6 +8811,24 @@ function RawkuOnboardingInterna({
           nombresExcluidos={Array.from(alimentosEvitados || [])}
           categoriasExcluidas={perfil?.categoriasExcluidas || []}
           onVolver={() => setFase("onboarding")}
+          onAbrirPanel={() => setMenuLigeroAbierto(true)}
+          firmante={perfilProfesional}
+          onFirmar={async (documento) => {
+            // Se guarda TAL CUAL lo que selló la API. La seguridad por fila
+            // de Supabase es lo que impide que firme quien no está
+            // acreditado: la API todavía no autentica (VETERINARIOS.md §10).
+            const fila = await firmarPauta({
+              documento,
+              profesionalId: usuario.id,
+              perroId: perfil._id || null,
+              // Hoy el paciente vive en la cuenta del veterinario, así que
+              // el tutor es él mismo. En la fase 3, cuando el perro sea de
+              // otro, aquí irá el dueño -- y por eso se guarda la columna
+              // desde ya en vez de deducirla al leer.
+              tutorId: usuario.id,
+            });
+            return fila;
+          }}
           onGuardar={(gramosFormulados, estadoFinal) => {
             const comoUnMenu = {
               factible: true,

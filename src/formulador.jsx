@@ -20,7 +20,7 @@
 // diría una cosa y el motor comprobaría otra, y no saltaría ningún error.
 // Esta pantalla solo pinta y ordena.
 import { useState, useEffect, useRef, useMemo } from "react";
-import { AlertCircle, Check, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { AlertCircle, Check, Menu, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { API_BASE, fetchConTimeout } from "./api.js";
 import { agruparNutrientes, resumenDeLaFicha, nombreLegible } from "./nutrientes.js";
 
@@ -45,6 +45,7 @@ export default function Formulador({
   perfil, derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg,
   pesoObjetivoKg, patologias = [], especiesExcluidas = [], nombresExcluidos = [],
   categoriasExcluidas = [], gramosIniciales = null, onGuardar = null, onVolver = () => {},
+  firmante = null, onFirmar = null, onAbrirPanel = null,
 }) {
   const [gramos, setGramos] = useState(() => ({ ...(gramosIniciales || {}) }));
   const [catalogo, setCatalogo] = useState(null);
@@ -56,6 +57,16 @@ export default function Formulador({
   const [avisoAuto, setAvisoAuto] = useState(null);
   const [alternativa, setAlternativa] = useState(null);
   const [error, setError] = useState(null);
+  // ─── FIRMAR ES UN ACTO: HAY QUE PULSAR ────────────────────────────────
+  // El modo profesional NO firma solo. Si firmara por el hecho de estar
+  // encendido, el veterinario acabaría con veinte pautas firmadas de las
+  // que hizo probando. Hasta que se pulsa "Firmar la pauta" esto es un
+  // borrador, y se ve que lo es.
+  const [firmando, setFirmando] = useState(false);       // el panel de firma
+  const [enviandoFirma, setEnviandoFirma] = useState(false);
+  const [nombreFirmante, setNombreFirmante] = useState(firmante?.nombre || "");
+  const [pautaFirmada, setPautaFirmada] = useState(null);
+  const [errorFirma, setErrorFirma] = useState(null);
   const peticion = useRef(0);
 
   const cuerpoBase = useMemo(() => ({
@@ -167,6 +178,47 @@ export default function Formulador({
     }
   };
 
+  const firmar = async () => {
+    setEnviandoFirma(true);
+    setErrorFirma(null);
+    try {
+      // ⚠️ EL DOCUMENTO LO CONSTRUYE Y LO SELLA LA API, sobre lo que acaba
+      // de verificar ella misma. Aquí NO se arma nada: si esta pantalla
+      // montara el documento con lo que tiene pintado, habría dos ideas de
+      // "lo firmado" y el día que se separen el sello seguiría cuadrando
+      // consigo mismo sin decir nada.
+      const r = await fetchConTimeout(`${API_BASE}/pauta/firmar`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ...cuerpoBase,
+          gramos_por_alimento: soloPositivos(gramos),
+          firmante: { nombre: nombreFirmante.trim(),
+                      num_colegiado: firmante?.num_colegiado || "" },
+          paciente: {
+            nombre: perfil?.nombre || "",
+            peso_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
+            bcs: perfil?.bcs ?? null,
+            tutor_nombre: perfil?.tutorNombre || "",
+            tutor_contacto: perfil?.tutorContacto || "",
+          },
+        }),
+      });
+      const d = await r.json();
+      if (!d?.factible || !d.documento) {
+        setErrorFirma(d?.motivo || "No se ha podido firmar esta ración.");
+        return;
+      }
+      if (onFirmar) await onFirmar(d.documento);
+      setPautaFirmada(d.documento);
+      setFirmando(false);
+    } catch (err) {
+      setErrorFirma(err?.message || "No se ha podido firmar esta ración.");
+    } finally {
+      setEnviandoFirma(false);
+    }
+  };
+
+
   const total = sumaDe(gramos);
   const desvio = estado?.desvio_kcal_pct;
   const ficha = estado?.ficha || null;
@@ -196,11 +248,24 @@ export default function Formulador({
   return (
     <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
       <div className="px-5 pt-5 pb-3" style={{ background: VIOLETA }}>
-        <button onClick={onVolver} className="text-xs mb-2"
-                style={{ color: "#D8CFEC", fontFamily: fontBody, background: "transparent",
-                         border: "none", cursor: "pointer" }}>
-          ← Volver
-        </button>
+        {/* ⚠️ EL PANEL, TAMBIÉN DESDE AQUÍ (29 agosto). Esta pantalla se
+            escribió sin él y era una vía muerta: desde el formulador no se
+            podía ir a la ficha, ni a los menús, ni a las pautas firmadas --
+            solo volver. Lo cazó la prueba del historial, que después de
+            firmar no encontraba cómo llegar a mirarlo. */}
+        <div className="flex items-center justify-between mb-2">
+          <button onClick={onVolver} className="text-xs"
+                  style={{ color: "#D8CFEC", fontFamily: fontBody, background: "transparent",
+                           border: "none", cursor: "pointer" }}>
+            ← Volver
+          </button>
+          {onAbrirPanel && (
+            <button onClick={onAbrirPanel} aria-label="Menú"
+                    style={{ background: "transparent", border: "none", cursor: "pointer" }}>
+              <Menu size={20} style={{ color: "#FFFFFF" }} />
+            </button>
+          )}
+        </div>
         <h1 className="text-2xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>
           Formular la ración
         </h1>
@@ -448,7 +513,111 @@ export default function Formulador({
           <p className="text-sm mb-3" style={{ color: ROSA, fontFamily: fontBody }}>{error}</p>
         )}
 
-        {onGuardar && (
+        {/* ─── FIRMAR ─────────────────────────────────────────────────
+            Una pauta firmada es la forma más difícil de retirar que tiene
+            un menú de salir de aquí, así que no se firma a ciegas: antes
+            de pulsar se enseña con qué nombre y número va a salir, y los
+            huecos del catálogo con los que se ha calculado. Los huecos van
+            además DENTRO del documento -- es incómodo y es exactamente por
+            eso: lo contrario es firmar sobre datos incompletos sin que
+            conste en ninguna parte. */}
+        {pautaFirmada ? (
+          <div className="rounded-2xl px-4 py-4 mb-6"
+               style={{ background: "#FFFFFF", border: `1.5px solid ${VERDE}` }}>
+            <div className="flex items-center gap-2 mb-1">
+              <Check size={17} style={{ color: VERDE }} />
+              <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                Pauta firmada
+              </p>
+            </div>
+            <p className="text-sm leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              {pautaFirmada.firmante?.nombre} · nº {pautaFirmada.firmante?.num_colegiado}
+            </p>
+            <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+              sello {pautaFirmada.sello}
+            </p>
+            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Queda guardada tal cual, con la ficha con la que se comprobó. No se edita: si
+              hay que cambiar algo, se firma otra y ésta se queda en el historial.
+            </p>
+          </div>
+        ) : firmando ? (
+          <div className="rounded-2xl px-4 py-4 mb-6"
+               style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+            <p className="text-[11px] tracking-[0.14em] uppercase mb-2"
+               style={{ color: MALVA, fontFamily: "monospace" }}>
+              Firmar la pauta
+            </p>
+            <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+              Sale con tu nombre y tu número de colegiado, y se guarda entera: el menú, la
+              ficha con la que se comprobó y los datos con los que se calculó.
+            </p>
+            <input
+              type="text" value={nombreFirmante}
+              onChange={(e) => setNombreFirmante(e.target.value)}
+              placeholder="Nombre y apellidos"
+              aria-label="Nombre del firmante"
+              className="w-full py-2.5 px-3 rounded-xl outline-none mb-2"
+              style={{ background: PAPEL, border: "1.5px solid #E3DAF0",
+                       color: TINTA, fontFamily: fontBody }} />
+            <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
+              Nº de colegiado:{" "}
+              <span style={{ color: TINTA, fontWeight: 700 }}>
+                {firmante?.num_colegiado || "—"}
+              </span>
+            </p>
+            {huecosDe(estado).length > 0 && (
+              <div className="rounded-xl px-3 py-2 mb-3" style={{ background: PAPEL }}>
+                <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                  Se firma con estos huecos del catálogo
+                </p>
+                <p className="text-xs leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                  {huecosDe(estado).join(", ")}
+                </p>
+              </div>
+            )}
+            {errorFirma && (
+              <p className="text-sm mb-2" style={{ color: ROSA, fontFamily: fontBody }}>{errorFirma}</p>
+            )}
+            <div className="flex gap-2">
+              <button onClick={firmar}
+                disabled={enviandoFirma || !nombreFirmante.trim() || !firmante?.num_colegiado}
+                className="flex-1 py-3 rounded-xl"
+                style={{ background: (nombreFirmante.trim() && firmante?.num_colegiado)
+                                       ? VIOLETA : "#E3DAF0",
+                         color: (nombreFirmante.trim() && firmante?.num_colegiado)
+                                  ? "#FFFFFF" : MALVA,
+                         border: "none", fontFamily: fontDisplay, fontSize: 15,
+                         cursor: "pointer" }}>
+                {enviandoFirma ? "Firmando…" : "Firmar"}
+              </button>
+              <button onClick={() => { setFirmando(false); setErrorFirma(null); }}
+                className="px-4 py-3 rounded-xl"
+                style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: MALVA,
+                         fontFamily: fontBody, cursor: "pointer" }}>
+                Cancelar
+              </button>
+            </div>
+            {!firmante?.num_colegiado && (
+              <p className="text-xs mt-2 leading-snug" style={{ color: ROSA, fontFamily: fontBody }}>
+                Tu ficha no tiene número de colegiado. Una pauta sin número no identifica a
+                nadie, así que no se puede firmar hasta que esté.
+              </p>
+            )}
+          </div>
+        ) : onFirmar ? (
+          <button onClick={() => { setFirmando(true); setErrorFirma(null); }}
+            disabled={!puedeGuardar}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl mb-3"
+            style={{ background: puedeGuardar ? VIOLETA : "#E3DAF0",
+                     color: puedeGuardar ? "#FFFFFF" : MALVA, border: "none",
+                     fontFamily: fontDisplay, fontSize: 15,
+                     cursor: puedeGuardar ? "pointer" : "default" }}>
+            <Check size={16} /> Firmar la pauta
+          </button>
+        ) : null}
+
+        {onGuardar && !pautaFirmada && (
           <button onClick={() => onGuardar(soloPositivos(gramos), estado)}
             disabled={!puedeGuardar}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl mb-6"
@@ -468,6 +637,16 @@ export default function Formulador({
       </div>
     </div>
   );
+}
+
+// Los huecos del catálogo de ESTA ración, en cristiano y en una línea. Un
+// hueco no es un fallo del menú: es que de algún alimento nos falta ese
+// dato, y quien firma tiene derecho a saberlo ANTES de firmar.
+function huecosDe(estado) {
+  const ficha = estado?.ficha || {};
+  const sinDato = Object.keys(ficha.datos_incompletos || {});
+  const dudosos = Object.keys(ficha.datos_dudosos || {});
+  return [...new Set([...sinDato, ...dudosos])];
 }
 
 function soloPositivos(gramos) {

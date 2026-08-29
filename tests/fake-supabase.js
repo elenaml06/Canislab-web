@@ -150,6 +150,10 @@ export function crearFakeSupabase(opciones = {}) {
     menus: [],
     // Lo que ha recibido el formulador, para poder afirmar sobre ello.
     peticionesFormular: [],
+    // Lo que ha recibido /pauta/firmar y lo que se ha llegado a guardar.
+    peticionesFirmar: [],
+    pautasFirmadas: [],
+    pautaNoSeFirma: false,
     // Y el caso de "con esas cantidades no cuadra", que es donde se ofrece
     // una alternativa sin aplicarla.
     formularNoCuadra: false,
@@ -286,7 +290,12 @@ export function crearFakeSupabase(opciones = {}) {
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
       // No pegajoso, como los demás interruptores que cambian una respuesta.
       estado.formularNoCuadra = cfg.formularNoCuadra === true;
-      if (cfg.olvidarFormular) estado.peticionesFormular = [];
+      estado.pautaNoSeFirma = cfg.pautaNoSeFirma === true;
+      if (cfg.olvidarFormular) {
+        estado.peticionesFormular = [];
+        estado.peticionesFirmar = [];
+        estado.pautasFirmadas = [];
+      }
       if (typeof cfg.colgarGenerador === "boolean") estado.colgarGenerador = cfg.colgarGenerador;
       if ("avisoComposicion" in cfg) estado.avisoComposicion = cfg.avisoComposicion;
       if ("avisoComposicionAlEditar" in cfg) estado.avisoComposicionAlEditar = cfg.avisoComposicionAlEditar;
@@ -363,6 +372,8 @@ export function crearFakeSupabase(opciones = {}) {
         peticionesCasa: estado.peticionesCasa.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesMenu: estado.peticionesMenu.map((p) => ({ ...p })),
         peticionesFormular: estado.peticionesFormular.map((p) => JSON.parse(JSON.stringify(p))),
+        peticionesFirmar: estado.peticionesFirmar.map((p) => JSON.parse(JSON.stringify(p))),
+        pautasFirmadas: estado.pautasFirmadas.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesSemana: estado.peticionesSemana.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesEdicion: estado.peticionesEdicion.map((p) => JSON.parse(JSON.stringify(p))),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
@@ -714,6 +725,42 @@ export function crearFakeSupabase(opciones = {}) {
                               estado: haceEstado(completado) });
     }
 
+    // ── LA PAUTA FIRMADA ────────────────────────────────────────────────
+    // El documento y su sello los hace la API de verdad; aquí solo se
+    // devuelve algo con la misma FORMA para poder probar la pantalla. Lo
+    // que esto no puede comprobar -- que el sello sirva -- se comprueba
+    // contra el motor, en el BLOQUE 42 de pruebas_completas.py.
+    if (ruta === "/pauta/firmar") {
+      const p = JSON.parse(cuerpo || "{}");
+      estado.peticionesFirmar.push(p);
+      if (estado.pautaNoSeFirma) {
+        return responder(200, {
+          factible: false,
+          motivo: "Esta ración todavía no cumple todo lo que hay que cumplir, así que no " +
+                  "se puede firmar.",
+          semaforo: "rojo",
+        });
+      }
+      return responder(200, {
+        factible: true,
+        documento: {
+          version: 1,
+          firmante: p.firmante,
+          firmada_en: "2026-08-29T20:00:00+00:00",
+          paciente: p.paciente || {},
+          menu: p.gramos_por_alimento || {},
+          ficha_verificada: { semaforo: "verde", faltan: [], se_pasa: [], dentro_de_rango: [] },
+          contexto: { etapa_requisitos: p.etapa_requisitos, der_objetivo: p.der_objetivo },
+          huecos: { sin_dato: {}, dato_dudoso: {}, no_verificable: [] },
+          seguridad: [],
+          sellos: { "alimentos_v3_final.json": "4d634b9cf5f19fdc",
+                    "requerimientos_v2_final.json": "68f335c24a4ec898",
+                    "main.py": "0000000000000000" },
+          sello: "abcdef0123456789",
+        },
+      });
+    }
+
     if (ruta.startsWith("/revisar") || ruta.startsWith("/analizar")) {
       return responder(200, { factible: true, problemas: [] });
     }
@@ -777,6 +824,19 @@ export function crearFakeSupabase(opciones = {}) {
           : [];
         return responder(200, []);
       }
+    }
+
+    // La tabla de pautas firmadas. Solo POST y GET: no hay update ni delete,
+    // igual que en la de verdad -- una pauta firmada no se edita, se firma
+    // otra. Aquí eso se nota porque no existe el camino.
+    if (ruta === "/rest/v1/pautas_firmadas") {
+      if (req.method === "POST") {
+        const fila = { id: `pauta-${estado.pautasFirmadas.length + 1}`,
+                       creada_en: new Date().toISOString(), ...JSON.parse(cuerpo || "{}") };
+        estado.pautasFirmadas.push(fila);
+        return responder(201, unSoloObjeto ? fila : [fila]);
+      }
+      return responder(200, estado.pautasFirmadas);
     }
 
     if (ruta === "/rest/v1/accesos") {

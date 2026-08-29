@@ -377,6 +377,55 @@ export async function getMenus(perroId) {
   return data ?? []
 }
 
+// ─── LAS PAUTAS FIRMADAS ─────────────────────────────────────────────────────
+//
+// Lo que se guarda es el DOCUMENTO que selló la API, entero, y no "el menú".
+// Ver el comentario de cabecera de supabase/migracion-pautas-firmadas.sql: la
+// ficha del perro cambia, el catálogo cambia y el motor cambia, así que un
+// papel firmado tiene que llevarse consigo todo aquello contra lo que se
+// comprobó.
+//
+// ⚠️ EL SELLO NO SE CALCULA AQUÍ. Lo calcula la API sobre lo que acaba de
+// verificar, y aquí solo se guarda. Si lo calculara la pantalla habría dos
+// ideas de "lo firmado" -- la del motor y la de la vista -- y el día que se
+// separaran el sello seguiría cuadrando consigo mismo sin decir nada.
+export async function firmarPauta({ documento, profesionalId, perroId, tutorId }) {
+  if (!documento?.sello) throw new Error("Este documento no viene sellado por la API.");
+  const { data, error } = await supabase
+    .from('pautas_firmadas')
+    .insert({
+      perro_id: perroId ?? null,
+      profesional: profesionalId,
+      // El tutor se copia aquí y no se busca en `perros`: si mañana se borra
+      // el perro o se revoca el acceso, el dueño tiene que seguir pudiendo
+      // leer su pauta.
+      tutor: tutorId ?? null,
+      nombre_firmante: documento.firmante?.nombre || "",
+      num_colegiado: documento.firmante?.num_colegiado || "",
+      firmada_en: documento.firmada_en,
+      documento,
+      sello: documento.sello,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// El historial de un paciente: una lista de documentos, no un documento que
+// se va pisando. Por eso van ordenadas por fecha y no se sobrescribe ninguna.
+export async function getPautasFirmadas(perroId) {
+  if (!perroId) return [];
+  const { data, error } = await supabase
+    .from('pautas_firmadas')
+    .select('*')
+    .eq('perro_id', perroId)
+    .order('firmada_en', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+
 export async function guardarMenu(userId, perroId, { modo, derReal, etapaLabel, menusData, numMenus, nombre }) {
   const { data, error } = await supabase
     .from('menus')
