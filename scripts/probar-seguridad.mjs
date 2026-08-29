@@ -224,15 +224,32 @@ async function main() {
     // consola del navegador. Si sale bien, el rol no acredita nada -- y de él
     // cuelga poder pautar por debajo de los mínimos de FEDIAF y firmar una
     // pauta con un número de colegiado.
-    await a.cliente.from('profiles')
-      .update({ rol: 'profesional', rol_verificado_en: new Date().toISOString() })
-      .eq('id', a.userId)
-    const { data } = await a.cliente.from('profiles')
+    // ⚠️ SE COMPARA ANTES Y DESPUÉS, no contra un valor fijo (29 agosto).
+    //
+    // La primera versión daba por hecho que la cuenta empezaba siendo 'tutor'
+    // y miraba si acababa en 'profesional'. En cuanto se acreditó la cuenta de
+    // prueba a mano -- que es justo lo que hay que hacer para poder probar el
+    // modo veterinario -- la comprobación se puso ROJA sin que nada estuviera
+    // roto: leía 'profesional' y creía que se había ascendido sola.
+    //
+    // Es el espejo de la verde falsa de los accesos: una prueba que no
+    // distingue "lo ha conseguido" de "ya estaba así" no comprueba nada.
+    // Ahora se intenta CAMBIAR el valor al contrario del que tenga y se exige
+    // que no se mueva, sea cual sea el de partida.
+    const { data: antes } = await a.cliente.from('profiles')
       .select('rol, rol_verificado_en').eq('id', a.userId).single()
-    const seAscendio = data?.rol === 'profesional' || Boolean(data?.rol_verificado_en)
-    apuntar(!seAscendio, 'Una cuenta no puede ascenderse a profesional',
-      seAscendio ? 'SE HA ASCENDIDO SOLA. El disparador proteger_el_rol no está puesto o no funciona.'
-                 : 'el disparador rechaza tocar rol y rol_verificado_en')
+    const alContrario = antes?.rol === 'profesional' ? 'tutor' : 'profesional'
+    await a.cliente.from('profiles')
+      .update({ rol: alContrario, rol_verificado_en: antes?.rol_verificado_en ? null : new Date().toISOString() })
+      .eq('id', a.userId)
+    const { data: despues } = await a.cliente.from('profiles')
+      .select('rol, rol_verificado_en').eq('id', a.userId).single()
+    const cambio = despues?.rol !== antes?.rol
+      || Boolean(despues?.rol_verificado_en) !== Boolean(antes?.rol_verificado_en)
+    apuntar(!cambio, 'Una cuenta no puede cambiarse el rol',
+      cambio ? `LO HA CAMBIADO: rol ${JSON.stringify(antes?.rol)} -> ${JSON.stringify(despues?.rol)}. ` +
+               'El disparador proteger_el_rol no está puesto o no funciona.'
+             : `el disparador rechaza tocar rol y rol_verificado_en (sigue en ${JSON.stringify(despues?.rol)})`)
   }
 
   {
