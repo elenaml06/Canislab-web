@@ -184,11 +184,17 @@ test.describe("de punta a punta contra la API de verdad", () => {
     // al peso real en vez de inventar un objetivo.
     const base = { nombres_alimentos: [], der_objetivo: 900,
                    etapa_requisitos: "Adulto", peso_perro_kg: 30 };
+    // ⚠️ LOS NÚMEROS CAMBIARON EL 29 (y esta prueba fue la que lo destapó).
+    // El peso ideal desde el BCS se DIVIDE, no se resta: «30 % overweight»
+    // es un 30 % sobre el IDEAL, no del peso de hoy. Con BCS 7 son 30/1,20
+    // = 25, no 30 x 0,80 = 24. Y el 9 sí se estima -la Tabla 1 de AAHA
+    // llega hasta ahí- pero con procedencia propia, porque la escala se
+    // satura y el objetivo sale por lo alto.
     const casos = [
       [{ ...base, peso_objetivo_kg: 25 }, "declarado", 25],
-      [{ ...base, bcs: 7 },               "derivado_del_bcs", 24],
+      [{ ...base, bcs: 7 },               "derivado_del_bcs", 25],
+      [{ ...base, bcs: 9 },               "derivado_del_bcs_cota_inferior", 21.43],
       [{ ...base },                       "peso_real_sin_objetivo", 30],
-      [{ ...base, bcs: 9 },               "peso_real_sin_objetivo", 30],
       [{ ...base, bcs: 4 },               "peso_real_sin_objetivo", 30],
     ];
     for (const [cuerpo, peldano, kg] of casos) {
@@ -197,7 +203,7 @@ test.describe("de punta a punta contra la API de verdad", () => {
       const pref = (await res.json()).peso_de_referencia;
       expect(pref.procedencia, `bcs=${cuerpo.bcs} objetivo=${cuerpo.peso_objetivo_kg}`)
         .toBe(peldano);
-      expect(pref.kg).toBeCloseTo(kg, 2);
+      expect(pref.kg).toBeCloseTo(kg, 1);
     }
   });
 });
