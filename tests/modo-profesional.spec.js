@@ -12,7 +12,7 @@
 // Todo esto se comprueba mirando la PANTALLA, pero lo que decide es el
 // perfil que sirve Supabase -- no un estado local que la app se invente.
 import { test, expect } from "@playwright/test";
-import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
 import { esperarLaFicha } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
@@ -111,5 +111,70 @@ test.describe("el modo veterinario", () => {
     await abrirAjustes(page);
     await expect(page.getByRole("button", { name: /Modo veterinario/ })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Soy veterinario/ })).toBeVisible();
+  });
+});
+
+// ─── LOS PACIENTES NO SE MEZCLAN CON EL PERRO PROPIO ─────────────────────────
+//
+// ⚠️ Un veterinario tiene en su cuenta las dos cosas, y las dos filas llevan
+// `user_id` = él. Lo que las distingue es tener fila en `accesos`. Si esto
+// se rompe no da ningún error: le sale su perro entre los pacientes, o sus
+// pacientes entre sus perros, y solo se ve si te fijas.
+test.describe("los pacientes y el perro propio", () => {
+  const NALA = PERRO_DE_PRUEBA;                 // el paciente
+  const CAIRO = SEGUNDO_PERRO_DE_PRUEBA;        // el perro del veterinario
+
+  const montar = (request, extra) => configurarBackend(request, {
+    retrasoPerrosMs: 50, menus: [],
+    perros: [NALA, CAIRO],
+    // Nala tiene acceso => es paciente. Cairo no => es su perro.
+    accesos: [{ perro_id: NALA.id, estado: "activo", origen: "creado_por_el_profesional" }],
+    rolProfesional: true, rolVerificado: true,
+    ...extra,
+  });
+
+  test("en modo veterinario se ven los pacientes, no sus perros", async ({ page, request }) => {
+    await montar(request);
+    await entrar(page);
+    await page.getByRole("button", { name: /Perro actual/ }).last().click();
+
+    const hoja = page.getByRole("dialog", { name: "Tus perros" });
+    await expect(hoja.getByText("Tus pacientes")).toBeVisible();
+    await expect(hoja.getByText("Nala")).toBeVisible();
+    // Y su propio perro NO está en la lista de pacientes.
+    await expect(hoja.getByText("Cairo")).toHaveCount(0);
+  });
+
+  test("y en modo tutor, sus perros y no sus pacientes", async ({ page, request }) => {
+    await montar(request);
+    await entrar(page);
+    // Apagar el modo desde Ajustes.
+    await page.getByRole("button", { name: /Perro actual/ }).last().click();
+    await page.getByRole("dialog", { name: "Tus perros" })
+              .getByRole("button", { name: "Ajustes", exact: true }).click();
+    await page.getByRole("button", { name: /Modo veterinario/ }).click();
+    await expect(page.getByText(/usas Rawku como cualquier tutor/)).toBeVisible();
+    await page.getByRole("button", { name: "Volver" }).first().click();
+    await esperarLaFicha(page);
+
+    await page.getByRole("button", { name: /Perro actual/ }).last().click();
+    const hoja = page.getByRole("dialog", { name: "Tus perros" });
+    await expect(hoja.getByText("Tus perros")).toBeVisible();
+    await expect(hoja.getByText("Cairo")).toBeVisible();
+    await expect(hoja.getByText("Nala")).toHaveCount(0);
+  });
+
+  test("si no se pueden leer los accesos, se ven TODOS los perros", async ({ page, request }) => {
+    // ⚠️ EL LADO SEGURO DEL ERROR, y hubo que medirlo: tratando "no se ha
+    // podido leer" igual que "no hay ninguno", un veterinario en su modo se
+    // quedaba SIN NINGÚN PERRO en pantalla en cuanto faltara la migración.
+    // `sinTablaAccesos` hace que el servidor conteste con un error, que es
+    // lo que pasa de verdad cuando la tabla no existe.
+    await montar(request, { sinTablaAccesos: true });
+    await entrar(page);
+    await page.getByRole("button", { name: /Perro actual/ }).last().click();
+    const hoja = page.getByRole("dialog", { name: "Tus perros" });
+    await expect(hoja.getByText("Nala")).toBeVisible();
+    await expect(hoja.getByText("Cairo")).toBeVisible();
   });
 });

@@ -14,11 +14,13 @@ import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 import {
   guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
   USUARIO_LOCAL, estaSinCuenta, entrarSinCuenta, salirDeSinCuenta,
-  hayDatosLocales, migrarLocalACuenta, vaciarLocal, esProfesional,
+  hayDatosLocales, migrarLocalACuenta, vaciarLocal, esProfesional, getAccesos,
+  marcarComoPaciente,
 } from "./almacen";
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import FichaClinica from "./fichaclinica";
+import { perrosDelModo } from "./pacientes";
 import { API_BASE, fetchConTimeout } from "./api.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
@@ -3833,6 +3835,9 @@ function RawkuOnboardingInterna({
   usuario,
   perroInicial,
   perros = [],
+  // Qué perros de la cuenta son pacientes. Por defecto null -- "no se sabe"
+  // --, que hace que no se reparta nada y se vean todos. Ver `pacientes.js`.
+  accesos = null,
   onCambiarDePerro = () => {},
   // Dónde arrancar tras un cambio de perro CON INTENCIÓN. Hoy solo
   // "generador_solo": el generador, con el menú pedido para este perro y no
@@ -4787,8 +4792,43 @@ function RawkuOnboardingInterna({
     return `${nombres.slice(0, -1).join(", ")} y ${nombres[nombres.length - 1]}`;
   };
 
+  // ⚠️ UN PERRO CREADO EN MODO VETERINARIO NACE COMO PACIENTE (28 agosto).
+  //
+  // Es lo único que lo separa del perro propio del veterinario, porque los
+  // dos llevan `user_id` = él. Si esto no se hiciera, el paciente aparecería
+  // entre sus perros y no en su lista de pacientes -- sin dar ningún error.
+  //
+  // Va en su propia función y no repetido en los dos caminos de alta, por lo
+  // de siempre: dos copias de la misma regla se separan solas.
+  //
+  // Y si falla, NO se rompe el alta: la ficha ya está guardada y perderla
+  // sería mucho peor que tener un paciente en la lista equivocada. Se avisa
+  // a Sentry y se sigue.
+  const nacerComoPaciente = async (perroGuardado) => {
+    if (!enModoProfesional || !perroGuardado?.id || !usuario?.id) return;
+    try {
+      await marcarComoPaciente(perroGuardado.id, usuario.id);
+      onPerroGuardado(perroGuardado);   // recargar arriba con el acceso ya puesto
+    } catch (err) {
+      capturarError(err, { donde: "nacerComoPaciente", perroId: perroGuardado.id });
+    }
+  };
+
+  // Cómo se llama lo que hay en la lista. En modo veterinario no son "tus
+  // perros": son sus pacientes, que es otra cosa -- un vet no tiene una casa
+  // con cinco perros. Los rótulos salen de aquí para que no se separen entre
+  // la hoja de perros y Ajustes, que es donde ya pasó una vez con el DER.
+  const rotuloLista = enModoProfesional ? "Tus pacientes" : "Tus perros";
+  const rotuloAnadir = enModoProfesional ? "Dar de alta un paciente" : "Añadir otro perro";
+
   const listaDePerros = (() => {
-    const guardados = (perros ?? []).map((p) => ({
+    // ⚠️ EN MODO VETERINARIO SE VEN SUS PACIENTES, NO SUS PERROS (28 agosto).
+    // Los dos llevan `user_id` = él, así que la columna no los distingue: lo
+    // hace `accesos`. La regla vive en `pacientes.js`, en un solo sitio,
+    // para que el día que la fase 3 traiga perros que NO son suyos se
+    // cambie ahí y lo vean todas las pantallas a la vez.
+    const delModo = perrosDelModo(perros ?? [], accesos, enModoProfesional);
+    const guardados = delModo.map((p) => ({
       id: p.id,
       nombre: p.id === perfil._id ? (perfil.nombre.trim() || p.nombre || "Sin nombre") : (p.nombre || "Sin nombre"),
       esElDeAhora: p.id === perfil._id,
@@ -4894,7 +4934,7 @@ function RawkuOnboardingInterna({
            style={{ background: "#FFFFFF" }} onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-4">
           <p className="text-[11px] tracking-[0.14em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
-            Tus perros
+            {rotuloLista}
           </p>
           <button onClick={() => setHojaDePerrosAbierta(false)} aria-label="Cerrar"
                   style={{ background: "none", border: "none", cursor: "pointer" }}>
@@ -4959,7 +4999,7 @@ function RawkuOnboardingInterna({
               <Plus size={17} strokeWidth={2} style={{ color: VIOLETA }} />
             </span>
             <span className="flex-1 text-left" style={{ color: VIOLETA, fontFamily: fontDisplay, fontSize: 16 }}>
-              Añadir otro perro
+              {rotuloAnadir}
             </span>
           </button>
         </div>
@@ -5115,7 +5155,7 @@ function RawkuOnboardingInterna({
         {/* ── LOS PERROS ── */}
         <div>
           <p className="text-[11px] tracking-[0.14em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
-            Tus perros
+            {rotuloLista}
           </p>
           <div className="flex flex-col gap-2">
             {listaDePerros.map((p) => (
@@ -5147,7 +5187,7 @@ function RawkuOnboardingInterna({
                 )}
               </div>
             ))}
-            {filaAjuste(Plus, "Añadir otro perro", null, () => {
+            {filaAjuste(Plus, rotuloAnadir, null, () => {
               cerrarAjustes();
               if (!perfil._id) { setFase("onboarding"); setPaso(1); return; }
               onAnadirPerro();
@@ -6053,6 +6093,7 @@ function RawkuOnboardingInterna({
         { etapa: etapaCalculada, pesoAdultoEsperado, dietaActual });
       if (!guardado?.id) throw new Error("Supabase no devolvió el perro guardado");
       onPerroGuardado(guardado);
+      await nacerComoPaciente(guardado);
       onAnadirPerro();
     } catch (err) {
       // Si no se ha podido guardar NO se navega: irse ahora perdería la
@@ -6214,6 +6255,10 @@ function RawkuOnboardingInterna({
         //    NO remonta la app a propósito: acabas de pedir el generador y
         //    remontar te devolvería a la ficha.
         if (perroGuardado?.id) onPerroGuardado(perroGuardado);
+        // Solo si es NUEVO: reeditar la ficha de un paciente no tiene que
+        // volver a marcarlo, y reeditar la del perro propio del veterinario
+        // no puede convertirlo en paciente.
+        if (perroGuardado?.id && !perfil._id) return nacerComoPaciente(perroGuardado);
       })
       .catch((err) => capturarError(err, { donde: "irAlGeneradorDeMenus" }));
   };
@@ -9089,6 +9134,11 @@ function AuthGate() {
   // la lista entera y se cogía `perros[0]`, tirando el resto. Ahora se
   // guarda la lista completa y cuál de ellos se está mirando.
   const [perros, setPerros] = useState(undefined); // undefined=cargando, []=no hay ninguno
+  // Los accesos: qué perros de esta cuenta son PACIENTES y no perros
+  // propios. Va aparte de `perros` porque no es un dato del perro, es de la
+  // relación. Ver `pacientes.js`. Si la tabla no existe todavía llega vacío
+  // y todo son perros propios, que es el lado seguro del error.
+  const [accesos, setAccesos] = useState(null);   // null = todavía sin leer
   //
   // Estos dos van SEPARADOS a propósito:
   //   · `perroMontadoId` dice qué perro se le pasa al componente de dentro.
@@ -9226,6 +9276,15 @@ function AuthGate() {
         setMigrando(false);
         setSinCuenta(false);
         salirDeSinCuenta();
+        // En paralelo con los perros y no antes: los accesos solo sirven
+        // para repartirlos, así que no merecen retrasar la carga. Si fallan,
+        // getAccesos ya devuelve [] por su cuenta.
+        getAccesos(user.id).then((filas) => {
+          // Se guarda TAL CUAL, incluido el null: distingue "no se han podido
+          // leer" de "no hay ninguno", y de eso depende que un veterinario
+          // vea sus perros o una lista vacía. Ver `pacientes.js`.
+          if (cargaRef.current.token === token) setAccesos(filas);
+        });
         return getPerros(user.id);
       })
       .then((lista) => {
@@ -9459,6 +9518,7 @@ function AuthGate() {
         onDescartarLocal={() => { vaciarLocal(); salirDeSinCuenta(); setSinCuenta(false); }}
         perroInicial={perroMontado}
         perros={perros ?? []}
+        accesos={accesos}
         onCambiarDePerro={cambiarDePerro}
         arrancarEn={arranqueTrasCambio}
         onAnadirPerro={anadirPerro}
