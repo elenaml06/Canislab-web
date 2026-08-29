@@ -25,7 +25,12 @@ export const GRUPOS = [
   },
   {
     titulo: "Minerales",
-    nutrientes: ["Calcio", "Fósforo", "Potasio", "Sodio", "Cloruro", "Magnesio"],
+    // La relación Ca:P va aquí y no aparte: no es un nutriente -- es una
+    // RELACIÓN, y el motor la comprueba por su cuenta -- pero quien lee la
+    // ficha la busca justo al lado del calcio y el fósforo. Sin esta línea
+    // caía en "Otros", sola y al final.
+    nutrientes: ["Calcio", "Fósforo", "Relación Ca:P", "Potasio", "Sodio",
+                 "Cloruro", "Magnesio"],
   },
   {
     titulo: "Oligoelementos",
@@ -81,7 +86,16 @@ export function agruparNutrientes(ficha) {
   for (const f of ficha.se_pasa || []) {
     filas.push({ ...f, estado: "se_pasa" });
   }
-  for (const f of ficha.dentro || []) {
+  // ⚠️ LA CLAVE ES `dentro_de_rango`, Y ESTO ESTUVO MAL UN RATO (29 agosto).
+  // Aquí ponía `ficha.dentro`, que es como se llama la lista DENTRO de
+  // verificar.py; al salir por la API se llama `dentro_de_rango`. El
+  // resultado: en producción no se veía ni uno de los que cumplen -- solo
+  // lo que falla --, que es justo lo contrario de para lo que se añadió esa
+  // lista. Y las pruebas pasaban, porque el Supabase de mentira devolvía el
+  // nombre equivocado igual que el código. Un servidor de mentira solo
+  // comprueba lo que ya sabes; por eso hay además un script contra la API
+  // de verdad (`scripts/probar-formulador-real.mjs`).
+  for (const f of ficha.dentro_de_rango || []) {
     filas.push({ ...f, estado: "dentro" });
   }
   const porGrupo = new Map();
@@ -114,6 +128,6 @@ export function resumenDeLaFicha(ficha) {
   if (!ficha) return { falta: 0, se_pasa: 0, dentro: 0, total: 0 };
   const falta = (ficha.faltan || []).length;
   const se_pasa = (ficha.se_pasa || []).length;
-  const dentro = (ficha.dentro || []).length;
+  const dentro = (ficha.dentro_de_rango || []).length;
   return { falta, se_pasa, dentro, total: falta + se_pasa + dentro };
 }

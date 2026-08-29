@@ -678,7 +678,12 @@ export function crearFakeSupabase(opciones = {}) {
               { nutriente: "Yodo", clave: "yodo", tiene: 0.01, necesita: 0.22, cubre_pct: 5 },
             ],
             se_pasa: [],
-            dentro: [
+            // ⚠️ `dentro_de_rango`, que es como se llama en la API de verdad.
+            // Estuvo como `dentro` un rato, igual que en la pantalla, y por
+            // eso las pruebas pasaban con el fallo puesto: los dos lados de
+            // mentira se equivocaban igual. Un servidor falso solo comprueba
+            // lo que ya sabes.
+            dentro_de_rango: [
               { nutriente: "Proteína_total", clave: "proteina", tiene: 92.4, minimo: 52.1,
                 maximo: null, cubre_pct: 177, del_maximo_pct: null, sin_referencia: false },
               { nutriente: "Lisina", clave: "lisina", tiene: 5.1, minimo: 2.8, maximo: null,
