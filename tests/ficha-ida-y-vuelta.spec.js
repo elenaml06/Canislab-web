@@ -46,6 +46,8 @@ const FICHA_COMPLETA = {
   castrado: true,                      // el defecto es false
   actividad: "baja",                   // el defecto es "media"
   condicion_idx: 3,                    // el defecto es 2
+  bcs: 6,                              // el defecto es null, y 6 no es ninguno
+                                       // de los cinco escalones del dueño
   sexo: "macho",
   raza: null,                          // mestizo: manda el tamaño manual
   tamano: "Pequeño",                   // el defecto acaba siendo 25 kg de adulto
@@ -69,6 +71,7 @@ const CAMPOS = [
   ["castrado",                "cambia las kcal que necesita"],
   ["actividad",               "cambia las kcal que necesita"],
   ["condicion_idx",           "de aquí sale su peso ideal, y de ahí las kcal"],
+  ["bcs",                     "el BCS exacto del veterinario: redondearlo mueve el peso objetivo un 10 %"],
   ["sexo",                    "un macho entero necesita más kcal"],
   ["tamano",                  "en un mestizo, de aquí sale su peso adulto esperado"],
   ["dieta_actual",            "de aquí sale si necesita transición desde el pienso"],

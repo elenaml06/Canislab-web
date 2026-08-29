@@ -44,6 +44,9 @@ const PERRO_LOCAL = {
   peso_actual: 17.4,
   peso_adulto_esperado: 18,
   condicion_idx: 3,
+  // El BCS exacto: 6 no es ninguno de los cinco escalones del dueño, así que
+  // si se perdiera en el salto a la cuenta se notaría (volvería null o un 5).
+  bcs: 6,
   etapa: "senior",
   tamano: "Pequeño",
   sexo: "macho",
@@ -72,6 +75,7 @@ const CAMPOS = [
   ["castrado",                "cambia las kcal que necesita"],
   ["actividad",               "cambia las kcal que necesita"],
   ["condicion_idx",           "de aquí sale su peso ideal, y de ahí las kcal"],
+  ["bcs",                     "el BCS exacto del veterinario: redondearlo mueve el peso objetivo un 10 %"],
   ["sexo",                    "un macho entero necesita más kcal"],
   ["tamano",                  "en un mestizo, de aquí sale su peso adulto esperado"],
   ["dieta_actual",            "de aquí sale si necesita transición desde el pienso"],
