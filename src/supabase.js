@@ -1,13 +1,20 @@
 import { createClient } from '@supabase/supabase-js'
-import { esProfesional as esProfesionalSegunPerfil } from './rol'
+import { esProfesional as esProfesionalSegunPerfil } from './rol.js'
 
 // Se pueden sobreescribir por variable de entorno (VITE_SUPABASE_URL /
 // VITE_SUPABASE_ANON_KEY). Si no existen, se usan los valores de
 // siempre, así el deploy de Vercel sigue funcionando sin tocar nada.
 // Los tests automáticos las usan para apuntar a un Supabase de mentira
 // levantado en local, sin rozar la base de datos real.
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://kvtkdpgpmrvwmvymyqof.supabase.co'
-const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2dGtkcGdwbXJ2d212eW15cW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTY4OTEsImV4cCI6MjEwMjczMjg5MX0.-I339koFHO6TE2bf0ty9hNji-9CeH57AE0C4a2ZccYE'
+// ⚠️ `import.meta.env?.` con interrogación, no `import.meta.env.` (29 agosto).
+// `import.meta.env` lo inventa Vite: en Node NO existe, así que sin la
+// interrogación este archivo revienta al importarlo desde fuera del navegador
+// -- y con él revienta `filaDePerro`, que es la función que decide QUÉ SE
+// GUARDA de un perro. Justamente la que provocó el fallo del 21 de agosto
+// (siete campos guardados vacíos en silencio) y la que más falta hace poder
+// comprobar contra Supabase de verdad, no solo contra el de mentira.
+const SUPABASE_URL = import.meta.env?.VITE_SUPABASE_URL || 'https://kvtkdpgpmrvwmvymyqof.supabase.co'
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env?.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2dGtkcGdwbXJ2d212eW15cW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTY4OTEsImV4cCI6MjEwMjczMjg5MX0.-I339koFHO6TE2bf0ty9hNji-9CeH57AE0C4a2ZccYE'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
@@ -366,6 +373,17 @@ export async function guardarMenu(userId, perroId, { modo, derReal, etapaLabel, 
       menus_data: menusData,
       num_menus: numMenus ?? 1,
       nombre: nombre ?? null,
+      // ⚠️ QUIÉN GENERÓ ESTE MENÚ (29 agosto). La columna se creó con la
+      // fase 2 y se quedó SIN RELLENAR: existía y valía NULL siempre, que
+      // es la peor forma de tener algo -- parece hecho.
+      //
+      // Hoy coincide con `user_id`, porque el menú lo guarda quien tiene la
+      // cuenta donde vive. Deja de coincidir en la fase 3, cuando un
+      // veterinario genere el menú de un perro que es de OTRO: ahí `user_id`
+      // será el tutor y esto será el veterinario. Se rellena desde ya para
+      // que el historial sea cierto desde el primer día en vez de tener un
+      // hueco de meses justo antes de que empiece a importar.
+      creado_por: userId,
     })
     .select()
     .single()
