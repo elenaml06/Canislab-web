@@ -64,7 +64,11 @@ test.describe("el modo veterinario", () => {
     await expect(page.getByRole("button", { name: /Modo veterinario/ })).toHaveCount(0);
   });
 
-  test("acreditada, aparece el interruptor y enciende la ficha clínica", async ({ page, request }) => {
+  test("acreditada, ENTRA YA en su modo sin tener que buscar nada", async ({ page, request }) => {
+    // ⚠️ CAMBIADO (28 agosto). Antes empezaba apagado, y eso dejaba a quien
+    // acabábamos de acreditar viendo la app de un dueño: lo suyo seguía
+    // escondido detrás de saber que existe un interruptor en Ajustes. Es el
+    // mismo fallo que tenía la pantalla de registro, un paso más adentro.
     await configurarBackend(request, {
       retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA], menus: [],
       rolProfesional: true, rolVerificado: true,
@@ -72,13 +76,28 @@ test.describe("el modo veterinario", () => {
     await entrar(page);
     await abrirAjustes(page);
 
-    const interruptor = page.getByRole("button", { name: /Modo veterinario/ });
-    await expect(interruptor).toBeVisible();
-    // Empieza apagado: acreditar a alguien no le cambia la app de golpe.
+    await expect(page.getByRole("button", { name: /Modo veterinario/ })).toBeVisible();
+    await expect(page.getByText(/ves la ficha clínica/)).toBeVisible();
+  });
+
+  test("y puede apagarlo, y se le respeta", async ({ page, request }) => {
+    // Lo que se guarda es la ELECCIÓN, no el estado: un veterinario con
+    // perro propio puede quedarse en modo tutor y no se le vuelve a mover.
+    await configurarBackend(request, {
+      retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA], menus: [],
+      rolProfesional: true, rolVerificado: true,
+    });
+    await entrar(page);
+    await abrirAjustes(page);
+    await page.getByRole("button", { name: /Modo veterinario/ }).click();
     await expect(page.getByText(/usas Rawku como cualquier tutor/)).toBeVisible();
 
-    await interruptor.click();
-    await expect(page.getByText(/ves la ficha clínica/)).toBeVisible();
+    // Y sigue apagado después de recargar: si volviera a encenderse solo,
+    // el interruptor no serviría de nada.
+    await page.reload();
+    await esperarLaFicha(page);
+    await abrirAjustes(page);
+    await expect(page.getByText(/usas Rawku como cualquier tutor/)).toBeVisible();
   });
 
   test("acreditada pero SIN verificar no enciende nada", async ({ page, request }) => {

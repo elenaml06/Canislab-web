@@ -47,6 +47,25 @@ test.describe("registrarse como veterinario", () => {
     await expect(page.getByText(/Lo comprobamos a mano/)).toBeVisible();
   });
 
+  test("a un veterinario no se le ofrece entrar sin cuenta", async ({ page }) => {
+    // ⚠️ Sin cuenta no hay perfil, y sin perfil no hay a quién acreditar ni
+    // de quién son los pacientes. Ofrecerle ese botón sería mandarle por la
+    // única puerta donde NO está lo que ha venido a buscar: se iría
+    // pensando que la app no lo tiene.
+    await page.goto("/");
+    await page.getByRole("button", { name: /Créala gratis/ }).click();
+    await expect(page.getByRole("button", { name: /sin crear cuenta|Seguir sin cuenta/ })).toBeVisible();
+
+    await page.getByRole("button", { name: "Soy veterinario/a" }).click();
+    await expect(page.getByRole("button", { name: /sin crear cuenta|Seguir sin cuenta/ })).toHaveCount(0);
+    // Y se explica por qué, en vez de desaparecer sin más.
+    await expect(page.getByText(/El modo veterinario necesita cuenta/)).toBeVisible();
+
+    // Al volver a tutor, vuelve.
+    await page.getByRole("button", { name: "Para mi perro" }).click();
+    await expect(page.getByRole("button", { name: /sin crear cuenta|Seguir sin cuenta/ })).toBeVisible();
+  });
+
   test("volver a 'para mi perro' quita el número", async ({ page }) => {
     // Si se quedara puesto, alguien que probó el botón por curiosidad
     // acabaría mandando un número que no es suyo.
