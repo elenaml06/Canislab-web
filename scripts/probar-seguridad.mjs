@@ -34,6 +34,25 @@
 //     'prueba-rls-'.
 import { createClient } from '@supabase/supabase-js'
 
+// ⚠️ EL `fetch` DE NODE NO USA HTTPS_PROXY (medido, Node 22). Si hay un proxy
+// por medio -- como en las sesiones de Claude Code en la nube, o en cualquier
+// red corporativa --, `curl` pasa y `fetch` NO: se va por otro camino, le
+// contestan un 403 de texto plano, y el cliente de Supabase intenta leerlo
+// como JSON y revienta con "Unexpected token 'H'", que no dice nada de esto.
+// Se perdió un buen rato con ese error antes de dar con la causa.
+//
+// Se arregla enrutando fetch por el proxy a mano. Sin proxy en el entorno
+// esto no hace nada y el script funciona igual.
+if (process.env.HTTPS_PROXY || process.env.https_proxy) {
+  try {
+    const { ProxyAgent, setGlobalDispatcher } = await import('undici')
+    setGlobalDispatcher(new ProxyAgent(process.env.HTTPS_PROXY || process.env.https_proxy))
+  } catch {
+    console.warn('[aviso] hay HTTPS_PROXY pero no se ha podido cargar undici: ' +
+                 'si falla la conexion, instalalo con `npm install undici`.')
+  }
+}
+
 const URL = process.env.SUPABASE_URL || 'https://kvtkdpgpmrvwmvymyqof.supabase.co'
 const ANON = process.env.SUPABASE_ANON_KEY ||
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt2dGtkcGdwbXJ2d212eW15cW9mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODcxNTY4OTEsImV4cCI6MjEwMjczMjg5MX0.-I339koFHO6TE2bf0ty9hNji-9CeH57AE0C4a2ZccYE'
@@ -53,7 +72,7 @@ const sello = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
 async function crearCuenta(etiqueta) {
   const cliente = createClient(URL, ANON)
-  const email = `prueba-rls-${sello()}@rawku.test`
+  const email = `prueba-rls-${sello()}@pruebas.rawku.app`
   const password = `pr-${sello()}`
   const { data, error } = await cliente.auth.signUp({
     email, password, options: { data: { nombre: `Prueba RLS ${etiqueta}` } },
@@ -89,13 +108,53 @@ async function comprobarQueSeLlega() {
   }
 }
 
+// ─── LO QUE VE UN DESCONOCIDO ────────────────────────────────────────────────
+//
+// Estas NO necesitan cuenta: son las que se pueden ejecutar siempre, y las
+// más graves si fallan. La clave `anon` va dentro del bundle de la app, así
+// que cualquiera que abra rawku.app la tiene. La pregunta es qué puede hacer
+// con ella SIN registrarse.
+async function loQueVeUnDesconocido() {
+  for (const tabla of ['profiles', 'perros', 'menus', 'accesos']) {
+    let filas = null, estado = 0
+    try {
+      const r = await fetch(`${URL}/rest/v1/${tabla}?select=*&limit=3`, { headers: { apikey: ANON } })
+      estado = r.status
+      const cuerpo = await r.text()
+      try { const j = JSON.parse(cuerpo); if (Array.isArray(j)) filas = j.length } catch { /* no era JSON */ }
+    } catch (err) {
+      apuntar(false, `Sin cuenta no se lee ${tabla}`, `no se ha podido comprobar: ${err.message}`)
+      continue
+    }
+    const leyoAlgo = filas !== null && filas > 0
+    apuntar(!leyoAlgo, `Sin cuenta no se lee la tabla ${tabla}`,
+      leyoAlgo ? `UN DESCONOCIDO HA LEÍDO ${filas} FILAS de ${tabla} con la clave pública.`
+               : `HTTP ${estado}, sin datos`)
+  }
+}
+
 async function main() {
   console.log(`\n${G}Contra: ${URL}${F}`)
   console.log(`${G}Con la clave pública, o sea con los mismos permisos que cualquiera${F}\n`)
   await comprobarQueSeLlega()
 
-  const a = await crearCuenta('A')
-  const b = await crearCuenta('B')
+  // Primero lo que no necesita cuenta: si esto falla, lo demás da igual.
+  await loQueVeUnDesconocido()
+
+  let a, b
+  try {
+    a = await crearCuenta('A')
+    b = await crearCuenta('B')
+  } catch (err) {
+    // ⚠️ NO SE TIRA TODO POR ESTO. Lo de arriba ya se ha comprobado y vale;
+    // lo de abajo necesita sesión y se queda sin comprobar. Decirlo y salir
+    // con lo que hay es más útil que perder el informe entero.
+    console.log(`\n${A}No se han podido crear las cuentas de prueba, así que las`)
+    console.log(`comprobaciones que necesitan sesión se quedan sin hacer:${F}`)
+    console.log(`${G}  ${err.message}${F}`)
+    resumir([])
+    return
+  }
 
   // ── EL DISPARADOR proteger_el_rol ─────────────────────────────────────────
   {
@@ -190,6 +249,10 @@ async function main() {
     await cliente.from(tabla).delete().eq('id', id)
   }
 
+  resumir([a.email, b.email])
+}
+
+function resumir(correosQueLimpiar) {
   const abiertos = resultados.filter((r) => !r.ok)
   console.log('')
   if (abiertos.length === 0) {
@@ -198,10 +261,12 @@ async function main() {
     console.log(`${R}${abiertos.length} de ${resultados.length} ABIERTAS:${F}`)
     for (const r of abiertos) console.log(`${R}  · ${r.titulo}${F}\n    ${r.detalle}`)
   }
-  console.log(`\n${A}Han quedado 2 cuentas de usar y tirar que la clave pública no puede borrar.`)
-  console.log(`Bórralas en Authentication -> Users filtrando por 'prueba-rls-':`)
-  console.log(`  ${a.email}\n  ${b.email}${F}\n`)
-
+  if (correosQueLimpiar.length) {
+    console.log(`\n${A}Han quedado ${correosQueLimpiar.length} cuentas de usar y tirar que la clave`)
+    console.log(`pública no puede borrar. Bórralas en Authentication -> Users:`)
+    for (const c of correosQueLimpiar) console.log(`  ${c}`)
+    console.log(F)
+  }
   process.exit(abiertos.length === 0 ? 0 : 1)
 }
 
