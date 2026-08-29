@@ -140,6 +140,43 @@ export async function pedirRolProfesional(userId, numColegiado) {
   if (error) throw error
 }
 
+// ─── ACCESOS: QUIÉN PUEDE VER QUÉ PERRO ──────────────────────────────────────
+//
+// Ver `pacientes.js` para la regla y `supabase/migracion-pacientes.sql` para
+// por qué un paciente propio también lleva fila.
+//
+// ⚠️ SI LA TABLA NO EXISTE TODAVÍA, esto devuelve [] en vez de reventar. Es
+// deliberado: sin accesos, todo son perros propios y la app se comporta como
+// antes de que existiera nada de esto. Un error aquí dejaría a cualquiera
+// sin poder abrir su perro, y eso es mucho peor que no tener pacientes.
+export async function getAccesos(userId) {
+  const { data, error } = await supabase
+    .from('accesos')
+    .select('perro_id, estado, origen, creado_en')
+    .eq('profesional', userId)
+  if (error) {
+    // ⚠️ null, NO []. Son cosas distintas: [] significa "leído bien, este
+    // veterinario no tiene pacientes todavía" y su lista sale vacía de
+    // verdad; null significa "no se ha podido leer", y entonces no se
+    // reparte nada y se enseñan todos los perros. Devolver [] aquí dejaba
+    // a un veterinario en su modo sin ningún perro en pantalla.
+    console.warn('[rawku] no se han podido leer los accesos; no se reparten los ' +
+                 'perros. ¿Falta la migración de pacientes?', error.message)
+    return null
+  }
+  return data ?? []
+}
+
+// Marcar un perro como PACIENTE de esta cuenta. Se llama justo después de
+// crear su ficha: es lo que lo separa del perro propio del veterinario.
+export async function marcarComoPaciente(perroId, userId) {
+  const { error } = await supabase
+    .from('accesos')
+    .insert({ perro_id: perroId, profesional: userId,
+              origen: 'creado_por_el_profesional', estado: 'activo' })
+  if (error) throw error
+}
+
 // ─── PERROS ───────────────────────────────────────────────────────────────────
 
 export async function getPerros(userId) {

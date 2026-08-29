@@ -40,6 +40,8 @@ import {
   actualizarMenu as actualizarMenuRemoto,
   esPremium as esPremiumRemoto,
   esProfesional as esProfesionalRemoto,
+  getAccesos as getAccesosRemotos,
+  marcarComoPaciente as marcarComoPacienteRemoto,
 } from './supabase'
 
 // El usuario de mentira que representa "estoy usando la app sin cuenta".
@@ -230,6 +232,20 @@ export async function esPremium(userId) {
 export async function esProfesional(userId) {
   if (esUsuarioLocal(userId)) return false
   return esProfesionalRemoto(userId)
+}
+
+// ─── ACCESOS ──────────────────────────────────────────────────────────────────
+// Sin cuenta no hay pacientes: no hay perfil que acreditar ni tabla donde
+// mirarlo. Se responde con la lista vacía, que la app lee como "todos estos
+// perros son tuyos" -- que es exactamente lo que son.
+export async function getAccesos(userId) {
+  if (esUsuarioLocal(userId)) return []
+  return getAccesosRemotos(userId)
+}
+
+export async function marcarComoPaciente(perroId, userId) {
+  if (esUsuarioLocal(userId)) return
+  return marcarComoPacienteRemoto(perroId, userId)
 }
 
 // ─── MIGRAR AL CREAR LA CUENTA ────────────────────────────────────────────────

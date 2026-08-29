@@ -217,6 +217,14 @@ export function crearFakeSupabase(opciones = {}) {
     // La ficha del menú de mentira, con nutrientes que fallan. Apagada por
     // defecto: el menú de siempre sale en verde.
     fichaConFallos: false,
+    // Los accesos: qué perros de la cuenta son PACIENTES. Vacío por
+    // defecto, que es lo mismo que "la migración no se ha ejecutado": todo
+    // son perros propios y la app va como siempre.
+    accesos: [],
+    // Simula que la tabla `accesos` no existe: PostgREST contesta con un
+    // error, no con una lista vacía. Son cosas distintas y la app tiene que
+    // distinguirlas.
+    sinTablaAccesos: false,
   };
 
   const servidor = http.createServer(async (req, res) => {
@@ -281,6 +289,8 @@ export function crearFakeSupabase(opciones = {}) {
       if (typeof cfg.rolProfesional === "boolean") estado.rolProfesional = cfg.rolProfesional;
       if (typeof cfg.rolVerificado === "boolean") estado.rolVerificado = cfg.rolVerificado;
       if (typeof cfg.fichaConFallos === "boolean") estado.fichaConFallos = cfg.fichaConFallos;
+      if (Array.isArray(cfg.accesos)) estado.accesos = cfg.accesos.map((a) => ({ ...a }));
+      if (typeof cfg.sinTablaAccesos === "boolean") estado.sinTablaAccesos = cfg.sinTablaAccesos;
       if (typeof cfg.casaAvisos === "boolean") estado.casaAvisos = cfg.casaAvisos;
       // ⚠️ Éste NO es pegajoso, a propósito, al revés que los demás
       // interruptores: cambia el CONTENIDO de los menús, y quedarse
@@ -667,6 +677,18 @@ export function crearFakeSupabase(opciones = {}) {
           : [];
         return responder(200, []);
       }
+    }
+
+    if (ruta === "/rest/v1/accesos") {
+      if (estado.sinTablaAccesos) {
+        return responder(404, { code: "42P01", message: 'relation "public.accesos" does not exist' });
+      }
+      if (req.method === "POST") {
+        const fila = JSON.parse(cuerpo || "{}");
+        estado.accesos.push({ estado: "activo", origen: "creado_por_el_profesional", ...fila });
+        return responder(201, [fila]);
+      }
+      return responder(200, estado.accesos);
     }
 
     if (ruta === "/rest/v1/profiles") {
