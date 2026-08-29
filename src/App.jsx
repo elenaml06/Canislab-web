@@ -21,6 +21,8 @@ import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import FichaClinica from "./fichaclinica";
 import { perrosDelModo } from "./pacientes";
+import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicion,
+         condicionDesdeBcs, bcsVigente } from "./bcs";
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout } from "./api.js";
@@ -1086,15 +1088,13 @@ function pesoAdultoDesdeCurva(pesoActualKg, meses, pesoMedioRaza, pesoMinRaza, p
 }
 
 
-const BCS_DESDE_CONDICION = { 0: 2, 1: 4, 2: 5, 3: 7, 4: 9 };
+// ⚠️ LA FÓRMULA SE FUE A `bcs.js` (29 agosto), entera y sin cambiarla. Los
+// cinco escalones del dueño y el BCS de 9 puntos del veterinario son la
+// misma cosa preguntada de dos maneras, y si cada pantalla calculara su peso
+// objetivo por su cuenta, el mismo perro tendría dos objetivos -- y de ahí
+// salen las kcal. Aquí solo queda la puerta de los cinco escalones.
 function pesoIdealDesdeCondicion(pesoActualKg, condicionIdx) {
-  if (!pesoActualKg || pesoActualKg <= 0) return null;
-  const bcs = BCS_DESDE_CONDICION[condicionIdx];
-  if (bcs === undefined) return null;
-  const desvio = (bcs - 5) * 0.10;
-  let ideal = pesoActualKg / (1 + desvio);
-  if (ideal > pesoActualKg * 1.20) ideal = pesoActualKg * 1.20;
-  return Math.round(ideal * 100) / 100;
+  return pesoIdealDesdeBcs(pesoActualKg, bcsDesdeCondicion(condicionIdx));
 }
 
 // ─── QUÉ PESO OBJETIVO SE USA HOY ────────────────────────────────────────────
@@ -1148,7 +1148,7 @@ function objetivoVigente(perfil, etapa) {
     }
     // Se sale de la banda: el objetivo es de otra época del perro.
     return {
-      kg: pesoIdealDesdeCondicion(peso, perfil.condicionIdx),
+      kg: pesoIdealDesdeBcs(peso, bcsVigente(perfil)),
       esViejo: true,
       esCalculadoAlVuelo: true,
     };
@@ -1156,7 +1156,7 @@ function objetivoVigente(perfil, etapa) {
 
   // Nunca se ha fijado (fichas de antes del 25 de agosto).
   return {
-    kg: pesoIdealDesdeCondicion(peso, perfil.condicionIdx),
+    kg: pesoIdealDesdeBcs(peso, bcsVigente(perfil)),
     esViejo: false,
     esCalculadoAlVuelo: true,
   };
@@ -3023,7 +3023,51 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 De esto salen las kcal, no solo del peso. Si ya no le sobra, hay que decirlo
                 aquí o le seguiremos dando una ración de bajada.
               </p>
-              <div className="flex flex-col gap-1.5">
+              {/* ⚠️ EN MODO VETERINARIO, LA MISMA PREGUNTA EN BCS (29 agosto).
+                  Pedido expreso: sus pantallas no van en el idioma de
+                  "Rellenito". Y no es solo tono: si aquí se contestara con
+                  los cinco escalones, un paciente con BCS 6 apuntado en
+                  consulta se quedaría con un 7 al pesarlo, sin que nadie
+                  hubiera cambiado de opinión sobre el perro. */}
+              {enModoProfesional && (
+                <div className="grid grid-cols-9 gap-1">
+                  {ESCALA_BCS.map((b) => {
+                    const puesta = bcsVigente(perfil) === b.n;
+                    return (
+                      <button key={b.n}
+                        aria-label={`Ahora está: BCS ${b.n}`}
+                        title={`${b.n} · ${b.titulo}`}
+                        onClick={() => {
+                          const peso = Number(perfil?.pesoActual);
+                          const objetivo = pesoIdealDesdeBcs(peso, b.n);
+                          set("bcs", b.n);
+                          set("condicionIdx", condicionDesdeBcs(b.n));
+                          set("condicionTocado", true);
+                          set("pesoObjetivoKg", objetivo);
+                          setPreguntarCondicion(false);
+                          setObjetivoConfirmado(true);
+                          if (usuario && perfil?._id) {
+                            const ficha = { ...perfil, bcs: b.n, condicionIdx: condicionDesdeBcs(b.n),
+                                            pesoObjetivoKg: objetivo, id: perfil._id };
+                            const d = datosDeUnPerro(ficha);
+                            guardarPerro(usuario.id, ficha,
+                              { etapa: d.etapaCalculada, pesoAdultoEsperado: d.pesoAdultoEsperado })
+                              .then((g) => { if (g?.id) onPerroGuardado(g); })
+                              .catch((err) => capturarError(err, { donde: "bcsAlPesar" }));
+                          }
+                        }}
+                        className="py-2 rounded-lg text-center text-sm"
+                        style={{ background: puesta ? VIOLETA : PAPEL,
+                                 border: `1.5px solid ${puesta ? VIOLETA : "#E3DAF0"}`,
+                                 color: puesta ? "#FFFFFF" : TINTA, fontFamily: fontBody,
+                                 cursor: "pointer" }}>
+                        {b.n}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="flex flex-col gap-1.5" hidden={enModoProfesional}>
                 {CONDICIONES.map((c, idx) => {
                   const puesta = idx === perfil?.condicionIdx;
                   return (
@@ -3033,12 +3077,17 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                         const peso = Number(perfil?.pesoActual);
                         const objetivo = pesoIdealDesdeCondicion(peso, idx);
                         set("condicionIdx", idx);
+                        // El BCS equivalente, por lo mismo que en la ficha:
+                        // dos campos que dicen la condición y solo uno
+                        // actualizado es una ficha que se contradice.
+                        set("bcs", bcsDesdeCondicion(idx));
                         set("condicionTocado", true);
                         set("pesoObjetivoKg", objetivo);
                         setPreguntarCondicion(false);
                         setObjetivoConfirmado(true);
                         if (usuario && perfil?._id) {
-                          const ficha = { ...perfil, condicionIdx: idx, pesoObjetivoKg: objetivo, id: perfil._id };
+                          const ficha = { ...perfil, condicionIdx: idx, bcs: bcsDesdeCondicion(idx),
+                                          pesoObjetivoKg: objetivo, id: perfil._id };
                           const d = datosDeUnPerro(ficha);
                           guardarPerro(usuario.id, ficha,
                             { etapa: d.etapaCalculada, pesoAdultoEsperado: d.pesoAdultoEsperado })
@@ -3720,6 +3769,9 @@ function perfilDesdeSupabase(p) {
     pesoActual: p.peso_actual ? String(p.peso_actual) : "",
     condicionIdx: p.condicion_idx ?? 2,
     condicionTocado: true,
+    // El BCS exacto, cuando lo puso un veterinario. Puede no venir: las
+    // fichas de un dueño no lo tienen, y ahí manda `condicion_idx`.
+    bcs: p.bcs ?? null,
     // Puede no venir: las fichas de antes del 25 de agosto no lo tienen, y
     // tampoco viene si la columna aún no existe en Supabase. En los dos
     // casos `objetivoVigente` lo calcula al vuelo y Evolución pide
@@ -3829,6 +3881,7 @@ function cuerpoApiDeUnPerro(perfil) {
     categorias_excluidas: perfil?.categoriasExcluidas || [],
     peso_adulto_esperado_kg: d.pesoAdultoEsperado || null,
     peso_objetivo_kg: d.objetivo?.kg || null,
+    bcs: bcsVigente(perfil),
     tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
   };
 }
@@ -4004,6 +4057,7 @@ function RawkuOnboardingInterna({
       pesoActual: "",
       condicionIdx: 2,
       condicionTocado: true,
+      bcs: null,
       pesoObjetivoKg: null,
       actividadIdx: 1,
       actividadTocado: true,
@@ -6339,6 +6393,12 @@ function RawkuOnboardingInterna({
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
       peso_objetivo_kg: pesoObjetivoKg || null,
+      // El BCS viaja además del objetivo, y no en su lugar: el motor usa el
+      // objetivo declarado cuando lo hay (`_peso_de_referencia`), así que
+      // esto es la red por debajo -- si algún día llegara una ficha sin
+      // objetivo, el motor sabría derivarlo en vez de dar por bueno el peso
+      // de un perro con sobrepeso.
+      bcs: bcsVigente(perfil),
       nombres_excluidos: Array.from(alimentosEvitados || []),
       especies_excluidas: Array.from(especiesExcluidas || []),
       patologias: perfil?.patologias || [],
@@ -7078,6 +7138,110 @@ function RawkuOnboardingInterna({
     const puedeContinuar = perfil.pesoActual && Number(perfil.pesoActual) > 0 && perfil.condicionTocado;
     const actual = CONDICIONES[perfil.condicionIdx];
     const tuck = perfil.condicionIdx / 4;
+
+    // ─── LA MISMA PREGUNTA, EN EL IDIOMA DEL VETERINARIO ────────────────
+    //
+    // ⚠️ PEDIDO EXPRESO (29 agosto): "para un veterinario es mejor poner el
+    // BCS... no tiene que ser rollo te lo hago divertido". Y tiene razón más
+    // allá del tono: el BCS de 9 puntos es lo que él anota en la historia
+    // clínica, y los cinco escalones cariñosos son cinco valores sueltos de
+    // esa escala (2, 4, 5, 7 y 9). Un BCS 6 -- el más común en consulta --
+    // no cabe entre ellos sin redondearlo, y redondearlo mueve el peso
+    // objetivo un 10 %, que es de donde salen las kcal.
+    //
+    // El número exacto se guarda aparte, en su columna, y es el que manda
+    // para calcular; el escalón se sigue rellenando para que la misma ficha
+    // se entienda desde el lado del dueño. La FÓRMULA es una sola, en
+    // `bcs.js`: si cada pantalla calculara su objetivo, el mismo perro
+    // tendría dos.
+    if (enModoProfesional) {
+      const elegido = bcsVigente(perfil);
+      const puesto = perfil.condicionTocado ? elegido : null;
+      const fila = ESCALA_BCS.find((b) => b.n === puesto) || null;
+      const objetivoBcs = puesto ? pesoIdealDesdeBcs(Number(perfil.pesoActual), puesto) : null;
+      const ponerBcs = (n) => {
+        set("bcs", n);
+        // El escalón del dueño se deriva, nunca se pregunta dos veces.
+        set("condicionIdx", condicionDesdeBcs(n));
+        set("condicionTocado", true);
+        // ⚠️ AQUÍ SE FIJA EL OBJETIVO (25 agosto). La condición es una
+        // observación hecha EN UN MOMENTO, junto a un peso: de las dos
+        // juntas sale el objetivo, y a partir de ahí ya no se mueve aunque
+        // el perro sí. Antes se recalculaba en cada pantalla dividiendo el
+        // peso de hoy, y por eso la dieta no podía terminar nunca.
+        set("pesoObjetivoKg", pesoIdealDesdeBcs(Number(perfil.pesoActual), n));
+      };
+      return (
+        <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+          <Fuentes />
+          <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={4} titulo="Peso y condición corporal" />
+          <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
+            <BotonAtras onClick={atras} />
+            <div className="mb-7">
+              <Etiqueta>Peso actual</Etiqueta>
+              <div className="flex items-baseline gap-2">
+                <input
+                  type="number" inputMode="decimal" value={perfil.pesoActual}
+                  onChange={(e) => {
+                    set("pesoActual", e.target.value);
+                    if (puesto) set("pesoObjetivoKg", pesoIdealDesdeBcs(Number(e.target.value), puesto));
+                  }}
+                  placeholder="0"
+                  className="text-3xl pb-2 outline-none bg-transparent w-28"
+                  style={{ color: TINTA, fontFamily: fontDisplay, borderBottom: `2px solid ${perfil.pesoActual ? VIOLETA : "#E3DAF0"}` }}
+                />
+                <span style={{ color: MALVA, fontFamily: fontBody }}>kg</span>
+              </div>
+            </div>
+            <Etiqueta>Condición corporal (BCS 1-9)</Etiqueta>
+            <div className="grid grid-cols-9 gap-1 mt-2 mb-3">
+              {ESCALA_BCS.map((b) => {
+                const activo = puesto === b.n;
+                return (
+                  <button key={b.n} onClick={() => ponerBcs(b.n)}
+                    aria-label={`BCS ${b.n}`}
+                    className="py-3 rounded-lg text-center"
+                    style={{ background: activo ? VIOLETA : "#FFFFFF",
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                             color: activo ? "#FFFFFF" : TINTA,
+                             fontFamily: fontDisplay, fontSize: 15, cursor: "pointer" }}>
+                    {b.n}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="rounded-2xl px-4 py-4 mb-3"
+                 style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+              {fila ? (
+                <>
+                  <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                    {fila.n} · {fila.titulo}
+                  </p>
+                  <p className="text-sm mt-1 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                    {fila.detalle}
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Marca el BCS observado. De ahí sale el peso objetivo, y del
+                  peso objetivo las kcal de la ración.
+                </p>
+              )}
+            </div>
+            {objetivoBcs && (
+              <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
+                Peso objetivo estimado:{" "}
+                <span style={{ color: VIOLETA, fontWeight: 700 }}>{objetivoBcs} kg</span>
+                {puesto === 9 && " (cota inferior: la escala se satura en 9)"}
+              </p>
+            )}
+            <div className="flex-1" />
+            <BotonContinuar activo={puedeContinuar} onClick={siguiente} />
+          </div>
+          {drawerLigero}
+        </div>
+      );
+    }
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
@@ -7120,6 +7284,15 @@ function RawkuOnboardingInterna({
               onChange={(e) => {
                 const idx = Number(e.target.value);
                 set("condicionIdx", idx);
+                // ⚠️ Y EL BCS EQUIVALENTE (29 agosto). Los cinco escalones
+                // SON cinco valores del BCS (2, 4, 5, 7 y 9): escribir los
+                // dos deja la ficha diciendo una sola cosa. Si solo se
+                // escribiera el escalón, un perro al que un veterinario le
+                // puso un 6 y luego un dueño marca "Rellenito" se quedaría
+                // con el 6 viejo mandando sobre la respuesta nueva -- y el
+                // peso objetivo guardado no cuadraría con el que se
+                // recalcula. Un fallo sin error, de los de esta casa.
+                set("bcs", bcsDesdeCondicion(idx));
                 set("condicionTocado", true);
                 // ⚠️ AQUÍ SE FIJA EL OBJETIVO (25 agosto). La condición es
                 // una observación hecha EN UN MOMENTO, junto a un peso: de

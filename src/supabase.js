@@ -256,6 +256,16 @@ export function filaDePerro(userId, perfil, extras = {}) {
     // pero se guardan bien igualmente, que para eso está la columna.
     peso_adulto_esperado: extras.pesoAdultoEsperado ?? (perfil.pesoAdultoEsperado ? Number(perfil.pesoAdultoEsperado) : null),
     condicion_idx: perfil.condicionIdx ?? 2,
+    // ⚠️ AÑADIDO (29 agosto) — EL BCS DE 9 PUNTOS, APARTE.
+    // `condicion_idx` son CINCO escalones (BCS 2, 4, 5, 7 y 9), así que un
+    // BCS 6 -- "por encima del ideal", el más común en consulta -- solo se
+    // puede guardar redondeándolo. Redondear la condición corporal mueve el
+    // peso objetivo un 10 %, y de ahí salen las kcal. En una ficha clínica
+    // eso no vale, así que el número exacto se guarda en su columna y es el
+    // que manda para calcular (ver `bcsVigente` en bcs.js).
+    // null cuando lo ha rellenado un dueño: no se inventa un 5 donde no lo
+    // ha dicho nadie.
+    bcs: perfil.bcs ?? null,
     // ⚠️ AÑADIDO (25 agosto) — EL PESO OBJETIVO SE GUARDA EN KILOS.
     // Antes se recalculaba en cada pantalla dividiendo el peso de HOY, así
     // que un perro «Rellenito» tenía siempre exactamente el mismo ratio

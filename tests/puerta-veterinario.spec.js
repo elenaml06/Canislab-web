@@ -108,3 +108,42 @@ test("sin acreditar, todo sigue exactamente igual que antes", async ({ page, req
   await expect(page.getByRole("button", { name: /Dar de alta un paciente/ })).toHaveCount(0);
   await expect.poll(() => elPerroDeAhora(page)).toContain(SU_PERRO.nombre);
 });
+
+test("la ficha del paciente pregunta el BCS de 9 puntos, no «rellenito»", async ({ page, request }) => {
+  // ⚠️ PEDIDO EXPRESO (29 agosto): "para un veterinario es mejor poner el
+  // BCS... no tiene que ser rollo te lo hago divertido". Y no es solo tono:
+  // los cinco escalones del dueño son cinco valores sueltos de la escala
+  // (2, 4, 5, 7 y 9), así que un BCS 6 -- el más común en consulta -- solo
+  // cabe redondeándolo, y eso mueve el peso objetivo un 10 %. De ahí salen
+  // las kcal.
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true,
+    perros: [], accesos: [], menus: [],
+  });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  await page.getByPlaceholder("Nombre del paciente").fill("Nala");
+  await page.getByRole("button", { name: "Hembra" }).click();
+  await page.getByRole("button", { name: /Continuar/ }).click();
+
+  await page.getByRole("button", { name: /Es mestizo/ }).click();
+  await page.getByRole("button", { name: /^Mediano/ }).click();
+  await page.getByRole("button", { name: /Continuar/ }).click();
+
+  // La fecha por defecto ya es válida (15 de febrero de este año).
+  await page.getByRole("button", { name: /Continuar/ }).click();
+
+  // Y aquí está lo que se prueba: la escala del veterinario, con sus nueve
+  // puntos, y NINGUNO de los nombres cariñosos.
+  await expect(page.getByText("Condición corporal (BCS 1-9)")).toBeVisible();
+  await expect(page.getByRole("button", { name: "BCS 6", exact: true })).toBeVisible();
+  await expect(page.getByText("Rellenito")).toHaveCount(0);
+  await expect(page.getByText("Muy gordete")).toHaveCount(0);
+
+  // Y el BCS decide el peso objetivo: 30 kg con BCS 6 son 27,27 kg de
+  // objetivo; redondeado al escalón del dueño (un 7) saldrían 25.
+  await page.getByRole("spinbutton").fill("30");
+  await page.getByRole("button", { name: "BCS 6", exact: true }).click();
+  await expect(page.getByText(/Peso objetivo estimado/)).toContainText("27.27");
+});
