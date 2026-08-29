@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, Component } from "react";
 import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, MoreVertical, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
+import Formulador from "./formulador.jsx";
 import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesional } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
@@ -5501,8 +5502,23 @@ function RawkuOnboardingInterna({
     // CINCO y esas cinco ("aparece el menú de la semana arriba"), y el menú
     // recién hecho no se pierde -- se guarda solo al generarlo, así que
     // está en "Mis menús". No había nada que rescatar.
-    { key: "perfil", Icono: Dog, label: `Perfil de ${nombreMostrar}`, isPremium: false,
-      ir: () => { setSeccionSuelta(null); setEditandoLaFicha(true); setFase("onboarding"); } },
+    { key: "perfil", Icono: Dog,
+      label: enModoProfesional ? `Ficha de ${nombreMostrar}` : `Perfil de ${nombreMostrar}`,
+      isPremium: false,
+      ir: () => {
+        setSeccionSuelta(null);
+        setEditandoLaFicha(true);
+        // ⚠️ EN MODO VETERINARIO SE ABRE LA FICHA CLÍNICA (29 agosto). Con
+        // un paciente ya guardado, `paso` vale TOTAL_PASOS + 1 -- "el
+        // asistente ya está hecho" -- y eso pinta el resumen de tutor. La
+        // ficha de una sola pantalla vive en los pasos, así que entrar a
+        // editar tiene que devolver ahí: si no, el veterinario ve la ficha
+        // clínica UNA vez, al dar de alta, y nunca más -- y el BCS, las
+        // patologías y los datos del tutor se quedan sin sitio donde
+        // corregirse.
+        if (enModoProfesional) setPaso(1);
+        setFase("onboarding");
+      } },
     { key: "menus", Icono: ClipboardList, label: "Mis menús", isPremium: false,
       ir: () => { setSeccionSuelta(null); setFase("misMenus"); } },
     { key: "evolucion", Icono: TrendingUp, label: "Evolución y crecimiento", isPremium: true,
@@ -8662,6 +8678,64 @@ function RawkuOnboardingInterna({
         </div>
         {drawerLigero}
       </div>
+    );
+  }
+
+  // ─── EL VETERINARIO NO ELIGE MODO: FORMULA ────────────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (29 agosto): "ellos no tienen que tener automático
+  // personalizar, ellos tienen su propio modo de crear el menú... van
+  // poniendo los alimentos y los gramos y van viendo todos los nutrientes
+  // por categorías en tiempo real... y lo del botón de autocompletar".
+  //
+  // "Automático" y "Personalizar" son para quien quiere que le resuelvan la
+  // ración. Un profesional pone las cantidades porque las ha decidido, y lo
+  // que necesita del motor es ver lo que va saliendo y que le cierre lo que
+  // falte cuando él lo pida. La pantalla vive en `formulador.jsx`; aquí solo
+  // se decide quién la ve y con qué paciente.
+  if (fase === "generador" && pantalla === "elegir" && enModoProfesional) {
+    return (
+      <>
+        <Fuentes />
+        <Formulador
+          perfil={perfil}
+          derObjetivo={derReal}
+          etapaRequisitos={ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto"}
+          pesoPerroKg={perfil?.pesoActual ? Number(perfil.pesoActual) : null}
+          pesoAdultoEsperadoKg={pesoAdultoEsperado || null}
+          pesoObjetivoKg={pesoObjetivoKg}
+          patologias={perfil?.patologias || []}
+          especiesExcluidas={Array.from(especiesExcluidas || [])}
+          nombresExcluidos={Array.from(alimentosEvitados || [])}
+          categoriasExcluidas={perfil?.categoriasExcluidas || []}
+          onVolver={() => setFase("onboarding")}
+          onGuardar={(gramosFormulados, estadoFinal) => {
+            const comoUnMenu = {
+              factible: true,
+              menu: gramosFormulados,
+              ficha: estadoFinal?.ficha || null,
+              problemas_seguridad: estadoFinal?.problemas_seguridad || [],
+              kcal_total: estadoFinal?.kcal ?? null,
+              gramos_total: estadoFinal?.gramos_total ?? null,
+              formulado_por_el_profesional: true,
+            };
+            setMenuReal(comoUnMenu);
+            setPantalla("resultado");
+            if (usuario && !sinCuenta) {
+              guardarMenu(usuario.id, perfil._id || null, {
+                modo: "formulado",
+                derReal,
+                etapaLabel,
+                menusData: [comoUnMenu],
+                numMenus: 1,
+              })
+                .then((fila) => { if (fila) setMenusGuardados((previos) => [fila, ...previos]); })
+                .catch((err) => capturarError(err, { donde: "guardarPautaFormulada" }));
+            }
+          }}
+        />
+        {drawerLigero}
+      </>
     );
   }
 
