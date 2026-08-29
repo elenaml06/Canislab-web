@@ -18,6 +18,18 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(null)
   const [mensajeOk, setMensajeOk] = useState(null)
+  // ⚠️ AÑADIDO (28 agosto) — QUIÉN ERES, EN LA PUERTA.
+  //
+  // Un veterinario que entra como un dueño más no descubre nunca que la app
+  // también es para él: el modo profesional estaba solo en Ajustes, o sea
+  // escondido detrás de saber que existe. Aquí se pregunta al crear la
+  // cuenta, que es cuando la persona ya está diciendo quién es.
+  //
+  // Elegir "veterinario" NO acredita a nadie: deja su número apuntado y ya.
+  // Lo enciende una persona después de mirarlo, igual que desde Ajustes.
+  const [tipoCuenta, setTipoCuenta] = useState('tutor') // tutor | profesional
+  const [colegiado, setColegiado] = useState('')
+  const esProfesional = tipoCuenta === 'profesional'
 
   const limpiar = () => { setError(null); setMensajeOk(null) }
 
@@ -43,10 +55,13 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
     limpiar()
     if (!nombre.trim()) { setError('Pon tu nombre para continuar.'); return }
     if (password.length < 6) { setError('La contraseña tiene que tener al menos 6 caracteres.'); return }
+    if (esProfesional && !colegiado.trim()) { setError('Pon tu número de colegiado para continuar.'); return }
     setCargando(true)
     try {
-      await registrar(email, password, nombre)
-      setMensajeOk('Si el email es nuevo, te hemos mandado un enlace de confirmación. Si ya tenías cuenta, inicia sesión directamente.')
+      await registrar(email, password, nombre, esProfesional ? colegiado : null)
+      setMensajeOk(esProfesional
+        ? 'Cuenta creada. Si el email es nuevo, te hemos mandado un enlace de confirmación. Comprobamos tu número de colegiado y te avisamos cuando el modo veterinario esté encendido: mientras tanto, puedes usar Rawku con normalidad.'
+        : 'Si el email es nuevo, te hemos mandado un enlace de confirmación. Si ya tenías cuenta, inicia sesión directamente.')
       setModo('login')
     } catch (err) {
       setError(err.message.includes('already registered')
@@ -99,13 +114,51 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
         Rawku
       </p>
       <p style={{ fontFamily: fontBody, fontSize: 14, color: MALVA, marginBottom: 40 }}>
-        {modo === 'login' ? 'Bienvenida de nuevo' : modo === 'registro' ? 'Crea tu cuenta' : 'Recuperar contraseña'}
+        {modo === 'login' ? 'Bienvenida de nuevo'
+          : modo === 'registro' ? (esProfesional ? 'Crea tu cuenta profesional' : 'Crea tu cuenta')
+          : 'Recuperar contraseña'}
       </p>
 
       {/* Formulario */}
       <div style={{ width: '100%', maxWidth: 380 }}>
         <form onSubmit={modo === 'login' ? handleLogin : modo === 'registro' ? handleRegistro : handleRecuperar}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+            {/* ── ¿PARA QUIÉN ES LA CUENTA? ──
+                Va lo PRIMERO del registro, antes que el nombre: es la
+                pregunta que decide el resto. Y son dos botones a la vista y
+                no un desplegable ni una casilla escondida, porque un
+                veterinario tiene que ver desde la puerta que la app le
+                habla a él -- si tiene que buscarlo, no se entera de que
+                existe. */}
+            {modo === 'registro' && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 4 }}>
+                {[
+                  { key: 'tutor', label: 'Para mi perro' },
+                  { key: 'profesional', label: 'Soy veterinario/a' },
+                ].map((op) => {
+                  const activo = tipoCuenta === op.key
+                  return (
+                    <button
+                      key={op.key}
+                      type="button"
+                      onClick={() => { setTipoCuenta(op.key); limpiar() }}
+                      aria-pressed={activo}
+                      style={{
+                        flex: 1, padding: '11px 8px', borderRadius: 12,
+                        background: activo ? VIOLETA : 'transparent',
+                        color: activo ? '#FFFFFF' : VIOLETA,
+                        border: `1.5px solid ${activo ? VIOLETA : '#E3DAF0'}`,
+                        fontFamily: fontBody, fontSize: 14,
+                        fontWeight: activo ? 700 : 400, cursor: 'pointer',
+                      }}
+                    >
+                      {op.label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
 
             {modo === 'registro' && (
               <input
@@ -136,6 +189,25 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
                 style={inputStyle}
                 required
               />
+            )}
+
+            {modo === 'registro' && esProfesional && (
+              <>
+                <input
+                  type="text"
+                  placeholder="Número de colegiado"
+                  value={colegiado}
+                  onChange={e => setColegiado(e.target.value)}
+                  style={inputStyle}
+                  required
+                />
+                {/* Se dice aquí, antes de crear la cuenta, y no después: que
+                    nadie crea que marcando la casilla ya tiene el modo. */}
+                <p style={{ margin: '-4px 4px 0', color: MALVA, fontFamily: fontBody, fontSize: 12, lineHeight: 1.5 }}>
+                  Lo comprobamos a mano antes de encender el modo veterinario. Mientras
+                  tanto puedes usar Rawku con normalidad, con todo lo de siempre.
+                </p>
+              </>
             )}
 
             {error && (
@@ -170,7 +242,7 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
               {cargando
                 ? 'Un momento...'
                 : modo === 'login' ? 'Entrar'
-                : modo === 'registro' ? 'Crear cuenta'
+                : modo === 'registro' ? (esProfesional ? 'Crear cuenta profesional' : 'Crear cuenta')
                 : 'Enviar enlace'}
             </button>
           </div>
@@ -182,7 +254,7 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
             <>
               <button onClick={() => { setModo('registro'); limpiar() }}
                 style={{ background: 'none', border: 'none', color: VIOLETA, fontFamily: fontBody, fontSize: 14, cursor: 'pointer' }}>
-                ¿No tienes cuenta? Créala gratis
+                ¿No tienes cuenta? Créala gratis — también profesional
               </button>
               <button onClick={() => { setModo('recuperar'); limpiar() }}
                 style={{ background: 'none', border: 'none', color: MALVA, fontFamily: fontBody, fontSize: 13, cursor: 'pointer' }}>
