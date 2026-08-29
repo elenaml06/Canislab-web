@@ -86,8 +86,24 @@ SECURITY DEFINER
 SET search_path = public
 AS $$
 BEGIN
-  -- El SQL Editor y el webhook entran como service_role: ahí sí se cambia.
-  IF auth.role() = 'service_role' THEN
+  -- ⚠️ CORREGIDO (29 agosto) — SE BLOQUEA A LAS SESIONES DE USUARIO, NO SE
+  -- PERMITE SOLO A service_role. Parece lo mismo y no lo es.
+  --
+  -- Antes decía `IF auth.role() = 'service_role' THEN RETURN NEW`, dando por
+  -- hecho que el SQL Editor entra como service_role. NO ENTRA: ahí no hay
+  -- ningún JWT, así que `auth.role()` vale NULL y el disparador saltaba.
+  -- Resultado: NO SE PODÍA ACREDITAR A NADIE POR NINGÚN CAMINO -- ni desde la
+  -- app (correcto) ni desde el SQL Editor (que es el camino bueno). La
+  -- función de acreditar existía y no funcionaba.
+  --
+  -- El JWT solo puede traer tres roles, y los firma Supabase: 'anon' con la
+  -- clave pública, 'authenticated' con la sesión de una persona, y
+  -- 'service_role' con la secreta. Los dos primeros son el peligro; todo lo
+  -- demás (SQL Editor, migraciones, service_role) es alguien que ya tiene la
+  -- llave de la casa. Así que se nombra el peligro, que además es la lista
+  -- cerrada, en vez de intentar nombrar todo lo que es de fiar.
+  IF auth.role() IS DISTINCT FROM 'authenticated'
+     AND auth.role() IS DISTINCT FROM 'anon' THEN
     RETURN NEW;
   END IF;
 
