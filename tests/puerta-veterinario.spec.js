@@ -109,10 +109,40 @@ test("sin acreditar, todo sigue exactamente igual que antes", async ({ page, req
   await expect.poll(() => elPerroDeAhora(page)).toContain(SU_PERRO.nombre);
 });
 
-test("la ficha del paciente pregunta el BCS de 9 puntos, no «rellenito»", async ({ page, request }) => {
-  // ⚠️ PEDIDO EXPRESO (29 agosto): "para un veterinario es mejor poner el
-  // BCS... no tiene que ser rollo te lo hago divertido". Y no es solo tono:
-  // los cinco escalones del dueño son cinco valores sueltos de la escala
+test("la ficha del paciente cabe en UNA pantalla, y habla en clínico", async ({ page, request }) => {
+  // ⚠️ PEDIDO EXPRESO (29 agosto): "un veterinario debería tener
+  // prácticamente todo en la misma pantalla, no tener que ir pasando
+  // pantallas, y lo de la pantalla de alergias y tal tiene que ser
+  // profesional, no esos textos para el usuario".
+  //
+  // El asistente de seis pasos está pensado para quien hace esto UNA vez,
+  // con su perro. Un veterinario lo hace varias veces al día con un animal
+  // delante. Son dos trabajos distintos, no dos gustos distintos.
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true,
+    perros: [], accesos: [], menus: [],
+  });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  // TODO en la misma pantalla: sin pulsar Continuar ni una vez.
+  await expect(page.getByPlaceholder("Nombre del paciente")).toBeVisible();
+  await expect(page.getByText("Peso y condición corporal")).toBeVisible();
+  await expect(page.getByText("Alergias alimentarias confirmadas")).toBeVisible();
+  await expect(page.getByText("Patologías diagnosticadas")).toBeVisible();
+  await expect(page.getByPlaceholder("Nombre del tutor")).toBeVisible();
+
+  // Y en el idioma de una consulta, no en el de un asistente.
+  await expect(page.getByText("Rellenito")).toHaveCount(0);
+  await expect(page.getByText("Muy gordete")).toHaveCount(0);
+  await expect(page.getByText(/Piensa en un día normal/)).toHaveCount(0);
+  await expect(page.getByText(/simplemente prefieres no dárselo/)).toHaveCount(0);
+  await expect(page.getByText("Mantenimiento")).toBeVisible();
+  await expect(page.getByText("Reposo / restricción")).toBeVisible();
+});
+
+test("y el BCS de 9 puntos decide el peso objetivo", async ({ page, request }) => {
+  // Los cinco escalones del dueño son cinco valores sueltos de la escala
   // (2, 4, 5, 7 y 9), así que un BCS 6 -- el más común en consulta -- solo
   // cabe redondeándolo, y eso mueve el peso objetivo un 10 %. De ahí salen
   // las kcal.
@@ -123,27 +153,26 @@ test("la ficha del paciente pregunta el BCS de 9 puntos, no «rellenito»", asyn
   await entrar(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
 
-  await page.getByPlaceholder("Nombre del paciente").fill("Nala");
-  await page.getByRole("button", { name: "Hembra" }).click();
-  await page.getByRole("button", { name: /Continuar/ }).click();
-
-  await page.getByRole("button", { name: /Es mestizo/ }).click();
-  await page.getByRole("button", { name: /^Mediano/ }).click();
-  await page.getByRole("button", { name: /Continuar/ }).click();
-
-  // La fecha por defecto ya es válida (15 de febrero de este año).
-  await page.getByRole("button", { name: /Continuar/ }).click();
-
-  // Y aquí está lo que se prueba: la escala del veterinario, con sus nueve
-  // puntos, y NINGUNO de los nombres cariñosos.
-  await expect(page.getByText("Condición corporal (BCS 1-9)")).toBeVisible();
   await expect(page.getByRole("button", { name: "BCS 6", exact: true })).toBeVisible();
-  await expect(page.getByText("Rellenito")).toHaveCount(0);
-  await expect(page.getByText("Muy gordete")).toHaveCount(0);
-
-  // Y el BCS decide el peso objetivo: 30 kg con BCS 6 son 27,27 kg de
-  // objetivo; redondeado al escalón del dueño (un 7) saldrían 25.
   await page.getByRole("spinbutton").fill("30");
   await page.getByRole("button", { name: "BCS 6", exact: true }).click();
+  // 30 kg con BCS 6 son 27,27 kg de objetivo; con el escalón redondeado
+  // (un 7) habrían salido 25.
   await expect(page.getByText(/Peso objetivo estimado/)).toContainText("27.27");
+  await expect(page.getByText(/Por encima del ideal/)).toBeVisible();
+});
+
+test("y sin lo imprescindible no deja guardar, diciendo qué falta", async ({ page, request }) => {
+  // Un formulario largo se rellena a saltos, así que tiene que decir qué le
+  // queda -- no dejar el botón apagado sin explicar por qué.
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true,
+    perros: [], accesos: [], menus: [],
+  });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+  await expect(page.getByText(/^Falta: /)).toContainText("nombre");
+  await page.getByPlaceholder("Nombre del paciente").fill("Nala");
+  await expect(page.getByText(/^Falta: /)).not.toContainText("nombre");
+  await expect(page.getByText(/^Falta: /)).toContainText("BCS");
 });

@@ -266,6 +266,12 @@ export function filaDePerro(userId, perfil, extras = {}) {
     // null cuando lo ha rellenado un dueño: no se inventa un 5 donde no lo
     // ha dicho nadie.
     bcs: perfil.bcs ?? null,
+    // ⚠️ LOS DATOS DEL TUTOR (29 agosto). Las columnas existen desde la
+    // migración de pacientes, y hasta hoy no las escribía nadie: la ficha
+    // clínica las pedía y se perdían. Un paciente sin tutor es medio
+    // paciente -- la pauta sale firmada y hay que saber a quién se le dio.
+    tutor_nombre: perfil.tutorNombre || null,
+    tutor_contacto: perfil.tutorContacto || null,
     // ⚠️ AÑADIDO (25 agosto) — EL PESO OBJETIVO SE GUARDA EN KILOS.
     // Antes se recalculaba en cada pantalla dividiendo el peso de HOY, así
     // que un perro «Rellenito» tenía siempre exactamente el mismo ratio
