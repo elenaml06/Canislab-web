@@ -70,8 +70,69 @@ function apuntar(ok, titulo, detalle) {
 
 const sello = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
+// ⚠️ DOS CUENTAS FIJAS Y REUTILIZABLES, Y NO DE USAR Y TIRAR (29 agosto).
+//
+// La primera versión creaba cuentas nuevas con contraseña al azar en cada
+// ejecución, y eso tenía dos problemas que solo se ven al segundo intento:
+//
+//   · No se podía volver a entrar con ellas -- la contraseña no se guardaba
+//     en ninguna parte --, así que con "Confirm email" encendido, que es como
+//     tiene que estar, la mitad de las comprobaciones se saltaba SIEMPRE.
+//   · Y dejaban basura: dos cuentas muertas por ejecución.
+//
+// Ahora son dos cuentas con credenciales FIJAS, que se leen del entorno. Se
+// crean una sola vez -- con "Confirm email" apagado un minuto -- y a partir de
+// ahí se entra con ellas para siempre, porque una cuenta creada sin
+// confirmación queda ya confirmada y volver a encenderla no la toca.
+//
+//     RAWKU_PRUEBA_EMAIL_A / RAWKU_PRUEBA_PASSWORD_A
+//     RAWKU_PRUEBA_EMAIL_B / RAWKU_PRUEBA_PASSWORD_B
+//
+// Sin ellas, se vuelve al comportamiento de antes (cuentas nuevas al azar),
+// que sirve la primera vez y con la confirmación apagada.
+//
+// ⚠️ NO SON CUENTAS DE NADIE. No tienen perros, ni menús, ni datos reales:
+// existen solo para preguntarle a la base qué deja hacer. Aun así, la
+// contraseña de un entorno la puede leer quien use ese entorno, así que estas
+// credenciales no valen para nada más y no se reutilizan en ningún otro sitio.
+const CUENTAS = {
+  A: { email: process.env.RAWKU_PRUEBA_EMAIL_A, password: process.env.RAWKU_PRUEBA_PASSWORD_A },
+  B: { email: process.env.RAWKU_PRUEBA_EMAIL_B, password: process.env.RAWKU_PRUEBA_PASSWORD_B },
+}
+
 async function crearCuenta(etiqueta) {
   const cliente = createClient(URL, ANON)
+  const fija = CUENTAS[etiqueta]
+
+  // 1. Si hay cuenta fija, se intenta ENTRAR. Es el camino normal.
+  if (fija?.email && fija?.password) {
+    const { data, error } = await cliente.auth.signInWithPassword({
+      email: fija.email, password: fija.password,
+    })
+    if (!error && data.session) return { cliente, userId: data.user.id, email: fija.email, reutilizada: true }
+
+    // 2. No existe todavía: se crea con ESAS credenciales, para que la
+    //    próxima vez baste con entrar.
+    const alta = await cliente.auth.signUp({
+      email: fija.email, password: fija.password,
+      options: { data: { nombre: `Prueba RLS ${etiqueta}` } },
+    })
+    if (alta.error) {
+      throw new Error(
+        `no se ha podido entrar ni crear la cuenta fija ${etiqueta} (${fija.email}): ` +
+        `${error?.message || alta.error.message}`)
+    }
+    if (!alta.data.session) {
+      throw new Error(
+        `la cuenta fija ${etiqueta} no existía y el proyecto pide confirmar el correo,\n` +
+        `        así que no se ha podido crear con sesión. Apaga "Confirm email" un minuto en\n` +
+        `        Authentication -> Sign In / Providers -> Email, ejecuta esto UNA vez, y vuelve\n` +
+        `        a encenderlo: la cuenta queda ya confirmada y no habrá que repetirlo.`)
+    }
+    return { cliente, userId: alta.data.user.id, email: fija.email, reutilizada: false }
+  }
+
+  // 3. Sin credenciales en el entorno: como antes, de usar y tirar.
   const email = `prueba-rls-${sello()}@pruebas.rawku.app`
   const password = `pr-${sello()}`
   const { data, error } = await cliente.auth.signUp({
@@ -81,10 +142,10 @@ async function crearCuenta(etiqueta) {
   if (!data.session) {
     throw new Error(
       `el registro de ${etiqueta} no ha devuelto sesión: el proyecto pide confirmar el correo.\n` +
-      `        Para poder ejecutar esto hay que apagar temporalmente "Confirm email" en\n` +
-      `        Authentication -> Providers -> Email, y volver a encenderlo al terminar.`)
+      `        Lo estable es poner RAWKU_PRUEBA_EMAIL_A/PASSWORD_A y _B en el entorno y crear\n` +
+      `        las dos cuentas una sola vez. Ver el comentario de CUENTAS, arriba.`)
   }
-  return { cliente, userId: data.user.id, email }
+  return { cliente, userId: data.user.id, email, reutilizada: false }
 }
 
 // Comprobar que se LLEGA, antes de nada. Si hay un proxy o un cortafuegos por
@@ -249,7 +310,7 @@ async function main() {
     await cliente.from(tabla).delete().eq('id', id)
   }
 
-  resumir([a.email, b.email])
+  resumir([a, b].filter((c) => !c.reutilizada).map((c) => c.email))
 }
 
 function resumir(correosQueLimpiar) {
