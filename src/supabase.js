@@ -13,13 +13,29 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
 
-export async function registrar(email, password, nombre) {
+// ⚠️ El número de colegiado viaja en la METADATA de la cuenta, no en
+// `profiles` (28 agosto). Motivo: al registrarse puede no haber sesión
+// todavía -- si Supabase pide confirmar el correo, la fila de `profiles`
+// aún no es escribible --, así que un `update` se perdería justo en el
+// caso normal. En la metadata entra siempre, con el registro mismo.
+//
+// Y desde ahí es donde se acredita a mano: Supabase -> Authentication ->
+// Users, se lee el número, y solo entonces se enciende el rol. Que es toda
+// la idea: quien se registra DECLARA, y una persona COMPRUEBA.
+export async function registrar(email, password, nombre, numColegiado = null) {
+  const extra = numColegiado ? { num_colegiado: String(numColegiado).trim(), pide_rol: 'profesional' } : {}
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { nombre } },
+    options: { data: { nombre, ...extra } },
   })
   if (error) throw error
+  // Si la cuenta ya viene con sesión (Supabase sin confirmación de correo),
+  // se copia también a `profiles` para que Ajustes lo enseñe. Best-effort:
+  // si falla, el número sigue en la metadata y no se pierde nada.
+  if (numColegiado && data?.user?.id && data?.session) {
+    try { await pedirRolProfesional(data.user.id, numColegiado) } catch { /* queda en la metadata */ }
+  }
   return data
 }
 
