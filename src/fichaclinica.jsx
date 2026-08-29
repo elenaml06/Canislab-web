@@ -171,9 +171,9 @@ export default function FichaClinica({ ficha }) {
         <Titulo>Dentro de rango ({num(correctos)})</Titulo>
         <div className="rounded-xl px-4 py-3" style={{ background: '#FFFFFF', border: '1.5px dashed #E3DAF0' }}>
           <p className="text-xs leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-            El motor confirma que {num(correctos)} requisitos quedan dentro de rango, pero
-            todavía no manda su valor ni su margen: solo cuántos son. Aquí saldrá cada uno
-            con su cifra y su distancia al límite en cuanto lo haga.
+            {num(correctos)} requisitos quedan dentro de rango. El desglose de cada uno
+            con su valor y su margen llega en la próxima versión; hasta entonces, aquí
+            arriba tienes con detalle todo lo que se sale.
           </p>
         </div>
       </div>
@@ -183,40 +183,42 @@ export default function FichaClinica({ ficha }) {
           los alimentos del menú no traía el dato de un nutriente. */}
       {Object.keys(huecos).length > 0 && (
         <div>
-          <Titulo>Huecos del catálogo ({Object.keys(huecos).length})</Titulo>
+          <Titulo>Sin dato publicado ({Object.keys(huecos).length})</Titulo>
           <div className="rounded-xl overflow-hidden" style={{ background: '#FFFFFF', border: `1.5px solid ${ROSA}33` }}>
             {Object.entries(huecos).map(([clave, alimentos]) => (
               <div key={clave} className="px-3 py-2" style={{ borderBottom: '1px solid #F0EBF8' }}>
                 <p style={{ color: TINTA, fontFamily: fontMono, fontSize: 12 }}>{clave}</p>
                 <p style={{ color: MALVA, fontFamily: fontBody, fontSize: 11 }}>
-                  sin dato en: {(alimentos || []).join(', ')}
+                  no publicado para: {(alimentos || []).join(', ')}
                 </p>
               </div>
             ))}
           </div>
           <p className="text-[11px] mt-1.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-            Un hueco no es un cero: es que no lo sabemos. Estos nutrientes se han
-            verificado sin contar lo que aporten esos alimentos.
+            Las tablas de composición de referencia (BEDCA, CIQUAL, USDA) no dan este
+            valor para esos alimentos. No se cuenta como cero: se verifica sin él, de
+            forma que lo que aporten queda del lado seguro.
           </p>
         </div>
       )}
 
       {Object.keys(dudosos).length > 0 && (
         <div>
-          <Titulo>Datos que no nos creemos ({Object.keys(dudosos).length})</Titulo>
+          <Titulo>Valores corregidos ({Object.keys(dudosos).length})</Titulo>
           <div className="rounded-xl overflow-hidden" style={{ background: '#FFFFFF', border: `1.5px solid ${ROSA}33` }}>
             {Object.entries(dudosos).map(([clave, alimentos]) => (
               <div key={clave} className="px-3 py-2" style={{ borderBottom: '1px solid #F0EBF8' }}>
                 <p style={{ color: TINTA, fontFamily: fontMono, fontSize: 12 }}>{clave}</p>
                 <p style={{ color: MALVA, fontFamily: fontBody, fontSize: 11 }}>
-                  valor declarado dudoso en: {(alimentos || []).join(', ')}
+                  etiqueta corregida en: {(alimentos || []).join(', ')}
                 </p>
               </div>
             ))}
           </div>
           <p className="text-[11px] mt-1.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-            Son valores de etiqueta que no cuadran con la química o con la literatura.
-            El menú se ha verificado sustituyéndolos por su valor plausible.
+            El fabricante declara un valor que no cuadra con la química ni con la
+            literatura. El menú se ha calculado con el valor contrastado, no con el de
+            la etiqueta.
           </p>
         </div>
       )}
