@@ -148,6 +148,11 @@ export function crearFakeSupabase(opciones = {}) {
     // el test lo notaría (la lista saldría vacía) en vez de pasar por
     // casualidad.
     menus: [],
+    // Lo que ha recibido el formulador, para poder afirmar sobre ello.
+    peticionesFormular: [],
+    // Y el caso de "con esas cantidades no cuadra", que es donde se ofrece
+    // una alternativa sin aplicarla.
+    formularNoCuadra: false,
     // Si es true, /menu/v2 y /menu/semana NO responden nunca: simula la
     // API dormida en Render, que es lo que dejaba el "Calculando..."
     // colgado para siempre.
@@ -279,6 +284,9 @@ export function crearFakeSupabase(opciones = {}) {
         estado.perros = cfg.sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }];
       }
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
+      // No pegajoso, como los demás interruptores que cambian una respuesta.
+      estado.formularNoCuadra = cfg.formularNoCuadra === true;
+      if (cfg.olvidarFormular) estado.peticionesFormular = [];
       if (typeof cfg.colgarGenerador === "boolean") estado.colgarGenerador = cfg.colgarGenerador;
       if ("avisoComposicion" in cfg) estado.avisoComposicion = cfg.avisoComposicion;
       if ("avisoComposicionAlEditar" in cfg) estado.avisoComposicionAlEditar = cfg.avisoComposicionAlEditar;
@@ -354,6 +362,7 @@ export function crearFakeSupabase(opciones = {}) {
         ultimoCambioDeCuenta: estado.ultimoCambioDeCuenta,
         peticionesCasa: estado.peticionesCasa.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesMenu: estado.peticionesMenu.map((p) => ({ ...p })),
+        peticionesFormular: estado.peticionesFormular.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesSemana: estado.peticionesSemana.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesEdicion: estado.peticionesEdicion.map((p) => JSON.parse(JSON.stringify(p))),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
@@ -636,6 +645,70 @@ export function crearFakeSupabase(opciones = {}) {
         "Hueso carnoso": [{ nombre: "Hueso carnoso de pollo", kcal_100g: 150 }],
       });
     }
+    // ── EL FORMULADOR DEL VETERINARIO ───────────────────────────────────
+    // Lo que se prueba aquí NO es la nutrición -- eso se comprueba contra el
+    // motor de verdad, en `pruebas_completas.py`. Es la pantalla: que llame
+    // con lo que hay puesto, que pinte lo que le contesten agrupado, que
+    // autocompletar deje lo rellenado EDITABLE y que un tope de patología
+    // roto se vea aunque FEDIAF diga verde. Por eso el estado que devuelve
+    // este servidor depende de los gramos que reciba: si no dependiera,
+    // una prueba no podría distinguir "en vivo" de "pintado una vez".
+    if (ruta === "/formular/estado" || ruta === "/formular/autocompletar") {
+      const peticion = JSON.parse(cuerpo || "{}");
+      const gramos = peticion.gramos_por_alimento || {};
+      estado.peticionesFormular.push({ ruta, ...peticion });
+      const totalG = Object.values(gramos).reduce((a, v) => a + Number(v || 0), 0);
+      const kcal = Math.round(totalG * 1.2);
+      const der = Number(peticion.der_objetivo) || 1;
+      const conRenal = (peticion.patologias || []).includes("renal");
+      const haceEstado = (g) => {
+        const t = Object.values(g).reduce((a, v) => a + Number(v || 0), 0);
+        const k = Math.round(t * 1.2);
+        const suficiente = t >= 500;
+        return {
+          gramos_total: Math.round(t * 10) / 10,
+          kcal: k,
+          der_objetivo: der,
+          desvio_kcal_pct: Math.round(((k - der) / der) * 1000) / 10,
+          reparto_categorias: { "Carne muscular": Math.round(t * 10) / 10 },
+          ficha: {
+            semaforo: suficiente ? "verde" : "rojo",
+            faltan: suficiente ? [] : [
+              { nutriente: "Calcio", clave: "calcio", tiene: 0.2, necesita: 1.4, cubre_pct: 14 },
+              { nutriente: "Yodo", clave: "yodo", tiene: 0.01, necesita: 0.22, cubre_pct: 5 },
+            ],
+            se_pasa: [],
+            dentro: [
+              { nutriente: "Proteína_total", clave: "proteina", tiene: 92.4, minimo: 52.1,
+                maximo: null, cubre_pct: 177, del_maximo_pct: null, sin_referencia: false },
+              { nutriente: "Lisina", clave: "lisina", tiene: 5.1, minimo: 2.8, maximo: null,
+                cubre_pct: 182, del_maximo_pct: null, sin_referencia: false },
+            ],
+          },
+          problemas_seguridad: [],
+          // El caso que importa: FEDIAF en verde y el tope de la patología
+          // roto. El semáforo son los requisitos de un perro SANO.
+          topes_de_patologia_rotos: conRenal
+            ? ["fosforo 1748.0 (tope 1200.0 por patología)"] : [],
+        };
+      };
+      if (ruta === "/formular/estado") return responder(200, haceEstado(gramos));
+      // Autocompletar: se queda con TODO lo que ya había puesto, con sus
+      // gramos intactos, y añade lo que falta.
+      if (estado.formularNoCuadra) {
+        return responder(200, {
+          factible: false,
+          motivo: "Con esas cantidades no sale, pero con estos mismos alimentos sí. " +
+                  "Lo que no cuadra son las cifras, no los ingredientes.",
+          alternativa: { ...gramos, "Hueso carnoso de pollo": 200 },
+        });
+      }
+      const completado = { ...gramos, "Hueso carnoso de pollo": 180,
+                           "Carne muscular de pollo": Number(gramos["Carne muscular de pollo"]) || 400 };
+      return responder(200, { factible: true, menu: completado, gramos_fijos_movidos: [],
+                              estado: haceEstado(completado) });
+    }
+
     if (ruta.startsWith("/revisar") || ruta.startsWith("/analizar")) {
       return responder(200, { factible: true, problemas: [] });
     }
