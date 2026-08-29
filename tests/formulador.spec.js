@@ -56,11 +56,13 @@ const comoVeterinario = async (page, request, extra = {}) => {
   await irAlFormulador(page);
 };
 
-// El camino al generador pasa por "Mis menús", igual que para un tutor.
+// El camino al generador pasa por el panel, igual que para un tutor. La
+// entrada se llama "Menús" y no "Mis menús" en modo veterinario: los menús
+// de un paciente no son suyos.
 async function irAlFormulador(page) {
   await page.getByRole("button", { name: "Menú", exact: true }).last().click();
   await page.getByRole("dialog", { name: "Panel lateral" })
-            .getByRole("button", { name: "Mis menús", exact: true }).click();
+            .getByRole("button", { name: "Menús", exact: true }).click();
   await page.getByRole("button", { name: /Hacer otro menú/ }).click();
   await expect(page.getByText("Formular la ración")).toBeVisible();
 }
@@ -148,4 +150,116 @@ test("un tope de patología roto se ve aunque FEDIAF diga verde", async ({ page,
   await expect(page.getByText("Topes por patología")).toBeVisible();
   await expect(page.getByText(/fosforo 1748/)).toBeVisible();
   await expect(page.getByText(/El semáforo de FEDIAF no los ve/)).toBeVisible();
+});
+
+// ─── FIRMAR ─────────────────────────────────────────────────────────────────
+//
+// Una pauta firmada es la forma más difícil de retirar que tiene un menú de
+// salir de aquí: un papel con un nombre y un número de colegiado. Lo que se
+// vigila aquí es la pantalla; que el sello sirva se comprueba contra el motor
+// (BLOQUE 42 de pruebas_completas.py).
+
+test("firmar es un acto: hay que pulsar, y antes se ve con qué nombre sale", async ({ page, request }) => {
+  // ⚠️ El modo profesional NO firma solo. Si firmara por estar encendido, el
+  // veterinario acabaría con veinte pautas firmadas de las que hizo probando.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByLabel("Buscar alimento").fill("pollo");
+  await page.getByRole("button", { name: /Carne muscular de pollo/ }).click();
+  await page.getByLabel("Gramos de Carne muscular de pollo").fill("700");
+
+  // Nada firmado todavía.
+  expect((await leer(request)).pautasFirmadas).toHaveLength(0);
+
+  await page.getByRole("button", { name: /Firmar la pauta/ }).click();
+  // Antes de firmar se ve QUIÉN firma.
+  await expect(page.getByLabel("Nombre del firmante")).toBeVisible();
+  await expect(page.getByText(/Nº de colegiado/)).toBeVisible();
+  // Y sigue sin haber nada firmado hasta pulsar Firmar.
+  expect((await leer(request)).pautasFirmadas).toHaveLength(0);
+
+  await page.getByLabel("Nombre del firmante").fill("Elena Martín");
+  await page.getByRole("button", { name: "Firmar", exact: true }).click();
+
+  await expect(page.getByText("Pauta firmada")).toBeVisible();
+  await expect(page.getByText(/sello abcdef0123456789/)).toBeVisible();
+
+  const guardadas = (await leer(request)).pautasFirmadas;
+  expect(guardadas).toHaveLength(1);
+  // Se guarda el documento que SELLÓ LA API, no uno montado en la pantalla.
+  expect(guardadas[0].sello).toBe("abcdef0123456789");
+  expect(guardadas[0].documento.sello).toBe("abcdef0123456789");
+  expect(guardadas[0].num_colegiado).toBe("COLVET-12345");
+});
+
+test("una ración a medias no se puede firmar", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByLabel("Buscar alimento").fill("pollo");
+  await page.getByRole("button", { name: /Carne muscular de pollo/ }).click();
+  // 100 g: el servidor de mentira contesta "rojo" por debajo de 500 g.
+  await page.getByLabel("Gramos de Carne muscular de pollo").fill("100");
+
+  const boton = page.getByRole("button", { name: /Firmar la pauta/ });
+  await expect(boton).toBeDisabled();
+  expect((await leer(request)).pautasFirmadas).toHaveLength(0);
+});
+
+test("y si la API dice que no, no se firma y se explica", async ({ page, request }) => {
+  // La última palabra la tiene el motor, no la pantalla: aunque aquí se vea
+  // verde, si al firmar la API dice que no, no se guarda nada.
+  await comoVeterinario(page, request, { pautaNoSeFirma: true });
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByLabel("Buscar alimento").fill("pollo");
+  await page.getByRole("button", { name: /Carne muscular de pollo/ }).click();
+  await page.getByLabel("Gramos de Carne muscular de pollo").fill("700");
+
+  await page.getByRole("button", { name: /Firmar la pauta/ }).click();
+  await page.getByLabel("Nombre del firmante").fill("Elena Martín");
+  await page.getByRole("button", { name: "Firmar", exact: true }).click();
+
+  await expect(page.getByText(/no se puede firmar/)).toBeVisible();
+  await expect(page.getByText("Pauta firmada")).toHaveCount(0);
+  expect((await leer(request)).pautasFirmadas).toHaveLength(0);
+});
+
+test("lo firmado queda en el historial del paciente, y no se edita", async ({ page, request }) => {
+  // ⚠️ El historial es una LISTA de documentos, no un documento que se va
+  // pisando. Es la única forma de poder mirar atrás y ver qué se pautó y
+  // cuándo -- y por eso en la tabla de verdad no hay política de update ni
+  // de delete: una pauta firmada no se edita, se firma otra.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByLabel("Buscar alimento").fill("pollo");
+  await page.getByRole("button", { name: /Carne muscular de pollo/ }).click();
+  await page.getByLabel("Gramos de Carne muscular de pollo").fill("700");
+  await page.getByRole("button", { name: /Firmar la pauta/ }).click();
+  await page.getByLabel("Nombre del firmante").fill("Elena Martín");
+  await page.getByRole("button", { name: "Firmar", exact: true }).click();
+  await expect(page.getByText("Pauta firmada")).toBeVisible();
+
+  await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+  await page.getByRole("dialog", { name: "Panel lateral" })
+            .getByRole("button", { name: "Pautas firmadas", exact: true }).click();
+
+  await expect(page.getByText(/Elena Martín · nº COLVET-12345/)).toBeVisible();
+  await expect(page.getByText(/sello abcdef0123456789/)).toBeVisible();
+  await expect(page.getByText(/Carne muscular de pollo/)).toBeVisible();
+});
+
+test("un tutor no ve las pautas firmadas por ningún lado", async ({ page, request }) => {
+  // No es que no las tenga: es que un tutor no firma nada, así que la
+  // entrada no significaría nada para él.
+  await configurar(request, {
+    rolProfesional: false, rolVerificado: false,
+    perros: [PERRO_DE_PRUEBA], accesos: [], menus: [],
+  });
+  await page.goto("/");
+  await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+  await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByText("Nombre y sexo").waitFor();
+  await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+  await expect(page.getByRole("dialog", { name: "Panel lateral" })
+                   .getByRole("button", { name: "Pautas firmadas" })).toHaveCount(0);
 });
