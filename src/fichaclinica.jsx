@@ -63,7 +63,29 @@ function Dato({ etiqueta, valor, unidad }) {
 // Una fila de la tabla de los que no cumplen. Se enseña SIEMPRE el número
 // que tiene y el límite contra el que se compara, nunca solo el nombre:
 // «le falta calcio» no le sirve a nadie que vaya a firmar.
-function Fila({ nutriente, tiene, limite, etiquetaLimite, extra, color }) {
+function Fila({ nutriente, tiene, limite, etiquetaLimite, extra, color,
+                techo = undefined, sinReferencia = false }) {
+  // ⚠️ HAY DOS SIN REFERENCIA EN ADULTO, y no es un hueco nuestro: FEDIAF
+  // pone «-» al linolénico y al araquidónico fuera de crecimiento y
+  // reproducción. Se dice, en vez de dejar la casilla vacía -- una casilla
+  // vacía parece un dato que nos falta.
+  if (sinReferencia) {
+    return (
+      <div className="flex items-baseline gap-2 px-3 py-2" style={{ borderBottom: '1px solid #F0EBF8' }}>
+        <span className="flex-1 truncate" style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
+          {nutriente}
+        </span>
+        <span style={{ color: MALVA, fontFamily: fontMono, fontSize: 13 }}>{num(tiene)}</span>
+        <span className="whitespace-nowrap" style={{ color: MALVA, fontFamily: fontMono, fontSize: 11 }}>
+          FEDIAF no da referencia en adulto
+        </span>
+      </div>
+    )
+  }
+  return _Fila({ nutriente, tiene, limite, etiquetaLimite, extra, color, techo })
+}
+
+function _Fila({ nutriente, tiene, limite, etiquetaLimite, extra, color, techo }) {
   return (
     <div className="flex items-baseline gap-2 px-3 py-2" style={{ borderBottom: '1px solid #F0EBF8' }}>
       <span className="flex-1 truncate" style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
@@ -74,6 +96,7 @@ function Fila({ nutriente, tiene, limite, etiquetaLimite, extra, color }) {
       </span>
       <span className="whitespace-nowrap" style={{ color: MALVA, fontFamily: fontMono, fontSize: 11 }}>
         {etiquetaLimite} {num(limite)}
+        {techo !== undefined && techo !== null && ` · máx ${num(techo)}`}
       </span>
       {extra !== undefined && extra !== null && (
         <span className="whitespace-nowrap text-right" style={{ color, fontFamily: fontMono, fontSize: 11, minWidth: 44 }}>
@@ -98,6 +121,8 @@ export default function FichaClinica({ ficha }) {
   const sePasa = ficha.se_pasa || []
   const huecos = ficha.datos_incompletos || {}
   const dudosos = ficha.datos_dudosos || {}
+  // Puede no venir: un menú guardado antes del 29 de agosto no la trae.
+  const dentro = ficha.dentro_de_rango || []
   const total = ficha.total
   const correctos = ficha.correctos
 
@@ -163,20 +188,41 @@ export default function FichaClinica({ ficha }) {
       )}
 
       {/* ── LOS QUE CUMPLEN ──
-          Hoy el motor manda el RECUENTO, no la lista. Se dice en pantalla en
-          vez de callarlo: un profesional tiene que saber qué le estamos
-          enseñando y qué no. En cuanto `verificar()` devuelva `correctos`
-          como lista, esto pasa a ser la tabla y se quita el aviso. */}
-      <div>
-        <Titulo>Dentro de rango ({num(correctos)})</Titulo>
-        <div className="rounded-xl px-4 py-3" style={{ background: '#FFFFFF', border: '1.5px dashed #E3DAF0' }}>
-          <p className="text-xs leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-            {num(correctos)} requisitos quedan dentro de rango. El desglose de cada uno
-            con su valor y su margen llega en la próxima versión; hasta entonces, aquí
-            arriba tienes con detalle todo lo que se sale.
+          Ya llega la lista, no el recuento (29 agosto). Y esta es la parte que
+          más importa de esta pantalla, aunque parezca la menos: de un menú
+          VERDE es LO ÚNICO que hay. Sin ella, a un profesional se le enseñaba
+          un número y nada más.
+
+          Vienen ORDENADOS POR LO QUE VA MÁS JUSTO, que es por donde se empieza
+          a mirar. El orden lo pone la API, aquí no se reordena: con 42 filas,
+          reordenar por nombre escondería justo el que aprieta. */}
+      {dentro.length > 0 ? (
+        <div>
+          <Titulo>Dentro de rango ({dentro.length})</Titulo>
+          <div className="rounded-xl overflow-hidden" style={{ background: '#FFFFFF', border: '1.5px solid #E3DAF0' }}>
+            {dentro.map((d) => (
+              <Fila key={d.clave || d.nutriente} nutriente={d.nutriente} tiene={d.tiene}
+                    limite={d.minimo} etiquetaLimite="mín." color={VERDE}
+                    extra={d.cubre_pct !== null && d.cubre_pct !== undefined ? `${d.cubre_pct}%` : null}
+                    techo={d.maximo} sinReferencia={d.sin_referencia} />
+            ))}
+          </div>
+          <p className="text-[11px] mt-1.5 px-1" style={{ color: MALVA, fontFamily: fontBody }}>
+            Ordenados por lo que va más justo. El porcentaje es del mínimo.
           </p>
         </div>
-      </div>
+      ) : (
+        <div>
+          <Titulo>Dentro de rango ({num(correctos)})</Titulo>
+          <div className="rounded-xl px-4 py-3" style={{ background: '#FFFFFF', border: '1.5px dashed #E3DAF0' }}>
+            <p className="text-xs leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              {num(correctos)} requisitos quedan dentro de rango. Este menú viene de una
+              versión del servidor que todavía no manda el desglose; aquí arriba tienes
+              con detalle todo lo que se sale.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* ── SOBRE QUÉ DATOS SE HA CALCULADO ──
           Esto no es un detalle: quien firma tiene derecho a saber que uno de
