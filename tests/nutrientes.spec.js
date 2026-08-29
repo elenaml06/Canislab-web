@@ -25,7 +25,10 @@ const LOS_41 = [
 test("los 41 de FEDIAF tienen grupo, y ninguno está dos veces", () => {
   const enGrupos = GRUPOS.flatMap((g) => g.nutrientes);
   expect(new Set(enGrupos).size).toBe(enGrupos.length);   // ninguno repetido
-  expect([...enGrupos].sort()).toEqual([...LOS_41].sort());
+  // Los 41 nutrientes MÁS la relación Ca:P, que el motor devuelve en las
+  // mismas listas aunque no sea un nutriente: es una relación, y se lee al
+  // lado del calcio y el fósforo. Son las 42 filas que devuelve verificar().
+  expect([...enGrupos].sort()).toEqual([...LOS_41, "Relación Ca:P"].sort());
 });
 
 test("un nutriente que el motor añada mañana NO desaparece: cae en Otros", () => {
@@ -34,7 +37,7 @@ test("un nutriente que el motor añada mañana NO desaparece: cae en Otros", () 
   // -- sin un solo error.
   const grupos = agruparNutrientes({
     faltan: [], se_pasa: [],
-    dentro: [{ nutriente: "Nutriente_del_futuro", tiene: 1, minimo: 0.5, maximo: null }],
+    dentro_de_rango: [{ nutriente: "Nutriente_del_futuro", tiene: 1, minimo: 0.5, maximo: null }],
   });
   expect(grupos.map((g) => g.titulo)).toContain("Otros");
 });
@@ -43,7 +46,7 @@ test("dentro de cada grupo, primero lo que hay que mirar", () => {
   const grupos = agruparNutrientes({
     faltan: [{ nutriente: "Calcio", tiene: 0.2, necesita: 1.4, cubre_pct: 14 }],
     se_pasa: [{ nutriente: "Fósforo", tiene: 3.1, maximo: 2.5, veces: 1.24 }],
-    dentro: [{ nutriente: "Sodio", tiene: 1.1, minimo: 0.8, maximo: null }],
+    dentro_de_rango: [{ nutriente: "Sodio", tiene: 1.1, minimo: 0.8, maximo: null }],
   });
   const minerales = grupos.find((g) => g.titulo === "Minerales");
   expect(minerales.filas.map((f) => f.nutriente)).toEqual(["Fósforo", "Calcio", "Sodio"]);
@@ -54,7 +57,7 @@ test("los grupos vacíos no se pintan", () => {
   // En una ración a medias media tabla está vacía, y una lista de títulos
   // sin nada debajo es ruido.
   const grupos = agruparNutrientes({
-    faltan: [{ nutriente: "Calcio", tiene: 0.2, necesita: 1.4 }], se_pasa: [], dentro: [],
+    faltan: [{ nutriente: "Calcio", tiene: 0.2, necesita: 1.4 }], se_pasa: [], dentro_de_rango: [],
   });
   expect(grupos.map((g) => g.titulo)).toEqual(["Minerales"]);
 });
@@ -66,7 +69,7 @@ test("sin ficha no se inventa nada", () => {
 
 test("el resumen cuenta lo que hay", () => {
   expect(resumenDeLaFicha({
-    faltan: [1, 2], se_pasa: [3], dentro: [4, 5, 6],
+    faltan: [1, 2], se_pasa: [3], dentro_de_rango: [4, 5, 6],
   })).toEqual({ falta: 2, se_pasa: 1, dentro: 3, total: 6 });
 });
 
