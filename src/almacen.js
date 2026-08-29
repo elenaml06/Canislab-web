@@ -323,6 +323,8 @@ export async function migrarLocalACuenta(userId) {
       // pasar de usar la app sin cuenta a crear una -- en silencio, que es
       // la familia de fallos que persigue el CLAUDE.md.
       bcs: p.bcs,
+      tutorNombre: p.tutor_nombre,
+      tutorContacto: p.tutor_contacto,
       // ⚠️ Sin esta línea, al crear cuenta el perro subiría sin su peso
       // objetivo y la app se lo recalcularía desde el peso de ese día: el
       // perro que llevaba dos meses adelgazando volvería a empezar la

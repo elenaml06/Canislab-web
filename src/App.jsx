@@ -567,6 +567,29 @@ const CONDICIONES = [
   { label: "Rellenito", detalle: "Cuesta notar las costillas, poca cintura" },
   { label: "Muy gordete", detalle: "No se notan las costillas, sin cintura" },
 ];
+// Qué bandera de "sí/no" acompaña a cada lista. En la ficha de una sola
+// pantalla las listas SON la respuesta -- una lista vacía es "no tiene" --,
+// pero el resto de la app lee estas banderas, así que se escriben solas para
+// que la ficha no pueda decir dos cosas a la vez.
+const BANDERA_DE = {
+  alergias: "alergiaSi",
+  otrosEvitar: "otrosEvitarSi",
+  categoriasExcluidas: "categoriasExcluidasSi",
+  patologias: "patologiaSi",
+};
+
+// Los mismos cinco niveles de actividad, dichos como se dicen en consulta.
+// El índice es lo único que llega al cálculo del DER, así que cambiar las
+// palabras no cambia ni una kcal -- y estas son las palabras que usa quien
+// escribe una pauta, no "no para".
+const NIVELES_CLINICOS = [
+  { label: "Reposo / restricción", detalle: "sedentario, postoperatorio" },
+  { label: "Mantenimiento", detalle: "paseos diarios" },
+  { label: "Actividad moderada", detalle: "ejercicio regular" },
+  { label: "Actividad alta", detalle: "deporte, carrera" },
+  { label: "Trabajo", detalle: "pastoreo, guarda, tiro" },
+];
+
 const NIVELES = [
   { label: "Sedentario", detalle: "Paseos cortos, se mueve poco", Icono: Moon },
   { label: "Normal", detalle: "Paseos diarios de siempre", Icono: Footprints },
@@ -3772,6 +3795,8 @@ function perfilDesdeSupabase(p) {
     // El BCS exacto, cuando lo puso un veterinario. Puede no venir: las
     // fichas de un dueño no lo tienen, y ahí manda `condicion_idx`.
     bcs: p.bcs ?? null,
+    tutorNombre: p.tutor_nombre || "",
+    tutorContacto: p.tutor_contacto || "",
     // Puede no venir: las fichas de antes del 25 de agosto no lo tienen, y
     // tampoco viene si la columna aún no existe en Supabase. En los dos
     // casos `objetivoVigente` lo calcula al vuelo y Evolución pide
@@ -4058,6 +4083,8 @@ function RawkuOnboardingInterna({
       condicionIdx: 2,
       condicionTocado: true,
       bcs: null,
+      tutorNombre: "",
+      tutorContacto: "",
       pesoObjetivoKg: null,
       actividadIdx: 1,
       actividadTocado: true,
@@ -4826,7 +4853,13 @@ function RawkuOnboardingInterna({
   // cuando la generación de la casa falla entera ("Hacer solo el de X").
   // Sin ese valor, ese botón devolvería a la misma pantalla que acaba de
   // fallar. Se puede llegar, pero ya no se elige.
-  const [paraQuien, setParaQuien] = useState(arrancarEn === "generador_solo" ? "solo" : "parecidos");
+  // ⚠️ EN MODO VETERINARIO, SIEMPRE "SOLO" (29 agosto). "Los menús de la
+  // casa" es una idea de tutor: varios perros que viven juntos, una sola
+  // compra, las mismas bandejas. Los pacientes de un veterinario no viven
+  // juntos ni comen de la misma bolsa -- preguntarle si quiere el mismo
+  // menú "para todos" no es que sobre: es que no significa nada.
+  const [paraQuien, setParaQuien] = useState(
+    (arrancarEn === "generador_solo" || enModoProfesional) ? "solo" : "parecidos");
   // ⚠️ Qué come AHORA cada perro, por separado: uno puede venir de pienso
   // y el otro llevar años en BARF, y de ahí sale si cada uno necesita
   // transición. Arranca con lo que tenga guardado cada ficha.
@@ -6954,6 +6987,373 @@ function RawkuOnboardingInterna({
     );
   }
 
+  // ─── LA FICHA DEL PACIENTE, EN UNA SOLA PANTALLA ──────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (29 agosto): "un veterinario debería tener
+  // prácticamente todo en la misma pantalla, no tener que ir pasando
+  // pantallas, y lo de la pantalla de alergias y tal tiene que ser
+  // profesional, no esos textos para el usuario".
+  //
+  // Las seis pantallas del asistente están pensadas para alguien que hace
+  // esto UNA VEZ, con su perro, y a quien conviene llevar de la mano: una
+  // pregunta por pantalla, un dibujo, una frase que tranquiliza. Un
+  // veterinario hace esto VARIAS VECES AL DÍA, con un animal delante, y lo
+  // que necesita es ver la ficha entera y rellenarla en el orden que él
+  // quiera. Son dos trabajos distintos, no dos gustos distintos.
+  //
+  // Es la MISMA ficha: los mismos campos, los mismos nombres de estado y el
+  // mismo guardado. Lo que cambia es la disposición y las palabras. Si
+  // mañana se añade un campo a la ficha, hay que añadirlo AQUÍ TAMBIÉN --
+  // y a `ficha-ida-y-vuelta.spec.js` y a `sin-cuenta.spec.js`, que es lo
+  // que impide que un campo se pierda en silencio.
+  if (enModoProfesional && paso <= TOTAL_PASOS) {
+    const fechaISO = (() => {
+      const m = String((perfil.mesIdx ?? 0) + 1).padStart(2, "0");
+      const d = String(perfil.dia ?? 1).padStart(2, "0");
+      return `${perfil.anio}-${m}-${d}`;
+    })();
+    // ⚠️ EN UN PACIENTE NUEVO, EL BCS NO SE DA POR PUESTO (29 agosto).
+    // La ficha nace con `condicionIdx: 2` y `condicionTocado: true` -- son
+    // los valores de partida del deslizador del dueño --, así que mirar
+    // "¿lo ha tocado?" daba por observado un BCS 5 que nadie había mirado.
+    // En una ficha clínica eso es peor que un hueco: un ideal supuesto pasa
+    // por un ideal comprobado, y de ahí salen las kcal.
+    //
+    // En una ficha QUE YA EXISTE sí se enseña el equivalente de lo que haya
+    // -- si el tutor dijo "Rellenito", el veterinario ve un 7 y lo corrige
+    // si no está de acuerdo --, porque ahí el dato existe y esconderlo sería
+    // hacerle preguntar dos veces lo mismo.
+    const bcsPuesto = perfil.bcs ?? (perfil._id ? bcsVigente(perfil) : null);
+    const filaBcs = ESCALA_BCS.find((b) => b.n === bcsPuesto) || null;
+    const objetivoBcs = bcsPuesto ? pesoIdealDesdeBcs(Number(perfil.pesoActual), bcsPuesto) : null;
+    const ponerBcs = (n) => {
+      set("bcs", n);
+      set("condicionIdx", condicionDesdeBcs(n));
+      set("condicionTocado", true);
+      set("pesoObjetivoKg", pesoIdealDesdeBcs(Number(perfil.pesoActual), n));
+    };
+    // Las listas SON la respuesta: si están vacías, no hay nada que
+    // declarar. El "¿tiene alergias? sí/no" es una pregunta de asistente,
+    // y en una ficha clínica sobra -- pero el resto de la app lee esas
+    // banderas, así que se escriben aquí para que no se contradigan.
+    const anadirA = (campo, item) => {
+      set(campo, [...perfil[campo], item]);
+      set(BANDERA_DE[campo], "si");
+      setCategoriaAbierta(null);
+    };
+    const quitarDe = (campo, idx) => {
+      const nueva = perfil[campo].filter((_, i) => i !== idx);
+      set(campo, nueva);
+      set(BANDERA_DE[campo], nueva.length ? "si" : "no");
+    };
+    const alternar = (campo, clave) => {
+      const nueva = perfil[campo].includes(clave)
+        ? perfil[campo].filter((k) => k !== clave)
+        : [...perfil[campo], clave];
+      set(campo, nueva);
+      set(BANDERA_DE[campo], nueva.length ? "si" : "no");
+    };
+    const faltan = [];
+    if (!perfil.nombre.trim()) faltan.push("nombre");
+    if (perfil.sexo === null) faltan.push("sexo");
+    if (perfil.esterilizado === null) faltan.push("estado reproductivo");
+    if (!(perfil.raza || perfil.tamanoManual)) faltan.push("raza o tamaño adulto");
+    if (!edad) faltan.push("fecha de nacimiento");
+    if (!(Number(perfil.pesoActual) > 0)) faltan.push("peso");
+    if (!bcsPuesto) faltan.push("BCS");
+    const puedeGuardar = faltan.length === 0;
+    const bloqueantes = perfil.patologias
+      .map((k) => PATOLOGIAS.find((p) => p.key === k))
+      .filter((p) => p && !p.segura);
+
+    const Bloque = ({ titulo, children }) => (
+      <div className="rounded-2xl px-4 py-4 mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+        <p className="text-[11px] tracking-[0.14em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
+          {titulo}
+        </p>
+        {children}
+      </div>
+    );
+    const Opciones = ({ opciones, valor, onElegir, columnas = 2 }) => (
+      <div className={`grid gap-2 grid-cols-${columnas}`}>
+        {opciones.map((op) => {
+          const activo = valor === op.key;
+          return (
+            <button key={op.key} onClick={() => onElegir(op.key)}
+              className="py-2.5 rounded-xl text-center"
+              style={{ background: activo ? VIOLETA : PAPEL,
+                       border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                       color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody,
+                       fontSize: 14, cursor: "pointer" }}>
+              {op.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+        <Fuentes />
+        <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)}
+                  titulo={perfil._id ? "Ficha del paciente" : "Nuevo paciente"} />
+        <div className="flex-1 overflow-y-auto px-5 pt-6 pb-6">
+
+          <Bloque titulo="Identificación">
+            <input
+              type="text" value={perfil.nombre} onChange={(e) => set("nombre", e.target.value)}
+              placeholder="Nombre del paciente"
+              className="w-full text-lg pb-2 mb-4 outline-none bg-transparent"
+              style={{ color: TINTA, fontFamily: fontDisplay,
+                       borderBottom: `2px solid ${perfil.nombre ? VIOLETA : "#E3DAF0"}` }} />
+            <p className="text-xs mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>Sexo</p>
+            <Opciones opciones={[{ key: "macho", label: "Macho" }, { key: "hembra", label: "Hembra" }]}
+                      valor={perfil.sexo} onElegir={(v) => set("sexo", v)} />
+            <p className="text-xs mt-3 mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
+              Estado reproductivo
+            </p>
+            <Opciones opciones={[{ key: "no", label: "Entero" }, { key: "si", label: "Esterilizado" }]}
+                      valor={perfil.esterilizado} onElegir={(v) => set("esterilizado", v)} />
+            <p className="text-xs mt-3 mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
+              Fecha de nacimiento {edad && `· ${edad.anios} a ${edad.meses} m`}
+            </p>
+            <input
+              type="date" value={fechaISO}
+              onChange={(e) => {
+                const [a, m, d] = e.target.value.split("-").map(Number);
+                if (a && m && d) { set("anio", a); set("mesIdx", m - 1); set("dia", d); }
+              }}
+              className="w-full py-2.5 px-3 rounded-xl outline-none"
+              style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }} />
+          </Bloque>
+
+          <Bloque titulo="Raza y tamaño adulto">
+            {perfil.raza ? (
+              <div className="flex items-center justify-between">
+                <span style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{perfil.raza.nombre}</span>
+                <button onClick={() => { set("raza", null); set("modoRaza", "raza"); setBusqueda(""); }}
+                        className="text-xs" style={{ color: ROSA, fontFamily: fontBody, cursor: "pointer" }}>
+                  Cambiar
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="relative mb-2">
+                  <Search size={16} style={{ position: "absolute", left: 12, top: 13, color: MALVA }} />
+                  <input
+                    value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
+                    placeholder="Buscar raza"
+                    className="w-full py-2.5 pl-9 pr-3 rounded-xl outline-none"
+                    style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }} />
+                </div>
+                {resultadosRaza.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mb-3">
+                    {resultadosRaza.map((r) => (
+                      <button key={r.nombre} onClick={() => { set("raza", r); set("modoRaza", "raza"); setBusqueda(""); }}
+                        className="text-left px-3 py-2 rounded-lg flex items-center justify-between"
+                        style={{ background: PAPEL, border: "1.5px solid #E3DAF0", cursor: "pointer" }}>
+                        <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>{r.nombre}</span>
+                        <span className="text-[11px]" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          {r.tamano} · ~{r.pesoMedio} kg
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+                <p className="text-xs mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Sin raza definida: tamaño adulto
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {TAMANOS.map((t) => {
+                    const activo = perfil.tamanoManual === t;
+                    return (
+                      <button key={t} onClick={() => { set("tamanoManual", t); set("modoRaza", "sin_raza"); }}
+                        className="py-2 rounded-lg text-center"
+                        style={{ background: activo ? VIOLETA : PAPEL,
+                                 border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                                 color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody,
+                                 fontSize: 13, cursor: "pointer" }}>
+                        {t}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </Bloque>
+
+          <Bloque titulo="Peso y condición corporal">
+            <div className="flex items-baseline gap-2 mb-4">
+              <input
+                type="number" inputMode="decimal" value={perfil.pesoActual}
+                onChange={(e) => {
+                  set("pesoActual", e.target.value);
+                  if (bcsPuesto) set("pesoObjetivoKg", pesoIdealDesdeBcs(Number(e.target.value), bcsPuesto));
+                }}
+                placeholder="0"
+                className="text-2xl pb-1 outline-none bg-transparent w-24"
+                style={{ color: TINTA, fontFamily: fontDisplay,
+                         borderBottom: `2px solid ${perfil.pesoActual ? VIOLETA : "#E3DAF0"}` }} />
+              <span style={{ color: MALVA, fontFamily: fontBody }}>kg</span>
+            </div>
+            <p className="text-xs mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
+              Condición corporal (BCS 1-9)
+            </p>
+            <div className="grid grid-cols-9 gap-1 mb-2">
+              {ESCALA_BCS.map((b) => {
+                const activo = bcsPuesto === b.n;
+                return (
+                  <button key={b.n} onClick={() => ponerBcs(b.n)} aria-label={`BCS ${b.n}`}
+                    title={`${b.n} · ${b.titulo}`}
+                    className="py-2.5 rounded-lg text-center"
+                    style={{ background: activo ? VIOLETA : PAPEL,
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                             color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay,
+                             fontSize: 14, cursor: "pointer" }}>
+                    {b.n}
+                  </button>
+                );
+              })}
+            </div>
+            {filaBcs && (
+              <p className="text-xs leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                <span style={{ color: TINTA, fontWeight: 700 }}>{filaBcs.n} · {filaBcs.titulo}.</span>{" "}
+                {filaBcs.detalle}
+              </p>
+            )}
+            {objetivoBcs && (
+              <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                Peso objetivo estimado:{" "}
+                <span style={{ color: VIOLETA, fontWeight: 700 }}>{objetivoBcs} kg</span>
+                {bcsPuesto === 9 && " (cota inferior: la escala se satura en 9)"}
+              </p>
+            )}
+          </Bloque>
+
+          <Bloque titulo="Actividad">
+            <div className="grid grid-cols-1 gap-1.5">
+              {NIVELES_CLINICOS.map((n, idx) => {
+                const activo = perfil.actividadTocado && perfil.actividadIdx === idx;
+                return (
+                  <button key={n.label}
+                    onClick={() => { set("actividadIdx", idx); set("actividadTocado", true); }}
+                    className="text-left px-3 py-2 rounded-lg flex items-center justify-between"
+                    style={{ background: activo ? "#F0EBF8" : PAPEL,
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                             cursor: "pointer" }}>
+                    <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>{n.label}</span>
+                    <span className="text-[11px] text-right ml-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                      {n.detalle}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </Bloque>
+
+          <Bloque titulo="Alergias alimentarias confirmadas">
+            <SelectorAlimentos
+              lista={perfil.alergias}
+              onAnadir={(item) => anadirA("alergias", item)}
+              onQuitar={(idx) => quitarDe("alergias", idx)}
+              idGrupo="alergias"
+              estadoAbierto={categoriaAbierta}
+              setEstadoAbierto={setCategoriaAbierta} />
+          </Bloque>
+
+          <Bloque titulo="Otras exclusiones (intolerancia, rechazo, criterio clínico)">
+            <SelectorAlimentos
+              lista={perfil.otrosEvitar}
+              onAnadir={(item) => anadirA("otrosEvitar", item)}
+              onQuitar={(idx) => quitarDe("otrosEvitar", idx)}
+              idGrupo="otros"
+              estadoAbierto={categoriaAbierta}
+              setEstadoAbierto={setCategoriaAbierta} />
+          </Bloque>
+
+          <Bloque titulo="Categorías excluidas">
+            <p className="text-xs mb-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              El calcio del hueso se cubre con suplemento si se excluye.
+            </p>
+            {[{ key: "Hueso carnoso", label: "Hueso carnoso" }].map((c) => {
+              const activo = perfil.categoriasExcluidas.includes(c.key);
+              return (
+                <button key={c.key} onClick={() => alternar("categoriasExcluidas", c.key)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg"
+                  style={{ background: activo ? VIOLETA : PAPEL,
+                           border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
+                  <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody, fontSize: 14 }}>{c.label}</span>
+                  {activo && <Check size={15} style={{ color: ROSA }} />}
+                </button>
+              );
+            })}
+          </Bloque>
+
+          <Bloque titulo="Patologías diagnosticadas">
+            <div className="flex flex-col gap-1.5">
+              {PATOLOGIAS.map((pat) => {
+                const activo = perfil.patologias.includes(pat.key);
+                return (
+                  <button key={pat.key} onClick={() => alternar("patologias", pat.key)}
+                    className="flex items-center justify-between px-3 py-2 rounded-lg text-left"
+                    style={{ background: activo ? VIOLETA : PAPEL,
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
+                    <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody, fontSize: 14 }}>
+                      {pat.label}
+                    </span>
+                    {activo && <Check size={15} style={{ color: ROSA }} />}
+                  </button>
+                );
+              })}
+            </div>
+            {bloqueantes.length > 0 && (
+              <div className="flex gap-2 items-start p-3 rounded-xl mt-2" style={{ background: "#FFF0F3" }}>
+                <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
+                <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                  Depende de analíticas y de pH urinario que la app no lee, así que no se genera
+                  ración automática: la formulación es tuya.
+                </p>
+              </div>
+            )}
+          </Bloque>
+
+          <Bloque titulo="Tutor">
+            <input
+              type="text" value={perfil.tutorNombre || ""}
+              onChange={(e) => set("tutorNombre", e.target.value)}
+              placeholder="Nombre del tutor"
+              className="w-full py-2.5 px-3 rounded-xl outline-none mb-2"
+              style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }} />
+            <input
+              type="text" value={perfil.tutorContacto || ""}
+              onChange={(e) => set("tutorContacto", e.target.value)}
+              placeholder="Teléfono o correo"
+              className="w-full py-2.5 px-3 rounded-xl outline-none"
+              style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }} />
+          </Bloque>
+
+          {!puedeGuardar && (
+            <p className="text-xs mb-2" style={{ color: ROSA, fontFamily: fontBody }}>
+              Falta: {faltan.join(", ")}.
+            </p>
+          )}
+          <BotonContinuar activo={puedeGuardar} texto="Guardar ficha" onClick={() => {
+            if (bloqueantes.length > 0) {
+              setMenuError(bloqueantes.map((pat) => pat.aviso).join(" "));
+              setNecesitaVeterinario(true);
+              setFase("generador");
+              setPantalla("veterinario_requerido");
+            } else {
+              setPaso(TOTAL_PASOS + 1);
+              setEditandoLaFicha(false);
+            }
+          }} />
+        </div>
+        {drawerLigero}
+      </div>
+    );
+  }
+
   if (paso === 1) {
     const puedeContinuar = perfil.nombre.trim().length > 0 && perfil.sexo !== null;
     return (
@@ -8282,7 +8682,7 @@ function RawkuOnboardingInterna({
                 de ser "solo" -- así que con un perro, que ni siquiera ve
                 esa elección, salía el texto de varios. Lo que decide el
                 título es cuántos perros hay, no qué se haya elegido. */}
-            {listaDePerros.length > 1 && paraQuien !== "solo"
+            {!enModoProfesional && listaDePerros.length > 1 && paraQuien !== "solo"
               ? <>¿Cómo quieres<br />hacer los menús<br />de la casa?</>
               : <>¿Cómo quieres<br />hacer el menú de<br />{nombreMostrar}?</>}
           </h1>
@@ -8294,7 +8694,7 @@ function RawkuOnboardingInterna({
               las cantidades, perfecto; y si no, los menos cambios de
               alimento posibles"), o dejar que cada uno tenga el suyo.
               Con un solo perro esto no se pinta: no hay nada que elegir. */}
-          {listaDePerros.length > 1 && (
+          {!enModoProfesional && listaDePerros.length > 1 && (
             <>
               {/* ⚠️ El rótulo vuelve a ser "¿Para quién?" (26 agosto). Pasó
                   a "¿Cómo?" el 23 de agosto, cuando para quién dejó de
