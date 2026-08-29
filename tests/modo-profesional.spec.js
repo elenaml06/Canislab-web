@@ -72,6 +72,13 @@ test.describe("el modo veterinario", () => {
     await configurarBackend(request, {
       retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA], menus: [],
       rolProfesional: true, rolVerificado: true,
+      // ⚠️ CON UN PACIENTE (29 agosto). Lo que se prueba aquí es el
+      // interruptor de Ajustes, y para llegar a Ajustes hay que estar
+      // DENTRO de una ficha. Desde que existe la puerta del veterinario, un
+      // acreditado sin ningún paciente entra por su lista vacía y no por
+      // una ficha -- que es justo lo que se quería --, así que sin este
+      // acceso este test fallaría por el motivo equivocado.
+      accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
     });
     await entrar(page);
     await abrirAjustes(page);
@@ -84,8 +91,15 @@ test.describe("el modo veterinario", () => {
     // Lo que se guarda es la ELECCIÓN, no el estado: un veterinario con
     // perro propio puede quedarse en modo tutor y no se le vuelve a mover.
     await configurarBackend(request, {
-      retrasoPerrosMs: 50, perros: [PERRO_DE_PRUEBA], menus: [],
+      retrasoPerrosMs: 50, menus: [],
       rolProfesional: true, rolVerificado: true,
+      // ⚠️ LOS DOS PERROS, y aquí sí hacen falta los dos: este test apaga el
+      // modo y RECARGA. Con solo el paciente, al apagarlo se queda sin
+      // perros (sus pacientes no son suyos) y cae en el asistente, así que
+      // fallaría por el motivo equivocado. Un veterinario con perro propio
+      // es justo el caso que describe el interruptor.
+      perros: [PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA],
+      accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
     });
     await entrar(page);
     await abrirAjustes(page);

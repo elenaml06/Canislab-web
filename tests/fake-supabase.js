@@ -286,11 +286,33 @@ export function crearFakeSupabase(opciones = {}) {
       if (typeof cfg.casaCompraUnica === "boolean") estado.casaCompraUnica = cfg.casaCompraUnica;
       // El rol profesional: dos banderas separadas para poder montar el
       // caso "lo pide y NO está aprobado", que es el que importa.
-      if (typeof cfg.rolProfesional === "boolean") estado.rolProfesional = cfg.rolProfesional;
-      if (typeof cfg.rolVerificado === "boolean") estado.rolVerificado = cfg.rolVerificado;
+      //
+      // ⚠️ Y NO PEGAJOSAS (29 agosto). Se quedaban puestas de un archivo al
+      // siguiente, y desde que la acreditación cambia la PANTALLA DE
+      // ENTRADA -- un veterinario sin pacientes entra por su lista vacía --
+      // eso dejaba a 26 pruebas de temas que no tienen nada que ver
+      // (paywall, peso objetivo, personalizar) esperando una ficha que no
+      // iba a aparecer, cada una hasta agotar su minuto. La batería pasó de
+      // 7 a 20 minutos y el fallo se veía a diez archivos de su causa.
+      estado.rolProfesional = cfg.rolProfesional === true;
+      estado.rolVerificado = cfg.rolVerificado === true;
       if (typeof cfg.fichaConFallos === "boolean") estado.fichaConFallos = cfg.fichaConFallos;
-      if (Array.isArray(cfg.accesos)) estado.accesos = cfg.accesos.map((a) => ({ ...a }));
-      if (typeof cfg.sinTablaAccesos === "boolean") estado.sinTablaAccesos = cfg.sinTablaAccesos;
+      // ⚠️ TAMPOCO PEGAJOSO (29 agosto). Desde que los accesos deciden con
+      // QUÉ PERRO se abre la app -- y no solo qué lista se pinta --, un
+      // acceso olvidado de la prueba anterior cambia la pantalla de entrada
+      // de la siguiente: su perro pasa a ser paciente de nadie, o al revés,
+      // y el test falla lejos de donde está la causa. Se pide o no se tiene.
+      estado.accesos = Array.isArray(cfg.accesos) ? cfg.accesos.map((a) => ({ ...a })) : [];
+      // ⚠️ NO PEGAJOSO (29 agosto), y por un caso real de hoy mismo: este
+      // interruptor hace que `accesos` conteste 404 como si la tabla no
+      // existiera. Encendido en el último test de un archivo, se quedaba
+      // encendido para TODOS los siguientes: los tests de la puerta del
+      // veterinario pasaban sueltos y fallaban en la batería entera, con un
+      // error que no tenía nada que ver (se abría el perro que no toca,
+      // porque sin accesos no se reparte nada). Es el mismo criterio que ya
+      // tienen `menusDistintos` y el retraso al guardar: si no lo pides, se
+      // apaga.
+      estado.sinTablaAccesos = cfg.sinTablaAccesos === true;
       if (typeof cfg.casaAvisos === "boolean") estado.casaAvisos = cfg.casaAvisos;
       // ⚠️ Éste NO es pegajoso, a propósito, al revés que los demás
       // interruptores: cambia el CONTENIDO de los menús, y quedarse

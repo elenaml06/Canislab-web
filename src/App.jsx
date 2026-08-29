@@ -21,6 +21,8 @@ import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import FichaClinica from "./fichaclinica";
 import { perrosDelModo } from "./pacientes";
+import { leerEleccionModo, guardarEleccionModo,
+         enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout } from "./api.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
@@ -3901,19 +3903,17 @@ function RawkuOnboardingInterna({
   // toca el interruptor se guarda lo que quiera y se respeta -- un
   // veterinario con perro propio puede quedarse en modo tutor y no se le
   // vuelve a mover.
-  const [eleccionModo, setEleccionModo] = useState(() => {
-    try {
-      const v = localStorage.getItem("rawku_modo_profesional");
-      return v === null ? null : v === "1";
-    } catch { return null; }
-  });
-  // Y si la acreditación se retira, el modo se apaga solo: si no, alguien
-  // que dejó de estar acreditado seguiría viendo la vista profesional hasta
-  // que se le ocurriera apagarla.
-  const enModoProfesional = acreditado && (eleccionModo === null ? true : eleccionModo);
+  //
+  // ⚠️ LA REGLA VIVE EN `modo.js` (29 agosto). Estaba escrita aquí dentro, y
+  // en cuanto hizo falta en un segundo sitio -- AuthGate, para decidir con
+  // QUÉ PERRO se abre la app -- había que copiarla. Una regla copiada se
+  // separa: es lo mismo que le pasa al DER entre los dos repos, con la
+  // diferencia de que aquí ni siquiera habría dos archivos que comparar.
+  const [eleccionModo, setEleccionModo] = useState(leerEleccionModo);
+  const enModoProfesional = calcularModoProfesional(acreditado, eleccionModo);
   const cambiarModoProfesional = (valor) => {
     setEleccionModo(valor);
-    try { localStorage.setItem("rawku_modo_profesional", valor ? "1" : "0"); } catch { /* navegador sin almacenamiento */ }
+    guardarEleccionModo(valor);
   };
   const [cargandoPerfil] = useState(false); // ya no necesario, carga en AuthGate
 
@@ -3964,6 +3964,21 @@ function RawkuOnboardingInterna({
 
   const [paso, setPaso] = useState(yaTienePerroGuardado ? TOTAL_PASOS + 1 : 1);
 
+  // ⚠️ AÑADIDO (29 agosto) — LA PUERTA DEL VETERINARIO.
+  //
+  // CASO REAL, encontrado por la usuaria entrando con la cuenta de pruebas
+  // acreditada: "he entrado como veterinario y te manda a la misma pantalla
+  // primera que si entras como usuario". Era verdad. Un veterinario sin
+  // pacientes caía en el asistente de siempre, que le preguntaba por "tu
+  // perro" -- y él no viene a apuntar a su perro, viene a dar de alta a un
+  // paciente. Lo profesional que ya existe (la lista, la ficha clínica, el
+  // interruptor) vivía todo un paso más adentro, así que la primera
+  // pantalla no se distinguía en nada.
+  //
+  // Es una pantalla y no un cambio de rótulos porque lo que cambia es el
+  // primer paso: dar de alta a alguien de fuera, no describir al de casa.
+  const [puertaProfesionalPasada, setPuertaProfesionalPasada] = useState(false);
+
   // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
   // que hacía falta: "cuando terminas de generar por primera vez el perfil
   // del perro sí que tienes que tener ese botón, pero cuando entras a
@@ -4006,7 +4021,7 @@ function RawkuOnboardingInterna({
     return perfilDeSupabase ? { ...base, ...perfilDeSupabase } : base;
   });
   const [categoriaAbierta, setCategoriaAbierta] = useState(null);
-  const nombreMostrar = perfil.nombre.trim() || "tu perro";
+  const nombreMostrar = perfil.nombre.trim() || (enModoProfesional ? "el paciente" : "tu perro");
   const [busqueda, setBusqueda] = useState("");
 
   // ⚠️ CAMBIADO — pedido expreso: al entrar, en vez de caer directamente
@@ -6825,6 +6840,60 @@ function RawkuOnboardingInterna({
   // un solo menú, se iba a repetir por definición, y que el sistema ya
   // resolvió en el momento de generarlo. Se salta esta llamada cuando
   // solo hay 1 menú -- el aviso solo tiene sentido real con 2 o más.
+  // ─── LA PUERTA DEL VETERINARIO ────────────────────────────────────────
+  // Un veterinario acreditado sin ningún paciente no entra por el asistente
+  // de "cuéntanos de tu perro": entra por su lista, vacía, con el botón de
+  // dar de alta al primero. Ver el comentario de `puertaProfesionalPasada`.
+  //
+  // Se pinta solo cuando NO hay perro montado (`yaTienePerroGuardado`), que
+  // en modo veterinario significa "ningún paciente": desde el 29 de agosto
+  // AuthGate elige el perro de arranque DENTRO del modo, así que tener el
+  // perro propio ya no cuenta como tener paciente.
+  if (enModoProfesional && paso === 1 && !yaTienePerroGuardado && !puertaProfesionalPasada) {
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+        <Fuentes />
+        <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} titulo={<>Tus<br />pacientes.</>} />
+        <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
+          <div className="px-5 py-6 rounded-2xl mb-6"
+               style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+            <div className="flex items-center gap-3 mb-3">
+              <Award size={20} style={{ color: VIOLETA, flexShrink: 0 }} />
+              <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 17 }}>
+                Todavía no tienes ninguno
+              </p>
+            </div>
+            <p className="text-sm leading-relaxed" style={{ color: MALVA, fontFamily: fontBody }}>
+              Da de alta al primero y Rawku le calcula la ración con los
+              requisitos de FEDIAF, con su ficha clínica y con los topes de su
+              patología si la tiene. Los pacientes van aparte de tus propios
+              perros: no se mezclan en ninguna lista.
+            </p>
+          </div>
+          <button
+            onClick={() => setPuertaProfesionalPasada(true)}
+            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl"
+            style={{ background: VIOLETA, color: "#FFFFFF", border: "none",
+                     fontFamily: fontDisplay, fontSize: 16, cursor: "pointer" }}>
+            <Plus size={18} /> Dar de alta un paciente
+          </button>
+          <div className="flex-1" />
+          {/* Un veterinario con perro propio usa Rawku para las dos cosas.
+              Desde aquí se pasa a su lado de tutor sin ir a buscar el
+              interruptor a Ajustes. */}
+          <button
+            onClick={() => cambiarModoProfesional(false)}
+            className="w-full text-center text-sm py-3"
+            style={{ background: "transparent", border: "none", color: MALVA,
+                     fontFamily: fontBody, cursor: "pointer" }}>
+            Usar Rawku para mi propio perro
+          </button>
+        </div>
+        {drawerLigero}
+      </div>
+    );
+  }
+
   if (paso === 1) {
     const puedeContinuar = perfil.nombre.trim().length > 0 && perfil.sexo !== null;
     return (
@@ -6833,12 +6902,12 @@ function RawkuOnboardingInterna({
         <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)} paso={1} titulo={<>Empecemos por<br />lo esencial.</>} />
         <div className="flex-1 px-6 pt-8 pb-6 flex flex-col">
           <div className="mb-8">
-            <Etiqueta>Nombre del perro</Etiqueta>
+            <Etiqueta>{enModoProfesional ? "Nombre del paciente" : "Nombre del perro"}</Etiqueta>
             <input
               type="text"
               value={perfil.nombre}
               onChange={(e) => set("nombre", e.target.value)}
-              placeholder="Nombre de tu perro"
+              placeholder={enModoProfesional ? "Nombre del paciente" : "Nombre de tu perro"}
               className="w-full text-2xl pb-3 outline-none bg-transparent"
               style={{ color: TINTA, fontFamily: fontDisplay, borderBottom: `2px solid ${perfil.nombre ? VIOLETA : "#E3DAF0"}` }}
             />
@@ -9276,30 +9345,54 @@ function AuthGate() {
         setMigrando(false);
         setSinCuenta(false);
         salirDeSinCuenta();
-        // En paralelo con los perros y no antes: los accesos solo sirven
-        // para repartirlos, así que no merecen retrasar la carga. Si fallan,
-        // getAccesos ya devuelve [] por su cuenta.
-        getAccesos(user.id).then((filas) => {
-          // Se guarda TAL CUAL, incluido el null: distingue "no se han podido
-          // leer" de "no hay ninguno", y de eso depende que un veterinario
-          // vea sus perros o una lista vacía. Ver `pacientes.js`.
-          if (cargaRef.current.token === token) setAccesos(filas);
-        });
-        return getPerros(user.id);
+        // ⚠️ LOS TRES A LA VEZ, Y SE ESPERA A LOS TRES (29 agosto).
+        //
+        // Antes los accesos se pedían "en paralelo y sin esperar", porque
+        // solo servían para repartir la lista. Pero también deciden CON QUÉ
+        // PERRO se abre la app, y eso se decidía aquí abajo sin mirarlos:
+        // se cogía `perrosCargados[0]`, el primero de la cuenta.
+        //
+        // FALLO REAL: un veterinario con su propio perro y un paciente
+        // entraba directamente DENTRO del perro que no toca -- el suyo
+        // estando en modo veterinario, o su paciente estando en modo tutor
+        // --, y encima ese perro no aparecía en la lista de al lado. Las dos
+        // listas no se mezclaban, pero la puerta de entrada sí.
+        //
+        // Van en paralelo (Promise.all), así que la espera es la del más
+        // lento, no la suma. Y si alguno falla se sigue con lo que hay: sin
+        // accesos se ven todos los perros (que es lo que ya hacía
+        // `pacientes.js` con null) y sin rol se entra como tutor.
+        return Promise.all([
+          getPerros(user.id),
+          getAccesos(user.id).catch(() => null),
+          esProfesional(user.id).catch(() => false),
+        ]);
       })
-      .then((lista) => {
+      .then(([lista, filasAccesos, cuentaAcreditada]) => {
         if (cargaRef.current.token !== token) return; // respuesta obsoleta
         const perrosCargados = lista ?? [];
+        // Se guarda TAL CUAL, incluido el null: distingue "no se han podido
+        // leer" de "no hay ninguno", y de eso depende que un veterinario
+        // vea sus perros o una lista vacía. Ver `pacientes.js`.
+        setAccesos(filasAccesos);
+        // El modo se calcula con la MISMA función que la pantalla de dentro
+        // (`modo.js`), no con una copia: si se separaran, la app abriría un
+        // perro que su propia lista no enseña.
+        const enModo = calcularModoProfesional(cuentaAcreditada, leerEleccionModo());
+        const delModo = perrosDelModo(perrosCargados, filasAccesos, enModo);
         // Se recupera el perro con el que se estaba. Si ese perro ya no
-        // existe (se borró desde otro móvil), se cae al primero en vez
-        // de dejar la app sin perro teniendo perros.
+        // existe (se borró desde otro móvil) o es del otro modo, se cae al
+        // primero de este modo en vez de dejar la app sin perro teniendo
+        // perros -- y en vez de abrir uno que no toca.
         const recordado = leerPerroActivoRecordado(user.id);
         const elegido =
-          perrosCargados.find((p) => p.id === recordado) ??
-          perrosCargados[0] ??
+          delModo.find((p) => p.id === recordado) ??
+          delModo[0] ??
           null;
         migaDePan("AuthGate: perros cargados", {
           cuantos: perrosCargados.length,
+          deEsteModo: delModo.length,
+          enModoProfesional: enModo,
           seRecuperoElRecordado: Boolean(recordado && elegido && elegido.id === recordado),
         });
         setPerros(perrosCargados);
