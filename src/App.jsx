@@ -3883,15 +3883,31 @@ function RawkuOnboardingInterna({
   // El modo se guarda en este navegador a propósito y no en Supabase: es de
   // este móvil y de este rato, como la cesta de la compra.
   const [acreditado, setAcreditado] = useState(false);
-  const [modoProfesional, setModoProfesional] = useState(() => {
-    try { return localStorage.getItem("rawku_modo_profesional") === "1"; } catch { return false; }
+
+  // ⚠️ CORREGIDO (28 agosto) — UN VETERINARIO ACREDITADO ENTRA EN SU MODO.
+  //
+  // Antes esto empezaba apagado siempre, así que alguien a quien acabábamos
+  // de acreditar entraba y veía la app de un dueño: lo suyo seguía
+  // escondido detrás de saber que existe un interruptor en Ajustes. Es el
+  // mismo fallo que tenía la pantalla de registro, un paso más adentro.
+  //
+  // Por eso lo que se guarda es la ELECCIÓN, no el estado: `null` significa
+  // "todavía no ha dicho nada", y entonces manda su acreditación. En cuanto
+  // toca el interruptor se guarda lo que quiera y se respeta -- un
+  // veterinario con perro propio puede quedarse en modo tutor y no se le
+  // vuelve a mover.
+  const [eleccionModo, setEleccionModo] = useState(() => {
+    try {
+      const v = localStorage.getItem("rawku_modo_profesional");
+      return v === null ? null : v === "1";
+    } catch { return null; }
   });
-  // Si la acreditación se retira, el modo se apaga solo. Si no, alguien que
-  // dejó de estar acreditado seguiría viendo la vista profesional hasta que
-  // se le ocurriera apagarla.
-  const enModoProfesional = acreditado && modoProfesional;
+  // Y si la acreditación se retira, el modo se apaga solo: si no, alguien
+  // que dejó de estar acreditado seguiría viendo la vista profesional hasta
+  // que se le ocurriera apagarla.
+  const enModoProfesional = acreditado && (eleccionModo === null ? true : eleccionModo);
   const cambiarModoProfesional = (valor) => {
-    setModoProfesional(valor);
+    setEleccionModo(valor);
     try { localStorage.setItem("rawku_modo_profesional", valor ? "1" : "0"); } catch { /* navegador sin almacenamiento */ }
   };
   const [cargandoPerfil] = useState(false); // ya no necesario, carga en AuthGate
@@ -5156,16 +5172,16 @@ function RawkuOnboardingInterna({
             </p>
             {acreditado ? (
               <button
-                onClick={() => cambiarModoProfesional(!modoProfesional)}
+                onClick={() => cambiarModoProfesional(!enModoProfesional)}
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left"
-                style={{ background: "#FFFFFF", border: `1.5px solid ${modoProfesional ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
-                <Award size={17} style={{ color: modoProfesional ? VIOLETA : MALVA, flexShrink: 0 }} />
+                style={{ background: "#FFFFFF", border: `1.5px solid ${enModoProfesional ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
+                <Award size={17} style={{ color: enModoProfesional ? VIOLETA : MALVA, flexShrink: 0 }} />
                 <span className="flex-1">
                   <span className="block" style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>
                     Modo veterinario
                   </span>
                   <span className="block text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
-                    {modoProfesional
+                    {enModoProfesional
                       ? "Encendido: ves la ficha clínica de cada menú"
                       : "Apagado: usas Rawku como cualquier tutor"}
                   </span>
@@ -5174,8 +5190,8 @@ function RawkuOnboardingInterna({
                     dependencia por un botón. */}
                 <span aria-hidden="true" className="shrink-0 rounded-full"
                       style={{ width: 38, height: 22, padding: 3,
-                               background: modoProfesional ? VIOLETA : "#E3DAF0",
-                               display: "flex", justifyContent: modoProfesional ? "flex-end" : "flex-start" }}>
+                               background: enModoProfesional ? VIOLETA : "#E3DAF0",
+                               display: "flex", justifyContent: enModoProfesional ? "flex-end" : "flex-start" }}>
                   <span style={{ width: 16, height: 16, borderRadius: "50%", background: "#FFFFFF" }} />
                 </span>
               </button>

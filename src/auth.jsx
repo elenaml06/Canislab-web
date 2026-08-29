@@ -278,7 +278,23 @@ export default function Auth({ onAutenticado, onSinCuenta = null, hayDatosSinCue
             dice lo que va a pasar de verdad -- que los datos se quedan
             en este móvil -- porque descubrirlo después, al cambiar de
             teléfono y no encontrar nada, es la peor forma de enterarse. */}
-        {onSinCuenta && (
+        {/* ⚠️ SIN CUENTA NO HAY MODO VETERINARIO (28 agosto), así que en
+            cuanto alguien dice que lo es, este botón deja de ofrecerse y
+            se explica por qué. Dejarlo puesto sería mandarle por la única
+            puerta donde NO está lo que ha venido a buscar: sin cuenta no
+            hay perfil, y sin perfil no hay a quién acreditar ni de quién
+            son los pacientes. Se iría pensando que la app no lo tiene. */}
+        {onSinCuenta && modo === 'registro' && esProfesional && (
+          <div style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid #E3DAF0`, textAlign: 'center' }}>
+            <p style={{ margin: 0, color: MALVA, fontFamily: fontBody, fontSize: 12, lineHeight: 1.5 }}>
+              El modo veterinario necesita cuenta: es lo que permite acreditarte y
+              lo que hace que tus pacientes sigan ahí mañana. Sin ella, Rawku
+              funciona, pero como para un dueño.
+            </p>
+          </div>
+        )}
+
+        {onSinCuenta && !(modo === 'registro' && esProfesional) && (
           <div style={{ marginTop: 28, paddingTop: 20, borderTop: `1px solid #E3DAF0`, textAlign: 'center' }}>
             <button
               onClick={onSinCuenta}
