@@ -15,6 +15,7 @@ import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // de alta el usuario y por qué.
 import {
   guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
+  getMenusDelProfesional,
   USUARIO_LOCAL, estaSinCuenta, entrarSinCuenta, salirDeSinCuenta,
   hayDatosLocales, migrarLocalACuenta, vaciarLocal, esProfesional, getAccesos,
   marcarComoPaciente,
@@ -23,6 +24,7 @@ import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import FichaClinica from "./fichaclinica";
 import { perrosDelModo } from "./pacientes";
+import { contiene } from "./texto.js";
 import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicion,
          condicionDesdeBcs, bcsVigente } from "./bcs";
 import { leerEleccionModo, guardarEleccionModo,
@@ -573,6 +575,18 @@ const CONDICIONES = [
 // pantalla las listas SON la respuesta -- una lista vacía es "no tiene" --,
 // pero el resto de la app lee estas banderas, así que se escriben solas para
 // que la ficha no pueda decir dos cosas a la vez.
+// Las seis categorías de comida del catálogo, tal como las nombra el motor.
+// Si un nombre no coincide EXACTAMENTE, la exclusión no hace nada y el menú
+// sale igual -- sin error y sin aviso. Por eso están escritas una sola vez.
+const CATEGORIAS_QUE_PUEDE_EXCLUIR = [
+  { key: "Carne muscular", label: "Carne muscular" },
+  { key: "Hueso carnoso", label: "Hueso carnoso" },
+  { key: "Pescados y mariscos", label: "Pescados y mariscos" },
+  { key: "Vísceras", label: "Vísceras" },
+  { key: "Hígado", label: "Hígado" },
+  { key: "Verduras y frutas", label: "Verduras y frutas" },
+];
+
 const BANDERA_DE = {
   alergias: "alergiaSi",
   otrosEvitar: "otrosEvitarSi",
@@ -3913,6 +3927,55 @@ function cuerpoApiDeUnPerro(perfil) {
   };
 }
 
+// ─── LAS DOS PIEZAS DE LA FICHA CLÍNICA, FUERA DE LA PANTALLA ───────────────
+//
+// ⚠️ CASO REAL ENCONTRADO POR LA USUARIA EN EL MÓVIL (29 agosto): "cuando
+// pide el nombre del paciente, cada vez que selecciono una letra se quita el
+// teclado".
+//
+// Estaban definidas DENTRO del componente grande. Eso las convierte en un
+// tipo de componente NUEVO en cada render: React no puede saber que
+// `<Bloque>` de esta vuelta es el mismo `<Bloque>` de la anterior, así que
+// desmonta todo lo que hay dentro y lo vuelve a montar. El `<input>` deja de
+// ser el mismo nodo del DOM, pierde el foco, y en un móvil eso significa que
+// el teclado se cierra -- a cada letra.
+//
+// En un ordenador casi no se nota (el cursor parpadea y sigues escribiendo);
+// en un teléfono hace la pantalla inservible. Es la razón por la que una
+// función que devuelve JSX no puede vivir dentro de otro componente si algo
+// de dentro guarda estado -- y un campo de texto con el foco lo guarda.
+function BloqueFicha({ titulo, children }) {
+  return (
+    <div className="rounded-2xl px-4 py-4 mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+      <p className="text-[11px] tracking-[0.14em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
+        {titulo}
+      </p>
+      {children}
+    </div>
+  );
+}
+
+function OpcionesFicha({ opciones, valor, onElegir, columnas = 2 }) {
+  return (
+    <div className={`grid gap-2 grid-cols-${columnas}`}>
+      {opciones.map((op) => {
+        const activo = valor === op.key;
+        return (
+          <button key={op.key} onClick={() => onElegir(op.key)}
+            className="py-2.5 rounded-xl text-center"
+            style={{ background: activo ? VIOLETA : PAPEL,
+                     border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                     color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody,
+                     fontSize: 14, cursor: "pointer" }}>
+            {op.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+
 function RawkuOnboardingInterna({
   usuario,
   perroInicial,
@@ -4071,6 +4134,16 @@ function RawkuOnboardingInterna({
   // Es una pantalla y no un cambio de rótulos porque lo que cambia es el
   // primer paso: dar de alta a alguien de fuera, no describir al de casa.
   const [puertaProfesionalPasada, setPuertaProfesionalPasada] = useState(false);
+
+  // ─── LOS MENÚS DE TODOS SUS PACIENTES ─────────────────────────────────
+  // ⚠️ PEDIDO EXPRESO (29 agosto): "en lo de los menús tiene que haber una
+  // opción de filtros, rollo filtrar por paciente, filtrar por nombre del
+  // dueño, filtrar por raza". La pantalla de un dueño enseña los menús DEL
+  // perro en el que está, porque un dueño entra ya dentro de su perro. Un
+  // veterinario no: entra a buscar, y lo que busca puede ser de cualquiera
+  // de sus pacientes.
+  const [menusDeTodos, setMenusDeTodos] = useState(null);   // null = sin cargar
+  const [filtroMenus, setFiltroMenus] = useState("");
 
   // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
   // que hacía falta: "cuando terminas de generar por primera vez el perfil
@@ -5467,6 +5540,23 @@ function RawkuOnboardingInterna({
       </div>
     </div>
   );
+
+  // Se cargan al entrar en la pantalla, no al arrancar la app: son hasta 200
+  // filas y solo hacen falta cuando se va a buscar entre ellas.
+  useEffect(() => {
+    if (!enModoProfesional || fase !== "misMenus" || !usuario?.id || sinCuenta) return;
+    if (menusDeTodos !== null) return;
+    let vivo = true;
+    getMenusDelProfesional(usuario.id)
+      .then((filas) => { if (vivo) setMenusDeTodos(filas); })
+      .catch((err) => {
+        capturarError(err, { donde: "getMenusDelProfesional" });
+        // Lista vacía NO: eso diría "no tienes menús" cuando lo que pasa es
+        // que no se han podido leer. Se deja en null y se dice.
+        if (vivo) setMenusDeTodos(undefined);
+      });
+    return () => { vivo = false; };
+  }, [enModoProfesional, fase, usuario, sinCuenta, menusDeTodos]);
 
   const cerrarPaneles = () => {
     setMenuLigeroAbierto(false);
@@ -7111,32 +7201,6 @@ function RawkuOnboardingInterna({
       .map((k) => PATOLOGIAS.find((p) => p.key === k))
       .filter((p) => p && !p.segura);
 
-    const Bloque = ({ titulo, children }) => (
-      <div className="rounded-2xl px-4 py-4 mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
-        <p className="text-[11px] tracking-[0.14em] uppercase mb-3" style={{ color: MALVA, fontFamily: "monospace" }}>
-          {titulo}
-        </p>
-        {children}
-      </div>
-    );
-    const Opciones = ({ opciones, valor, onElegir, columnas = 2 }) => (
-      <div className={`grid gap-2 grid-cols-${columnas}`}>
-        {opciones.map((op) => {
-          const activo = valor === op.key;
-          return (
-            <button key={op.key} onClick={() => onElegir(op.key)}
-              className="py-2.5 rounded-xl text-center"
-              style={{ background: activo ? VIOLETA : PAPEL,
-                       border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
-                       color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody,
-                       fontSize: 14, cursor: "pointer" }}>
-              {op.label}
-            </button>
-          );
-        })}
-      </div>
-    );
-
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
@@ -7144,7 +7208,7 @@ function RawkuOnboardingInterna({
                   titulo={perfil._id ? "Ficha del paciente" : "Nuevo paciente"} />
         <div className="flex-1 overflow-y-auto px-5 pt-6 pb-6">
 
-          <Bloque titulo="Identificación">
+          <BloqueFicha titulo="Identificación">
             <input
               type="text" value={perfil.nombre} onChange={(e) => set("nombre", e.target.value)}
               placeholder="Nombre del paciente"
@@ -7152,12 +7216,12 @@ function RawkuOnboardingInterna({
               style={{ color: TINTA, fontFamily: fontDisplay,
                        borderBottom: `2px solid ${perfil.nombre ? VIOLETA : "#E3DAF0"}` }} />
             <p className="text-xs mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>Sexo</p>
-            <Opciones opciones={[{ key: "macho", label: "Macho" }, { key: "hembra", label: "Hembra" }]}
+            <OpcionesFicha opciones={[{ key: "macho", label: "Macho" }, { key: "hembra", label: "Hembra" }]}
                       valor={perfil.sexo} onElegir={(v) => set("sexo", v)} />
             <p className="text-xs mt-3 mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
               Estado reproductivo
             </p>
-            <Opciones opciones={[{ key: "no", label: "Entero" }, { key: "si", label: "Esterilizado" }]}
+            <OpcionesFicha opciones={[{ key: "no", label: "Entero" }, { key: "si", label: "Esterilizado" }]}
                       valor={perfil.esterilizado} onElegir={(v) => set("esterilizado", v)} />
             <p className="text-xs mt-3 mb-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
               Fecha de nacimiento {edad && `· ${edad.anios} a ${edad.meses} m`}
@@ -7170,9 +7234,9 @@ function RawkuOnboardingInterna({
               }}
               className="w-full py-2.5 px-3 rounded-xl outline-none"
               style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }} />
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Raza y tamaño adulto">
+          <BloqueFicha titulo="Raza y tamaño adulto">
             {perfil.raza ? (
               <div className="flex items-center justify-between">
                 <span style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>{perfil.raza.nombre}</span>
@@ -7225,9 +7289,9 @@ function RawkuOnboardingInterna({
                 </div>
               </>
             )}
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Peso y condición corporal">
+          <BloqueFicha titulo="Peso y condición corporal">
             <div className="flex items-baseline gap-2 mb-4">
               <input
                 type="number" inputMode="decimal" value={perfil.pesoActual}
@@ -7273,9 +7337,9 @@ function RawkuOnboardingInterna({
                 {bcsPuesto === 9 && " (cota inferior: la escala se satura en 9)"}
               </p>
             )}
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Actividad">
+          <BloqueFicha titulo="Actividad">
             <div className="grid grid-cols-1 gap-1.5">
               {NIVELES_CLINICOS.map((n, idx) => {
                 const activo = perfil.actividadTocado && perfil.actividadIdx === idx;
@@ -7294,9 +7358,9 @@ function RawkuOnboardingInterna({
                 );
               })}
             </div>
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Alergias alimentarias confirmadas">
+          <BloqueFicha titulo="Alergias alimentarias confirmadas">
             <SelectorAlimentos
               lista={perfil.alergias}
               onAnadir={(item) => anadirA("alergias", item)}
@@ -7304,9 +7368,9 @@ function RawkuOnboardingInterna({
               idGrupo="alergias"
               estadoAbierto={categoriaAbierta}
               setEstadoAbierto={setCategoriaAbierta} />
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Otras exclusiones (intolerancia, rechazo, criterio clínico)">
+          <BloqueFicha titulo="Otras exclusiones (intolerancia, rechazo, criterio clínico)">
             <SelectorAlimentos
               lista={perfil.otrosEvitar}
               onAnadir={(item) => anadirA("otrosEvitar", item)}
@@ -7314,13 +7378,23 @@ function RawkuOnboardingInterna({
               idGrupo="otros"
               estadoAbierto={categoriaAbierta}
               setEstadoAbierto={setCategoriaAbierta} />
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Categorías excluidas">
+          <BloqueFicha titulo="Categorías excluidas">
             <p className="text-xs mb-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-              El calcio del hueso se cubre con suplemento si se excluye.
+              Lo que quede fuera se cubre con el resto de la ración o con suplemento. Si no hay
+              forma de cumplir los requisitos sin ella, el motor lo dice en vez de apañarlo.
             </p>
-            {[{ key: "Hueso carnoso", label: "Hueso carnoso" }].map((c) => {
+            {/* ⚠️ LAS SEIS, NO SOLO EL HUESO (29 agosto). Al dueño se le ofrece
+                únicamente "hueso carnoso", y con razón: es el caso real que se
+                pidió (un senior sin dientes) y las demás no las va a querer
+                quitar nadie por su cuenta. Un veterinario sí: una dieta de
+                eliminación deja fuera el pescado, una hepatopatía puede querer
+                sin vísceras, un ensayo de proteína novel se queda sin carne
+                muscular del catálogo. El motor las acepta todas desde siempre
+                -- `categorias_excluidas` es una lista --, así que lo que
+                faltaba era ofrecérselas. */}
+            {CATEGORIAS_QUE_PUEDE_EXCLUIR.map((c) => {
               const activo = perfil.categoriasExcluidas.includes(c.key);
               return (
                 <button key={c.key} onClick={() => alternar("categoriasExcluidas", c.key)}
@@ -7332,9 +7406,9 @@ function RawkuOnboardingInterna({
                 </button>
               );
             })}
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Patologías diagnosticadas">
+          <BloqueFicha titulo="Patologías diagnosticadas">
             <div className="flex flex-col gap-1.5">
               {PATOLOGIAS.map((pat) => {
                 const activo = perfil.patologias.includes(pat.key);
@@ -7360,9 +7434,29 @@ function RawkuOnboardingInterna({
                 </p>
               </div>
             )}
-          </Bloque>
+          </BloqueFicha>
 
-          <Bloque titulo="Tutor">
+          <BloqueFicha titulo="Dieta actual">
+            {/* ⚠️ PEDIDO EXPRESO (29 agosto): "no se pregunta qué come
+                actualmente el perro. Eso es muy importante para la
+                transición también". Al dueño se le pregunta en el generador;
+                en la ficha clínica es un dato del paciente -- de aquí sale
+                si hace falta un plan de cambio gradual y desde qué. */}
+            <OpcionesFicha
+              opciones={[{ key: "pienso", label: "Pienso" },
+                         { key: "cocinada", label: "Cocinada" },
+                         { key: "barf_otra", label: "BARF / cruda" }]}
+              valor={dietaActual}
+              onElegir={(v) => setDietaActual(v)}
+              columnas={3} />
+            {dietaActual && dietaActual !== "barf_otra" && (
+              <p className="text-xs mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                Con este cambio hace falta transición gradual: sale en la pauta.
+              </p>
+            )}
+          </BloqueFicha>
+
+          <BloqueFicha titulo="Tutor">
             <input
               type="text" value={perfil.tutorNombre || ""}
               onChange={(e) => set("tutorNombre", e.target.value)}
@@ -7375,7 +7469,7 @@ function RawkuOnboardingInterna({
               placeholder="Teléfono o correo"
               className="w-full py-2.5 px-3 rounded-xl outline-none"
               style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }} />
-          </Bloque>
+          </BloqueFicha>
 
           {!puedeGuardar && (
             <p className="text-xs mb-2" style={{ color: ROSA, fontFamily: fontBody }}>
@@ -8117,7 +8211,8 @@ function RawkuOnboardingInterna({
   }
 
   if (fase === "misMenus") {
-    const ETIQUETAS_MODO = { automatico: "Automático", personalizar: "Personalizado" };
+    const ETIQUETAS_MODO = { automatico: "Automático", personalizar: "Personalizado",
+                             formulado: "Formulado" };
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
@@ -8126,9 +8221,11 @@ function RawkuOnboardingInterna({
             <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
             {burbujaDePerfil(true)}
           </div>
-          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>Mis menús</p>
+          <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+            {enModoProfesional ? "Menús" : "Mis menús"}
+          </p>
           <h1 className="text-3xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
-            Los menús de<br />{nombreMostrar}
+            {enModoProfesional ? <>Los menús de<br />tus pacientes</> : <>Los menús de<br />{nombreMostrar}</>}
           </h1>
         </div>
 
@@ -8150,7 +8247,88 @@ function RawkuOnboardingInterna({
             <Plus size={17} /> Hacer otro menú
           </button>
 
-          {cargandoMenusGuardados ? (
+          {/* ─── EL BUSCADOR DEL VETERINARIO ─────────────────────────────
+              Un solo campo que mira el nombre del paciente, el del tutor y la
+              raza. Se pidieron tres filtros; una caja que busca en los tres
+              hace lo mismo y no obliga a elegir por cuál buscar antes de
+              saber qué buscas. Sin tildes, como el resto (ver texto.js). */}
+          {enModoProfesional && (
+            <div className="mb-3">
+              <div className="relative">
+                <Search size={16} style={{ position: "absolute", left: 12, top: 13, color: MALVA }} />
+                <input
+                  value={filtroMenus}
+                  onChange={(e) => setFiltroMenus(e.target.value)}
+                  placeholder="Buscar por paciente, tutor o raza"
+                  aria-label="Buscar menús"
+                  className="w-full py-2.5 pl-9 pr-3 rounded-xl outline-none"
+                  style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
+                           color: TINTA, fontFamily: fontBody }} />
+              </div>
+            </div>
+          )}
+
+          {enModoProfesional ? (
+            menusDeTodos === null ? (
+              <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>Cargando...</p>
+            ) : menusDeTodos === undefined ? (
+              <p className="text-sm" style={{ color: ROSA, fontFamily: fontBody }}>
+                No se han podido cargar los menús. Vuelve a entrar en un momento.
+              </p>
+            ) : (() => {
+              const porPerro = Object.fromEntries((perros || []).map((p) => [p.id, p]));
+              const filas = menusDeTodos.filter((m) => {
+                if (!filtroMenus.trim()) return true;
+                const p = porPerro[m.perro_id] || {};
+                return contiene(p.nombre || "", filtroMenus)
+                    || contiene(p.tutor_nombre || "", filtroMenus)
+                    || contiene(nombreDeRaza(p.raza) || "", filtroMenus)
+                    || contiene(m.nombre || "", filtroMenus);
+              });
+              if (filas.length === 0) {
+                return (
+                  <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
+                    {menusDeTodos.length === 0
+                      ? "Todavía no has hecho ningún menú. En cuanto formules uno, aparecerá aquí."
+                      : `Ningún menú de tus pacientes cuadra con «${filtroMenus}».`}
+                  </p>
+                );
+              }
+              return (
+                <div className="flex flex-col gap-2">
+                  {filas.map((fila) => {
+                    const p = porPerro[fila.perro_id] || {};
+                    return (
+                      <button key={fila.id} onClick={() => abrirMenuGuardado(fila)}
+                        className="flex items-center gap-3 p-4 rounded-2xl text-left"
+                        style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
+                                 cursor: "pointer" }}>
+                        <div className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
+                             style={{ background: VIOLETA }}>
+                          <ClipboardList size={16} style={{ color: ROSA }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                            {p.nombre || "Paciente"}
+                          </p>
+                          <p className="text-[11px] mt-0.5" style={{ color: MALVA, fontFamily: fontBody }}>
+                            {[nombreDeRaza(p.raza), p.tutor_nombre, fecha(fila.created_at)]
+                              .filter(Boolean).join(" · ")}
+                          </p>
+                          <p className="text-[10px] tracking-[0.1em] uppercase mt-0.5"
+                             style={{ color: MALVA, fontFamily: "monospace" }}>
+                            {ETIQUETAS_MODO[fila.modo] || "Automático"}
+                            {fila.der_real ? ` · ${Math.round(fila.der_real)} kcal` : ""}
+                          </p>
+                        </div>
+                        <ChevronRight size={16} style={{ color: "#C9BEDD" }} />
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()
+          ) : cargandoMenusGuardados ? (
             <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>Cargando...</p>
           ) : menusGuardados.length === 0 ? (
             <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -8504,7 +8682,14 @@ function RawkuOnboardingInterna({
             guarda antes de empezar la siguiente (ver
             anadirOtroPerroGuardandoEste). Con dos o más ya no hace falta
             invitar a nada — para eso están las pestañas de arriba. */}
-        {listaDePerros.length === 1 && <div className="mt-3">{invitacionAOtroPerro}</div>}
+        {/* ⚠️ NUNCA EN MODO VETERINARIO (29 agosto). "¿Tienes más perros? Añade
+            a otro y podréis hacer sus menús lo más parecidos posible: una sola
+            compra para los dos" es una idea de casa. Los pacientes de un
+            veterinario no viven juntos ni comen de la misma bolsa. Es lo mismo
+            que ya se quitó de "¿para quién es el menú?" */}
+        {!enModoProfesional && listaDePerros.length === 1 && (
+          <div className="mt-3">{invitacionAOtroPerro}</div>
+        )}
 
         {/* ⚠️ AÑADIDO — borrar perro. Hasta ahora un perro creado por
             error se quedaba en la cuenta para siempre: no había forma de
@@ -8812,6 +8997,7 @@ function RawkuOnboardingInterna({
           categoriasExcluidas={perfil?.categoriasExcluidas || []}
           onVolver={() => setFase("onboarding")}
           onAbrirPanel={() => setMenuLigeroAbierto(true)}
+          dietaActual={dietaActual}
           firmante={perfilProfesional}
           onFirmar={async (documento) => {
             // Se guarda TAL CUAL lo que selló la API. La seguridad por fila
@@ -8829,7 +9015,7 @@ function RawkuOnboardingInterna({
             });
             return fila;
           }}
-          onGuardar={(gramosFormulados, estadoFinal) => {
+          onGuardar={(gramosFormulados, estadoFinal, indicaciones) => {
             const comoUnMenu = {
               factible: true,
               menu: gramosFormulados,
@@ -8838,9 +9024,20 @@ function RawkuOnboardingInterna({
               kcal_total: estadoFinal?.kcal ?? null,
               gramos_total: estadoFinal?.gramos_total ?? null,
               formulado_por_el_profesional: true,
+              // Lo que él ha escrito para el tutor se guarda con el menú:
+              // una pauta son los gramos Y qué hacer con ellos.
+              indicaciones: indicaciones || "",
             };
-            setMenuReal(comoUnMenu);
-            setPantalla("resultado");
+            // ⚠️ NO SE NAVEGA A NINGUNA PARTE (29 agosto). Antes esto hacía
+            // `setPantalla("resultado")` y el veterinario acababa en la
+            // pantalla del dueño: la del menú con "editar", "cómo darlo",
+            // la cesta y el plan de transición para casa. CASO REAL de la
+            // usuaria: "te lleva a una pantalla igual que el generador de
+            // menú del usuario, y eso no me gusta... no tiene sentido, tiene
+            // que ser profesional".
+            //
+            // Se queda donde está, con lo que acaba de formular delante, y
+            // el propio formulador dice que está guardada y dónde mirarla.
             if (usuario && !sinCuenta) {
               guardarMenu(usuario.id, perfil._id || null, {
                 modo: "formulado",
@@ -9144,7 +9341,7 @@ function RawkuOnboardingInterna({
               pantalla en la que te pide lo del menú, no solo en la ficha.
               Es el otro momento en que se piensa en ello: estás a punto
               de hacer un menú y te acuerdas de que en casa hay dos. */}
-          {listaDePerros.length === 1 && invitacionAOtroPerro}
+          {!enModoProfesional && listaDePerros.length === 1 && invitacionAOtroPerro}
           <div className="flex-1" />
           </div>
         {drawerLigero}

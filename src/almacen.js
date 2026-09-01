@@ -35,6 +35,7 @@ import {
   guardarPerro as guardarPerroRemoto,
   eliminarPerro as eliminarPerroRemoto,
   getMenus as getMenusRemotos,
+  getMenusDelProfesional as getMenusDelProfesionalRemoto,
   guardarMenu as guardarMenuRemoto,
   eliminarMenu as eliminarMenuRemoto,
   actualizarMenu as actualizarMenuRemoto,
@@ -154,6 +155,20 @@ export async function eliminarPerro(perroId) {
 }
 
 // ─── MENÚS ────────────────────────────────────────────────────────────────────
+
+/**
+ * Los menús de TODOS los pacientes de un profesional, para poder buscar
+ * entre ellos.
+ *
+ * No tiene versión local a propósito: sin cuenta no hay modo veterinario --
+ * eso se decidió en la pantalla de registro -- así que aquí no hay nada que
+ * repartir entre el navegador y Supabase. Pasa por el almacén igualmente,
+ * porque es la puerta por la que salen los datos y saltársela una vez es
+ * como se empiezan a tener dos.
+ */
+export async function getMenusDelProfesional(userId) {
+  return getMenusDelProfesionalRemoto(userId)
+}
 
 export async function getMenus(perroId) {
   if (!esIdLocal(perroId)) return getMenusRemotos(perroId)

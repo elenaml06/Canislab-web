@@ -176,3 +176,73 @@ test("y sin lo imprescindible no deja guardar, diciendo qué falta", async ({ pa
   await expect(page.getByText(/^Falta: /)).not.toContainText("nombre");
   await expect(page.getByText(/^Falta: /)).toContainText("BCS");
 });
+
+test("se puede ESCRIBIR en la ficha: el teclado no se cierra a cada letra", async ({ page, request }) => {
+  // ⚠️ CASO REAL ENCONTRADO POR LA USUARIA EN EL MÓVIL (29 agosto): "cuando
+  // pide el nombre del paciente, cada vez que selecciono una letra se quita
+  // el teclado".
+  //
+  // Las piezas de la ficha (`Bloque`, `Opciones`) estaban definidas DENTRO
+  // del componente grande, así que en cada render eran un tipo de componente
+  // NUEVO: React desmontaba todo lo de dentro y lo volvía a montar. El input
+  // dejaba de ser el mismo nodo del DOM, perdía el foco, y en un teléfono eso
+  // cierra el teclado. A cada letra.
+  //
+  // Por eso esto NO usa `fill()`, que escribe de golpe y pasaría con el fallo
+  // puesto: escribe letra a letra, como una persona, y comprueba que llegan
+  // todas Y que el campo sigue teniendo el foco.
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true,
+    perros: [], accesos: [], menus: [],
+  });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  const campo = page.getByPlaceholder("Nombre del paciente");
+  await campo.click();
+  await page.keyboard.type("Nala");
+  await expect(campo).toHaveValue("Nala");
+  await expect(campo).toBeFocused();
+
+  // Y lo mismo en el peso, que es el otro campo donde se escribe seguido.
+  const peso = page.getByRole("spinbutton").first();
+  await peso.click();
+  await page.keyboard.type("12.5");
+  await expect(peso).toHaveValue("12.5");
+  await expect(peso).toBeFocused();
+});
+
+test("el veterinario puede excluir cualquier categoría, no solo el hueso", async ({ page, request }) => {
+  // ⚠️ PEDIDO EXPRESO (29 agosto): "en categorías excluidas solo aparece
+  // hueso carnoso". Al dueño se le ofrece solo esa, y con razón -- es el caso
+  // real que se pidió, un senior sin dientes. Un veterinario tiene otros: una
+  // dieta de eliminación deja fuera el pescado, un ensayo de proteína novel
+  // se queda sin la carne muscular del catálogo. El motor las acepta todas
+  // desde siempre; lo que faltaba era ofrecérselas.
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true,
+    perros: [], accesos: [], menus: [],
+  });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  for (const cat of ["Carne muscular", "Hueso carnoso", "Pescados y mariscos",
+                     "Vísceras", "Hígado", "Verduras y frutas"]) {
+    await expect(page.getByRole("button", { name: cat, exact: true })).toBeVisible();
+  }
+});
+
+test("y en modo veterinario no se ofrece «¿tienes más perros?»", async ({ page, request }) => {
+  // Otra idea de casa: "añade a otro y podréis hacer sus menús lo más
+  // parecidos posible: una sola compra para los dos". Los pacientes de un
+  // veterinario no viven juntos ni comen de la misma bolsa.
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true,
+    perros: [PERRO_DE_PRUEBA],
+    accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
+    menus: [],
+  });
+  await entrar(page);
+  await page.getByText("Nombre y sexo").waitFor();
+  await expect(page.getByText(/¿Tienes más perros\?/)).toHaveCount(0);
+});
