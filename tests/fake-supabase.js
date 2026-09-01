@@ -877,9 +877,16 @@ export function crearFakeSupabase(opciones = {}) {
         // que hace que el test detecte un perro_id mal guardado.
         const filtro = url.searchParams.get("perro_id");
         const perroId = filtro && filtro.startsWith("eq.") ? filtro.slice(3) : null;
-        const filas = perroId
-          ? estado.menus.filter((m) => String(m.perro_id) === perroId)
-          : estado.menus;
+        // ⚠️ Y por `creado_por`, que es como el veterinario pide los menús de
+        // TODOS sus pacientes. Se filtra de verdad, igual que por perro: si
+        // la app dejara de rellenar esa columna -- ya pasó, y por eso existe
+        // -- la lista saldría vacía y la prueba lo vería.
+        const filtroCreador = url.searchParams.get("creado_por");
+        const creador = filtroCreador && filtroCreador.startsWith("eq.")
+          ? filtroCreador.slice(3) : null;
+        let filas = estado.menus;
+        if (perroId) filas = filas.filter((m) => String(m.perro_id) === perroId);
+        if (creador) filas = filas.filter((m) => String(m.creado_por) === creador);
         return responder(200, filas);
       }
       if (req.method === "DELETE") {

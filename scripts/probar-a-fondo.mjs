@@ -247,6 +247,32 @@ if (documentoDePrueba) {
             `${distinto.sello_del_documento} → ${distinto.sello_recalculado}`);
 }
 
+console.log(`\n${G}════ 4b. EXCLUIR UNA CATEGORÍA ENTERA LA QUITA DE VERDAD ════${F}`);
+// ⚠️ Los nombres de las categorías viajan como TEXTO. Si uno no coincide
+// exactamente con el del catálogo, la exclusión no hace nada -- y el menú
+// sale igual, verde, con la categoría dentro. Sin error y sin aviso. Desde
+// que el veterinario puede excluir las seis, esto hay que comprobarlo contra
+// el catálogo de verdad y no fiarse de haberlas escrito bien.
+const _BASE_CAT = { der_objetivo: 1230, etapa_requisitos: "Adulto", peso_perro_kg: 25,
+                    nombres_alimentos: [], modo: "automatico" };
+for (const cat of ["Carne muscular", "Hueso carnoso", "Pescados y mariscos",
+                   "Vísceras", "Hígado", "Verduras y frutas"]) {
+  let r;
+  try { r = await pedir("/menu/v2", { ..._BASE_CAT, categorias_excluidas: [cat] }); }
+  catch (err) { mal(`sin ${cat}: la API ha reventado`, String(err.message)); continue; }
+  if (!r.factible) {
+    aviso(`sin ${cat}: no hay menú`, (r.motivo || "").slice(0, 80));
+    continue;
+  }
+  const estado = await pedir("/formular/estado", {
+    ..._BASE_CAT, categorias_excluidas: [cat], gramos_por_alimento: r.menu });
+  const dentro = (estado.reparto_categorias || {})[cat];
+  comprobar(!dentro, `sin ${cat}`,
+            dentro ? `el menú lleva ${dentro} g de ${cat} y estaba excluida — ¿el nombre no `
+                   + `coincide con el del catálogo?`
+                   : `${Object.keys(estado.reparto_categorias || {}).join(", ")}`);
+}
+
 console.log(`\n${G}════ 5. LA BASE DE VERDAD ════${F}`);
 const EMAIL_A = process.env.RAWKU_PRUEBA_EMAIL_A;
 const PASS_A = process.env.RAWKU_PRUEBA_PASSWORD_A;

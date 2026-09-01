@@ -263,3 +263,99 @@ test("un tutor no ve las pautas firmadas por ningún lado", async ({ page, reque
   await expect(page.getByRole("dialog", { name: "Panel lateral" })
                    .getByRole("button", { name: "Pautas firmadas" })).toHaveCount(0);
 });
+
+test("guardar no te manda a la pantalla del dueño: lo dice y te deja donde estabas", async ({ page, request }) => {
+  // ⚠️ CASO REAL DE LA USUARIA (29 agosto): "cuando guardas la pauta te lleva
+  // a una pantalla igual que el generador de menú del usuario, y eso no me
+  // gusta... tienes ahí el editar, el cómo darlo... no tiene sentido, tiene
+  // que ser profesional". Se queda donde está, con lo que acaba de formular
+  // delante, y se le dice dónde ha quedado.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByLabel("Buscar alimento").fill("pollo");
+  await page.getByRole("button", { name: /Carne muscular de pollo/ }).click();
+  await page.getByLabel("Gramos de Carne muscular de pollo").fill("700");
+  await page.getByRole("button", { name: /Guardar la pauta/ }).click();
+
+  await expect(page.getByText(/Guardada en los menús de/)).toBeVisible();
+  // Y sigue en el formulador, no en la pantalla del dueño.
+  await expect(page.getByText("Formular la ración")).toBeVisible();
+  await expect(page.getByText(/Cómo se prepara|Plan de transición|Lista de la compra/)).toHaveCount(0);
+});
+
+test("el «cómo darlo» lo propone Rawku y lo puede cambiar entero", async ({ page, request }) => {
+  // ⚠️ PEDIDO EXPRESO: "tiene que haber una sección de cómo darlo que
+  // proponga Rawku, pero que él pueda modificar todo lo que quiera". Lo que
+  // firma un colegiado no puede ser un texto que él no haya podido tocar.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByLabel("Buscar alimento").fill("pollo");
+  await page.getByRole("button", { name: /Carne muscular de pollo/ }).click();
+
+  const campo = page.getByLabel("Cómo darlo");
+  await expect(campo).toBeVisible();
+  // Rawku propone: la indicación de la categoría del alimento que hay puesto.
+  await expect(campo).toHaveValue(/Carne muscular/);
+  // Y se puede reescribir entero.
+  await campo.fill("Se sirve a temperatura ambiente, en dos tomas.");
+  await expect(campo).toHaveValue("Se sirve a temperatura ambiente, en dos tomas.");
+  // Con la puerta de vuelta, para no perder la propuesta por haberla tocado.
+  await page.getByRole("button", { name: /Volver a la propuesta/ }).click();
+  await expect(campo).toHaveValue(/Carne muscular/);
+});
+
+test("los menús de TODOS sus pacientes, y se pueden buscar", async ({ page, request }) => {
+  // ⚠️ PEDIDO EXPRESO (29 agosto): "en lo de los menús tiene que haber una
+  // opción de filtros, rollo filtrar por paciente, filtrar por nombre del
+  // dueño, filtrar por raza".
+  //
+  // La pantalla de un dueño enseña los menús DEL perro en el que está,
+  // porque un dueño entra ya dentro de su perro. Un veterinario entra a
+  // buscar, y lo que busca puede ser de cualquiera de sus pacientes.
+  const NALA = { ...PERRO_DE_PRUEBA, nombre: "Nala", raza: "Pastor alemán",
+                 tutor_nombre: "María López" };
+  const CAIRO = { ...PERRO_DE_PRUEBA, id: "22222222-2222-4222-8222-222222222222",
+                  nombre: "Cairo", raza: "Bulldog francés", tutor_nombre: "Juan Pérez" };
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true,
+    perros: [NALA, CAIRO],
+    accesos: [{ perro_id: NALA.id, estado: "activo" },
+              { perro_id: CAIRO.id, estado: "activo" }],
+    menus: [
+      { id: "m1", perro_id: NALA.id, creado_por: CUENTA_DE_PRUEBA.userId, modo: "formulado",
+        der_real: 1200, created_at: "2026-08-28T10:00:00.000Z", menus_data: [] },
+      { id: "m2", perro_id: CAIRO.id, creado_por: CUENTA_DE_PRUEBA.userId, modo: "formulado",
+        der_real: 660, created_at: "2026-08-29T10:00:00.000Z", menus_data: [] },
+    ],
+  });
+  await page.goto("/");
+  await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+  await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByText("Nombre y sexo").waitFor();
+  await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+  await page.getByRole("dialog", { name: "Panel lateral" })
+            .getByRole("button", { name: "Menús", exact: true }).click();
+
+  // Las FILAS de la lista, no la burbuja de arriba (que también dice el
+  // nombre del paciente abierto y haría pasar la prueba sin lista).
+  const filaDe = (nombre) => page.getByRole("button", { name: new RegExp(`^${nombre} `) });
+
+  // Están los de los dos pacientes, no solo los del que está abierto.
+  await expect(page.getByRole("heading", { name: /Los menús de tus pacientes/ })).toBeVisible();
+  await expect(filaDe("Nala")).toBeVisible();
+  await expect(filaDe("Cairo")).toBeVisible();
+
+  // Y se busca por paciente, por tutor y por raza -- sin tildes.
+  const buscador = page.getByLabel("Buscar menús");
+  await buscador.fill("cairo");
+  await expect(filaDe("Nala")).toHaveCount(0);
+  await expect(filaDe("Cairo")).toBeVisible();
+  await buscador.fill("María");
+  await expect(filaDe("Nala")).toBeVisible();
+  await expect(filaDe("Cairo")).toHaveCount(0);
+  await buscador.fill("bulldog");
+  await expect(filaDe("Cairo")).toBeVisible();
+  await buscador.fill("pastor aleman");   // sin tilde, como se escribe en un móvil
+  await expect(filaDe("Nala")).toBeVisible();
+});

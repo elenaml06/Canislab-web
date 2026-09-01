@@ -377,6 +377,30 @@ export async function getMenus(perroId) {
   return data ?? []
 }
 
+/**
+ * TODOS los menús que ha hecho este profesional, de todos sus pacientes.
+ *
+ * ⚠️ PEDIDO EXPRESO (29 agosto): "en lo de los menús tiene que haber una
+ * opción de filtros, rollo filtrar por paciente, filtrar por nombre del
+ * dueño, filtrar por raza". Para poder filtrar hay que tenerlos todos, y
+ * `getMenus` los trae de UN perro: es la pantalla de un dueño, que entra ya
+ * dentro de su perro.
+ *
+ * Se filtra por `creado_por`, que es la columna que se añadió justo para
+ * esto y que hasta el 28 de agosto no rellenaba nadie: sin ella, un menú del
+ * veterinario y uno que el dueño se hizo un domingo son la misma fila.
+ */
+export async function getMenusDelProfesional(userId) {
+  const { data, error } = await supabase
+    .from('menus')
+    .select('*')
+    .eq('creado_por', userId)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data ?? []
+}
+
 // ─── LAS PAUTAS FIRMADAS ─────────────────────────────────────────────────────
 //
 // Lo que se guarda es el DOCUMENTO que selló la API, entero, y no "el menú".

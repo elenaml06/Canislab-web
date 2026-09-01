@@ -23,6 +23,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { AlertCircle, Check, Menu, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
 import { API_BASE, fetchConTimeout } from "./api.js";
 import { agruparNutrientes, resumenDeLaFicha, nombreLegible } from "./nutrientes.js";
+import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
 
 const VIOLETA = "#5A4088";
 const ROSA = "#FF6F91";
@@ -45,7 +46,7 @@ export default function Formulador({
   perfil, derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg,
   pesoObjetivoKg, patologias = [], especiesExcluidas = [], nombresExcluidos = [],
   categoriasExcluidas = [], gramosIniciales = null, onGuardar = null, onVolver = () => {},
-  firmante = null, onFirmar = null, onAbrirPanel = null,
+  firmante = null, onFirmar = null, onAbrirPanel = null, dietaActual = null,
 }) {
   const [gramos, setGramos] = useState(() => ({ ...(gramosIniciales || {}) }));
   const [catalogo, setCatalogo] = useState(null);
@@ -67,6 +68,20 @@ export default function Formulador({
   const [nombreFirmante, setNombreFirmante] = useState(firmante?.nombre || "");
   const [pautaFirmada, setPautaFirmada] = useState(null);
   const [errorFirma, setErrorFirma] = useState(null);
+  const [huecosAbiertos, setHuecosAbiertos] = useState(false);
+  const [guardada, setGuardada] = useState(false);
+  // ⚠️ EL "CÓMO DARLO" LO ESCRIBE ÉL (29 agosto). Pedido expreso: "tiene que
+  // haber una sección de cómo darlo que proponga Rawku, pero que él pueda
+  // modificar todo lo que quiera". Rawku propone -- las indicaciones de cada
+  // categoría y del alimento concreto, que ya existen y son las mismas que ve
+  // un dueño -- y a partir de ahí el texto es suyo: lo que firma un colegiado
+  // no puede ser un texto que él no haya podido tocar.
+  //
+  // `tocado` distingue "no lo ha mirado" de "lo ha dejado así": mientras no
+  // lo toque, la propuesta se rehace sola al cambiar la ración; en cuanto
+  // escribe una letra, deja de moverse debajo de sus manos.
+  const [indicaciones, setIndicaciones] = useState("");
+  const [indicacionesTocadas, setIndicacionesTocadas] = useState(false);
   const peticion = useRef(0);
 
   const cuerpoBase = useMemo(() => ({
@@ -121,10 +136,49 @@ export default function Formulador({
     return () => clearTimeout(t);
   }, [gramos, cuerpoBase]);
 
+  // La propuesta de Rawku, hecha con las MISMAS instrucciones que ve un
+  // dueño (`instrucciones.js`): las de cada categoría presente en la ración y
+  // las del alimento concreto cuando la tiene. No se escribe aquí una
+  // segunda versión "para profesionales" -- serían dos textos que se separan,
+  // y el que se quedaría viejo sería justo el que se firma.
+  const propuesta = useMemo(() => {
+    const nombres = Object.keys(soloPositivos(gramos));
+    if (!nombres.length || !catalogo) return "";
+    const categoriaDe = {};
+    for (const [cat, lista] of Object.entries(catalogo)) {
+      for (const a of lista) categoriaDe[a.nombre] = cat;
+    }
+    const cats = [...new Set(nombres.map((n) => categoriaDe[n]).filter(Boolean))];
+    const trozos = [];
+    for (const cat of cats) {
+      const txt = INSTRUCCIONES_POR_CATEGORIA[cat];
+      if (txt) trozos.push(`${cat}: ${txt}`);
+    }
+    for (const n of nombres) {
+      const propio = COMO_DAR_ALIMENTO[n];
+      if (propio?.como) trozos.push(`${n}: ${propio.como}`);
+    }
+    if (dietaActual && dietaActual !== "barf_otra") {
+      trozos.unshift(
+        "Transición: cambio gradual desde " +
+        (dietaActual === "pienso" ? "pienso" : "comida cocinada") +
+        " a lo largo de 7-10 días, subiendo la proporción de la ración nueva cada 2-3 días. " +
+        "Si aparece diarrea o vómitos, se vuelve al reparto anterior y se alarga.");
+    }
+    return trozos.join("\n\n");
+  }, [gramos, catalogo, dietaActual]);
+
+  useEffect(() => {
+    if (!indicacionesTocadas) setIndicaciones(propuesta);
+  }, [propuesta, indicacionesTocadas]);
+
   const ponerGramos = (nombre, valor) => {
     setGramos((g) => ({ ...g, [nombre]: valor }));
     setAvisoAuto(null);
     setAlternativa(null);
+    // Si cambia la ración, lo guardado ya no es esto: el cartel de "guardada"
+    // se quita solo para no decir algo que ha dejado de ser verdad.
+    setGuardada(false);
   };
   const quitar = (nombre) => {
     setGramos((g) => { const n = { ...g }; delete n[nombre]; return n; });
@@ -194,6 +248,9 @@ export default function Formulador({
           gramos_por_alimento: soloPositivos(gramos),
           firmante: { nombre: nombreFirmante.trim(),
                       num_colegiado: firmante?.num_colegiado || "" },
+          // Lo que él ha escrito para el tutor va DENTRO de lo que firma:
+          // una pauta son los gramos y qué hacer con ellos.
+          indicaciones,
           paciente: {
             nombre: perfil?.nombre || "",
             peso_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
@@ -566,14 +623,46 @@ export default function Formulador({
                 {firmante?.num_colegiado || "—"}
               </span>
             </p>
-            {huecosDe(estado).length > 0 && (
+            {/* ⚠️ REESCRITO (29 agosto) — CASO REAL DE LA USUARIA mirando esta
+                pantalla: "esto que sale aquí asusta y no se entiende bien", y
+                debajo `calcio, araquidonico, dha, epa, ..., vitA`:
+                veinticuatro claves en crudo, sin una frase, justo encima del
+                botón de firmar.
+                Un hueco NO es un fallo del menú, y la pantalla tiene que
+                poder decirlo: es que de algún ALIMENTO de la ración no está
+                publicado ese dato. Ahora se dice qué es, qué consecuencia
+                tiene, y a qué alimento le falta -- que es lo único
+                accionable: se puede cambiar ese alimento por otro. */}
+            {(estado?.huecos || []).length > 0 && (
               <div className="rounded-xl px-3 py-2 mb-3" style={{ background: PAPEL }}>
                 <p className="text-xs mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
-                  Se firma con estos huecos del catálogo
+                  Datos que faltan en el catálogo
                 </p>
-                <p className="text-xs leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-                  {huecosDe(estado).join(", ")}
+                <p className="text-xs leading-snug mb-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                  De {contarAlimentosConHueco(estado)} de los alimentos de esta ración no está
+                  publicado el valor de {estado.huecos.length}{" "}
+                  {estado.huecos.length === 1 ? "nutriente" : "nutrientes"}. Se cuentan como
+                  cero, así que la ración aporta eso o más, nunca menos. Queda escrito en la
+                  pauta.
                 </p>
+                <button onClick={() => setHuecosAbiertos((v) => !v)}
+                        className="text-xs"
+                        style={{ background: "transparent", border: "none", color: VIOLETA,
+                                 fontFamily: fontBody, cursor: "pointer", padding: 0 }}>
+                  {huecosAbiertos ? "Ocultar el detalle" : "Ver cuáles"}
+                </button>
+                {huecosAbiertos && (
+                  <div className="mt-1">
+                    {estado.huecos.map((h) => (
+                      <p key={h.clave + h.tipo} className="text-[11px] leading-snug"
+                         style={{ color: MALVA, fontFamily: fontBody }}>
+                        <span style={{ color: TINTA }}>{h.nombre}</span>
+                        {h.tipo === "dato_dudoso" && " (valor de etiqueta que no cuadra)"}
+                        {" — "}{h.alimentos.join(", ")}
+                      </p>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
             {errorFirma && (
@@ -617,16 +706,66 @@ export default function Formulador({
           </button>
         ) : null}
 
+        {/* ── CÓMO DARLO ──────────────────────────────────────────────
+            Lo propone Rawku y lo escribe él. Va con la pauta: sin esto, lo
+            que se firma son unos gramos y el tutor se queda sin saber qué
+            hacer con ellos. */}
+        {Object.keys(soloPositivos(gramos)).length > 0 && (
+          <div className="rounded-2xl px-4 py-3 mb-3"
+               style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-[11px] tracking-[0.14em] uppercase"
+                 style={{ color: MALVA, fontFamily: "monospace" }}>
+                Cómo darlo
+              </p>
+              {indicacionesTocadas && (
+                <button onClick={() => { setIndicacionesTocadas(false); setIndicaciones(propuesta); }}
+                        className="text-[11px]"
+                        style={{ background: "transparent", border: "none", color: VIOLETA,
+                                 fontFamily: fontBody, cursor: "pointer", padding: 0 }}>
+                  Volver a la propuesta
+                </button>
+              )}
+            </div>
+            <p className="text-[11px] mb-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Propuesto por Rawku con las indicaciones de cada alimento. Es un borrador: cámbialo,
+              quita lo que no aplique y añade lo tuyo. Va dentro de la pauta.
+            </p>
+            <textarea
+              value={indicaciones}
+              onChange={(e) => { setIndicacionesTocadas(true); setIndicaciones(e.target.value); }}
+              aria-label="Cómo darlo"
+              rows={8}
+              className="w-full py-2 px-3 rounded-xl outline-none"
+              style={{ background: PAPEL, border: "1.5px solid #E3DAF0", color: TINTA,
+                       fontFamily: fontBody, fontSize: 13, lineHeight: 1.5, resize: "vertical" }} />
+          </div>
+        )}
+
         {onGuardar && !pautaFirmada && (
-          <button onClick={() => onGuardar(soloPositivos(gramos), estado)}
+          <button onClick={async () => {
+              await onGuardar(soloPositivos(gramos), estado, indicaciones);
+              setGuardada(true);
+            }}
             disabled={!puedeGuardar}
             className="w-full flex items-center justify-center gap-2 py-3 rounded-xl mb-6"
             style={{ background: puedeGuardar ? VIOLETA : "#E3DAF0",
                      color: puedeGuardar ? "#FFFFFF" : MALVA, border: "none",
                      fontFamily: fontDisplay, fontSize: 15,
                      cursor: puedeGuardar ? "pointer" : "default" }}>
-            <Check size={16} /> Guardar la pauta
+            <Check size={16} /> {guardada ? "Guardada" : "Guardar la pauta"}
           </button>
+        )}
+        {guardada && !pautaFirmada && (
+          <div className="rounded-2xl px-4 py-3 mb-6" style={{ background: "#EAF5EF" }}>
+            <p className="text-sm" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+              Guardada en los menús de {perfil?.nombre || "este paciente"}
+            </p>
+            <p className="text-xs mt-1 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Sigue aquí por si quieres seguir ajustándola. Para verla o volver a ella, entra por
+              el menú lateral.
+            </p>
+          </div>
         )}
         {!puedeGuardar && ficha && (
           <p className="text-xs mb-6 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -639,14 +778,14 @@ export default function Formulador({
   );
 }
 
-// Los huecos del catálogo de ESTA ración, en cristiano y en una línea. Un
-// hueco no es un fallo del menú: es que de algún alimento nos falta ese
-// dato, y quien firma tiene derecho a saberlo ANTES de firmar.
-function huecosDe(estado) {
-  const ficha = estado?.ficha || {};
-  const sinDato = Object.keys(ficha.datos_incompletos || {});
-  const dudosos = Object.keys(ficha.datos_dudosos || {});
-  return [...new Set([...sinDato, ...dudosos])];
+// A cuántos ALIMENTOS de la ración les falta algún dato. Es el número que
+// hace entendible el otro: "23 nutrientes" asusta y no dice nada; "de 3 de
+// los alimentos no está publicado el valor de 23 nutrientes" se entiende, y
+// además apunta a lo único que se puede hacer -- cambiar ese alimento.
+function contarAlimentosConHueco(estado) {
+  const con = new Set();
+  for (const h of estado?.huecos || []) for (const a of h.alimentos || []) con.add(a);
+  return con.size;
 }
 
 function soloPositivos(gramos) {
