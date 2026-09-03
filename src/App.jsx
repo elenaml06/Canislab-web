@@ -730,7 +730,15 @@ const CATEGORIAS_ALIMENTO = {
     "Pavo": ["Cuello de pavo"],
     "Pollo": ["Carcasa de pollo"],
     "Ternera": ["Pecho de ternera con hueso", "Cuello de ternera"],
-    "Vaca": ["Laringe de vacuno"],
+    // ⚠️ QUITADA LA VACA (3 septiembre): su única entrada era "Laringe de
+    // vacuno", que se fue del catálogo del motor. Lleva pegada la glándula
+    // tiroides -- es la pieza del hipertiroidismo por alimentación en
+    // perros -- y además es cartílago, no hueso: 66 mg de calcio donde un
+    // hueso carnoso trae 1.250-1.810. Ver `seguridad.LARINGE_EXCLUIR` y el
+    // BLOQUE 44 en el repo del motor.
+    // Dejarla aquí no habría dado ningún error: la habría ofrecido el
+    // selector de cambiar alimento, y al elegirla el backend habría dicho
+    // que no la conoce. Lo caza `tests/catalogo-app-y-motor.spec.js`.
   },
   "Vísceras": {
     // ⚠️ CORREGIDO (5 agosto, madrugada): el pulmón vuelve aquí -- a

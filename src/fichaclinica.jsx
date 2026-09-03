@@ -98,6 +98,7 @@ export default function FichaClinica({ ficha }) {
   const sePasa = ficha.se_pasa || []
   const huecos = ficha.datos_incompletos || {}
   const dudosos = ficha.datos_dudosos || {}
+  const trazas = ficha.datos_traza || {}
   const total = ficha.total
   const correctos = ficha.correctos
 
@@ -219,6 +220,37 @@ export default function FichaClinica({ ficha }) {
             El fabricante declara un valor que no cuadra con la química ni con la
             literatura. El menú se ha calculado con el valor contrastado, no con el de
             la etiqueta.
+          </p>
+        </div>
+      )}
+
+      {/* ── PRESENTE EN TRAZAS ──
+          Va en su propia sección y NO dentro de «sin dato publicado», que es
+          lo que parecía obvio y habría sido mentira: de una traza SÍ hay dato
+          publicado. BEDCA distingue tres cosas -- 0, trazas y n.d. -- y hasta
+          el 3 de septiembre el catálogo solo sabía escribir dos, así que once
+          pescados y el pollo con piel declaraban un cero redondo donde la
+          fuente dice «trazas». Aquí no se avisa de un problema: se le dice a
+          quien firma cuáles de los ceros de esta ración son medidas y cuáles
+          están por debajo del límite de cuantificación. */}
+      {Object.keys(trazas).length > 0 && (
+        <div>
+          <Titulo>Presente en trazas ({Object.keys(trazas).length})</Titulo>
+          <div className="rounded-xl overflow-hidden" style={{ background: '#FFFFFF', border: `1.5px solid ${ROSA}33` }}>
+            {Object.entries(trazas).map(([clave, alimentos]) => (
+              <div key={clave} className="px-3 py-2" style={{ borderBottom: '1px solid #F0EBF8' }}>
+                <p style={{ color: TINTA, fontFamily: fontMono, fontSize: 12 }}>{clave}</p>
+                <p style={{ color: MALVA, fontFamily: fontBody, fontSize: 11 }}>
+                  trazas en: {(alimentos || []).join(', ')}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="text-[11px] mt-1.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+            Esto no es un hueco: la fuente sí publica el dato y dice «trazas», o sea por
+            debajo del límite de cuantificación. Cuenta como cero en la verificación, que
+            es lo correcto en las dos direcciones — ni suma para un mínimo ni se acerca a
+            un máximo.
           </p>
         </div>
       )}
