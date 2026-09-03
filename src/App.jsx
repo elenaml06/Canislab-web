@@ -726,10 +726,15 @@ const CATEGORIAS_ALIMENTO = {
     // Reconstruido con esos datos reales más micronutrientes estimados.
     "Conejo": ["Carcasa de conejo", "Espinazo de conejo"],
     "Cordero": ["Costillas de cordero"],
-    "Pato": ["Carcasa de pato", "Cuello de pato"],
-    "Pavo": ["Cuello de pavo"],
+    // ⚠️ FUERA LOS TRES CUELLOS (3 septiembre) — TEJIDO TIROIDEO. La glándula
+    // tiroides va pegada al cuello y la tráquea en los mamíferos, y separarla
+    // limpiamente en el despiece no está garantizado: el hipertiroidismo por
+    // alimentación en perros viene de ahí, y en la serie publicada la mitad
+    // estaba asintomática con la T4 ya alta. Se fueron del catálogo del motor
+    // (`seguridad.TIROIDES_EXCLUIR`) y el pavo se queda sin hueso propio.
+    "Pato": ["Carcasa de pato"],
     "Pollo": ["Carcasa de pollo"],
-    "Ternera": ["Pecho de ternera con hueso", "Cuello de ternera"],
+    "Ternera": ["Pecho de ternera con hueso"],
     // ⚠️ QUITADA LA VACA (3 septiembre): su única entrada era "Laringe de
     // vacuno", que se fue del catálogo del motor. Lleva pegada la glándula
     // tiroides -- es la pieza del hipertiroidismo por alimentación en
@@ -1024,10 +1029,20 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
   });
 }
 
+// ⚠️ ESTA LISTA NO LA COMPARA NADIE CON EL CATÁLOGO (apuntado el 3 de
+// septiembre). Es el menú que se enseña en la portada, escrito a mano, y hoy
+// nombra tres alimentos que el motor no tiene: "Alitas de pollo", "Costillas
+// de ternera" y "Pechuga de pavo sin piel" (la ficha se llama "Pavo pechuga
+// sin piel"). No rompe nada -- esto no pasa por el motor, es una imagen --
+// pero enseña una ración que la app no puede generar. `catalogo-app-y-motor`
+// no lo caza porque solo mira CATEGORIAS_ALIMENTO. Apuntado en PENDIENTE.
 const MENUS_EJEMPLO = [
   { id: 1, nombre: "Menú 1", dias: 3, kcal: 1120, items: [
     { categoria: "Carne muscular", Icono: Beef, alimento: "Pechuga de pavo sin piel", gramos: 520, porque: null },
-    { categoria: "Hueso carnoso", Icono: Beef, alimento: "Cuello de pavo", gramos: 75, porque: null },
+    // ⚠️ ERA "Cuello de pavo" y se cambió el 3 de septiembre: el cuello está
+    // bloqueado por tejido tiroideo. Enseñar en la portada un alimento que la
+    // app luego no deja usar es peor que enseñar uno que no tenemos.
+    { categoria: "Hueso carnoso", Icono: Beef, alimento: "Carcasa de pollo", gramos: 75, porque: null },
     { categoria: "Vísceras", Icono: HeartPulse, alimento: "Corazón de cordero", gramos: 38, porque: null },
     { categoria: "Hígado", Icono: HeartPulse, alimento: "Hígado de vaca", gramos: 38, porque: "cubre Vitamina B12 y Riboflavina" },
     { categoria: "Verduras y frutas", Icono: Salad, alimento: "Calabaza + Manzana", gramos: 75, porque: null },
