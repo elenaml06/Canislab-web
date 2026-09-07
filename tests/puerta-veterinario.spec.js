@@ -232,6 +232,79 @@ test("el veterinario puede excluir cualquier categoría, no solo el hueso", asyn
   }
 });
 
+test("cardiopatía despliega el estadio ACVIM, y elegirlo cambia la clave real", async ({ page, request }) => {
+  // ⚠️ AÑADIDO (7 septiembre) junto con `FAMILIAS_PATOLOGIA` en App.jsx:
+  // antes, marcar "Cardiopatía" mandaba siempre la clave genérica
+  // "cardiopatia" (sodio 900 mg/1000kcal) aunque el veterinario supiera el
+  // estadio ACVIM exacto -- el backend ya distingue cardiopatia_a/_b1/_b2/
+  // _c/_d desde hace semanas, pero nada en la app lo usaba nunca. Esto
+  // prueba que la pregunta aparece y que elegir un estadio cambia de
+  // verdad la selección (no solo la etiqueta).
+  await configurar(request, { rolProfesional: true, rolVerificado: true, perros: [], accesos: [], menus: [] });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  await page.getByText("Cardiopatía", { exact: true }).click();
+  await expect(page.getByText("¿Sabes el estadio ACVIM?")).toBeVisible();
+
+  const b2 = page.getByText("B2 — remodelado, sin síntomas", { exact: true });
+  await expect(b2).toBeVisible();
+  await b2.click();
+
+  // Elegido: la cabecera "Cardiopatía" sigue marcada como activa (misma
+  // familia), y la opción B2 queda resaltada -- comprobado por color de
+  // fondo sería frágil, así que se comprueba que sigue siendo la única
+  // marcada dentro de su grupo pulsando "No lo sé" y viendo que cambia.
+  const noLoSe = page.getByText("No lo sé / sin estadiar", { exact: true });
+  await expect(b2).toHaveCSS("border-color", "rgb(90, 64, 136)"); // VIOLETA
+  await noLoSe.click();
+  await expect(noLoSe).toHaveCSS("border-color", "rgb(90, 64, 136)");
+  await expect(b2).not.toHaveCSS("border-color", "rgb(90, 64, 136)");
+});
+
+test("estruvita/cistina/urato: elegir una NO deja la genérica puesta también", async ({ page, request }) => {
+  // ⚠️ ARREGLADO (7 septiembre) — CONFLACIÓN ENCONTRADA: esta casilla
+  // mandaba SIEMPRE "estruvita" al backend aunque el perro tuviera urato o
+  // cistina. Las tres bloquean igual para el tutor, así que nadie lo veía,
+  // pero el aviso.profesional que le llegaba a un veterinario formulando
+  // para "urato" (restricción de purinas) era el de "estruvita" (pH
+  // urinario) -- el equivocado. Ahora es una familia con subtipo.
+  await configurar(request, { rolProfesional: true, rolVerificado: true, perros: [], accesos: [], menus: [] });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  await page.getByText("Cálculos urinarios", { exact: false }).click();
+  await expect(page.getByText("¿Qué tipo de cálculo, si se sabe?")).toBeVisible();
+  await page.getByText("Urato (dálmata, shunt hepático)", { exact: true }).click();
+
+  // El aviso que ve el veterinario tiene que ser el de URATO (purinas),
+  // no el de estruvita (pH) -- es justo la confusión que este cambio
+  // arregla, así que el texto concreto es lo que hay que comprobar.
+  await expect(page.getByText(/carga de purinas/)).toBeVisible();
+  await expect(page.getByText(/pH de la orina/)).toHaveCount(0);
+});
+
+test("renal moderada-grave bloquea, leve-moderada no", async ({ page, request }) => {
+  // ⚠️ AÑADIDO (7 septiembre) junto con `renal_avanzada` en patologias.json:
+  // esta clave solo existe dentro de la familia "renal", no como entrada
+  // suelta de PATOLOGIAS -- así que si `datosPatologia()` no supiera mirar
+  // también las opciones de familia, este bloqueo desaparecería en
+  // silencio (exactamente el fallo que `datosPatologia` arregló).
+  await configurar(request, { rolProfesional: true, rolVerificado: true, perros: [], accesos: [], menus: [] });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  await page.getByText("Insuficiencia renal crónica", { exact: true }).click();
+  await expect(page.getByText(/leve-moderada o moderada-grave/)).toBeVisible();
+
+  // Leve-moderada (la cabecera): no bloquea.
+  await expect(page.getByText(/dieta renal terapéutica pautada/)).toHaveCount(0);
+
+  // Moderada-grave: sí.
+  await page.getByText("Moderada-grave (creatinina/SDMA claramente altos)", { exact: true }).click();
+  await expect(page.getByText(/dieta renal terapéutica pautada/)).toBeVisible();
+});
+
 test("y en modo veterinario no se ofrece «¿tienes más perros?»", async ({ page, request }) => {
   // Otra idea de casa: "añade a otro y podréis hacer sus menús lo más
   // parecidos posible: una sola compra para los dos". Los pacientes de un
