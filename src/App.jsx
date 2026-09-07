@@ -847,18 +847,37 @@ const CATEGORIAS_ALIMENTO = {
 
 
 
+// ⚠️ SINCRONIZADO (7 septiembre) contra `patologias.json` del repo de la
+// API, que a esa fecha tiene 40 patologías verificadas contra SACN5 5ª ed.
+// + NRC 2006 + FEDIAF (ver VETERINARIOS.md §12-bis y §12-quinquies allí).
+// `segura` es el `formulable` del backend -- si un día se desincronizan,
+// esta pantalla deja pasar algo que el servidor va a rechazar (o al
+// revés, asusta con un aviso que ya no aplica), así que cualquier cambio
+// de `formulable` en patologias.json tiene que reflejarse aquí también.
+//
+// No hay una entrada por cada estadio/subtipo (cardiopatia_b2, renal_
+// avanzada, raza_predispuesta_cobre, encefalopatia_hepatica...): esas
+// siguen un patrón de FAMILIA (ver `FAMILIAS_PATOLOGIA` más abajo) --
+// una sola casilla con una pregunta de subtipo debajo, no una casilla
+// por cada variante, que sería ilegible.
 const PATOLOGIAS = [
   { key: "renal", label: "Insuficiencia renal crónica", segura: true },
+  { key: "renal_proteinuria", label: "Proteinuria renal (UPC > 0,5)", segura: true },
   { key: "pancreatitis", label: "Pancreatitis", segura: true },
   { key: "oxalato", label: "Cálculos de oxalato cálcico", segura: true },
-  // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: el aviso de "esto
-  // lo tiene que ver un veterinario" tenía que saltar al elegir la
-  // patología y pulsar continuar, no después de navegar hasta la
-  // generación del menú. Se guarda aquí el mismo texto que ya usa el
-  // backend, para poder mostrarlo de inmediato sin ni siquiera llamar
-  // al servidor -- ya se sabe en el cliente que no va a funcionar.
-  { key: "estruvita", label: "Cálculos de estruvita / cistina / urato", segura: false,
+  // ⚠️ CORREGIDO (7 septiembre) — CONFLACIÓN ENCONTRADA: esta única casilla
+  // mandaba SIEMPRE la clave "estruvita" al backend, aunque el perro
+  // tuviera cistina o urato -- las tres bloquean igual para el tutor, así
+  // que nadie lo notaba, pero un veterinario que formulara para "urato"
+  // (restricción de purinas) veía el aviso.profesional de "estruvita"
+  // (pH urinario), que es el equivocado. Ahora es la cabeza de una
+  // familia con subtipo -- ver `FAMILIAS_PATOLOGIA`.
+  { key: "estruvita", label: "Cálculos urinarios (estruvita / oxalato de calcio ya cubierto arriba / urato / cistina)", segura: false,
     aviso: "Estos cálculos dependen del pH de la orina y de analíticas que la app no puede ver. Una dieta mal ajustada aquí puede empeorarlos, así que no generamos menú automático: necesitas una dieta pautada por tu veterinario." },
+  { key: "urato", label: "Urolitos de urato", segura: false,
+    aviso: "La carga de purinas de una ración cruda está muy por encima de cualquier objetivo seguro para esta condición, y no solo por las vísceras. No generamos menú automático: necesitas una dieta pautada por tu veterinario, a menudo con pienso terapéutico específico." },
+  { key: "cistina", label: "Urolitos de cistina", segura: false,
+    aviso: "Depende del pH de la orina y de analíticas que la app no puede ver, igual que estruvita -- y el objetivo terapéutico de metionina+cistina está además por debajo del mínimo nutricional de cualquier perro sano. No generamos menú automático: necesitas una dieta pautada por tu veterinario." },
   // ⚠️ CAMBIADO A `segura: false` (25 agosto), con la revisión clínica.
   // La restricción de cobre que hace falta en una hepatopatía por acúmulo
   // (1,2 mg/1000 kcal, Today's Veterinary Practice 2023) está POR DEBAJO
@@ -870,11 +889,32 @@ const PATOLOGIAS = [
   // Va aquí y no solo en el servidor porque el aviso tiene que saltar al
   // ELEGIR la patología, no después de recorrer todo el generador para
   // que al final no salga menú. Mismo patrón que estruvita.
-  { key: "hepatopatia", label: "Hepatopatía (enfermedad hepática)", segura: false,
+  { key: "hepatopatia", label: "Hepatopatía / predisposición al cobre", segura: false,
     aviso: "La restricción de cobre que hace falta en una hepatopatía por acúmulo está POR DEBAJO del mínimo de cobre que necesita cualquier perro para estar sano. No es algo que se pueda resolver eligiendo mejor los alimentos: hace falta supervisión veterinaria con suplementación dirigida, así que no generamos menú automático." },
+  { key: "shunt_sin_encefalopatia", label: "Shunt portosistémico hepático", segura: false,
+    aviso: "El shunt hace que la sangre porta-hepática se salte el hígado, así que el amoniaco de catabolizar proteína no se depura: la proteína hay que bajarla por debajo del mínimo saludable de FEDIAF, y eso necesita una dieta pautada por tu veterinario." },
   { key: "cardiopatia", label: "Cardiopatía", segura: true },
+  { key: "dcm_taurina_respondedora", label: "Miocardiopatía dilatada respondedora a taurina", segura: true },
+  { key: "dcm_asociada_a_dieta", label: "Miocardiopatía dilatada asociada a dieta (\"grain-free\")", segura: true },
   { key: "diabetes", label: "Diabetes mellitus", segura: true },
   { key: "hipotiroidismo", label: "Hipotiroidismo", segura: true },
+  { key: "hiperlipidemia", label: "Hiperlipidemia (triglicéridos o colesterol altos)", segura: true },
+  { key: "obesidad", label: "Obesidad / adelgazamiento dirigido", segura: true },
+  { key: "ple_linfangiectasia", label: "Enteropatía pierde-proteínas / linfangiectasia intestinal", segura: true },
+  { key: "insuficiencia_pancreatica_exocrina", label: "Insuficiencia pancreática exocrina (EPI)", segura: true },
+  { key: "fracaso_renal_agudo", label: "Fracaso renal agudo (no crónico)", segura: true },
+  { key: "enteropatia_cronica", label: "Enteropatía crónica / colitis", segura: true },
+  { key: "artrosis", label: "Artrosis / osteoartritis", segura: true },
+  { key: "riesgo_gdv", label: "Riesgo de torsión gástrica (razas de tórax profundo)", segura: true },
+  { key: "disfuncion_cognitiva", label: "Disfunción cognitiva canina", segura: true },
+  { key: "dermatosis_zinc", label: "Dermatosis zinc-sensible (razas nórdicas)", segura: true },
+  { key: "dermatitis_atopica", label: "Dermatitis atópica", segura: true },
+  { key: "epilepsia_idiopatica", label: "Epilepsia idiopática", segura: true },
+  { key: "mielopatia_degenerativa", label: "Mielopatía degenerativa", segura: true },
+  { key: "cushing", label: "Hiperadrenocorticismo (Cushing)", segura: true },
+  { key: "addison", label: "Hipoadrenocorticismo (Addison)", segura: true },
+  { key: "cancer_soporte", label: "Soporte nutricional oncológico", segura: true },
+  { key: "inmunosupresion", label: "Inmunosupresión (quimioterapia, corticoides, enf. inmunomediada)", segura: true },
   // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: si el perro tiene
   // una patología que no está en esta lista, antes no había ninguna
   // opción -- la persona podía quedarse con la duda de si su caso
@@ -888,6 +928,128 @@ const PATOLOGIAS = [
   { key: "otra", label: "Otra patología / no está en esta lista", segura: false,
     aviso: "Esta condición no está entre las que este sistema sabe ajustar automáticamente todavía, así que no generamos un menú que podría no estar realmente adaptado a lo que necesita: mejor que un veterinario valore su caso en concreto y paute la dieta." },
 ];
+
+// ─── LAS PATOLOGÍAS QUE EN REALIDAD SON UNA FAMILIA ─────────────────────────
+//
+// Ver VETERINARIOS.md §12-quinquies (repo de la API), "Grupo 2": son
+// preguntas que decide el TUTOR con lo que ya le dijo su veterinario -- no
+// hace falta acreditación profesional para responderlas --, pero sin la
+// pregunta la app no sabe qué clave concreta mandar y se queda siempre en
+// la más genérica. Cada familia tiene una clave CABECERA (la que aparece
+// en `PATOLOGIAS` de arriba) y una lista de opciones, cada una con su
+// propia clave real de `patologias.json`. La opción elegida SUSTITUYE a
+// la cabecera (y a cualquier otra hermana) en `perfil.patologias` -- el
+// array que ve el backend nunca lleva dos claves de la misma familia a
+// la vez.
+const FAMILIAS_PATOLOGIA = {
+  cardiopatia: {
+    pregunta: "¿Sabes el estadio ACVIM?",
+    opciones: [
+      { key: "cardiopatia", label: "No lo sé / sin estadiar" },
+      { key: "cardiopatia_a", label: "A — predispuesta, sin enfermedad todavía", segura: true },
+      { key: "cardiopatia_b1", label: "B1 — soplo, sin remodelado", segura: true },
+      { key: "cardiopatia_b2", label: "B2 — remodelado, sin síntomas", segura: true },
+      { key: "cardiopatia_c", label: "C — insuficiencia cardíaca, actual o pasada", segura: true },
+      { key: "cardiopatia_d", label: "D — insuficiencia cardíaca refractaria", segura: true },
+    ],
+  },
+  renal: {
+    pregunta: "¿Tu veterinario ha dicho si es leve-moderada o moderada-grave?",
+    opciones: [
+      { key: "renal", label: "No lo sé / leve-moderada" },
+      { key: "renal_avanzada", label: "Moderada-grave (creatinina/SDMA claramente altos)", segura: false,
+        aviso: "En insuficiencia renal moderada-grave, la restricción real de proteína va por debajo de lo que un perro sano necesita -- eso no se puede resolver eligiendo mejor los alimentos, hace falta una dieta renal terapéutica pautada por tu veterinario." },
+    ],
+  },
+  hepatopatia: {
+    pregunta: "¿Está confirmado con biopsia o analítica de cobre, o es solo predisposición de raza?",
+    opciones: [
+      { key: "hepatopatia", label: "Confirmado" },
+      { key: "raza_predispuesta_cobre", label: "Solo predisposición de raza (sin diagnóstico)", segura: true },
+    ],
+  },
+  shunt_sin_encefalopatia: {
+    pregunta: "¿Hay signos neurológicos activos ahora mismo?",
+    opciones: [
+      { key: "shunt_sin_encefalopatia", label: "No", segura: false,
+        aviso: "El shunt hace que la sangre porta-hepática se salte el hígado, así que el amoniaco de catabolizar proteína no se depura: la proteína hay que bajarla por debajo del mínimo saludable de FEDIAF, y eso necesita una dieta pautada por tu veterinario." },
+      { key: "encefalopatia_hepatica", label: "Sí, hay signos neurológicos ahora", segura: false,
+        aviso: "Con signos neurológicos activos por acumulación de amoniaco, la proteína hay que bajarla más que en cualquier otra hepatopatía -- muy por debajo de lo saludable. Es una urgencia relativa: necesita manejo veterinario directo, no un menú ajustado desde una app." },
+    ],
+  },
+  estruvita: {
+    pregunta: "¿Qué tipo de cálculo, si se sabe?",
+    opciones: [
+      { key: "estruvita", label: "Estruvita (o no lo sé)" },
+      { key: "urato", label: "Urato (dálmata, shunt hepático)" },
+      { key: "cistina", label: "Cistina" },
+    ],
+  },
+};
+// Clave real -> familia a la que pertenece, para poder quitar a las
+// hermanas del array al elegir una nueva.
+const FAMILIA_DE_CLAVE = Object.fromEntries(
+  Object.entries(FAMILIAS_PATOLOGIA).flatMap(([cabecera, { opciones }]) =>
+    opciones.map((o) => [o.key, cabecera]))
+);
+
+// Toda opción de toda familia, indexada por su propia clave -- para poder
+// resolver "urato" o "renal_avanzada" aunque no tengan su propia entrada
+// en `PATOLOGIAS` (algunas sí la tienen también, p.ej. "urato"; la
+// entrada de `PATOLOGIAS` manda si existen las dos, por eso se comprueba
+// primero en `datosPatologia`).
+const OPCIONES_DE_FAMILIA_POR_CLAVE = Object.fromEntries(
+  Object.values(FAMILIAS_PATOLOGIA).flatMap(({ opciones }) =>
+    opciones.map((o) => [o.key, o]))
+);
+
+// La ÚNICA función que hay que llamar para saber si una clave de patología
+// (venga de una casilla simple o de una opción de familia) es segura y qué
+// aviso lleva -- `bloqueantes` en las dos pantallas la usa, para no volver
+// a mirar solo `PATOLOGIAS` y perderse las claves que solo existen dentro
+// de una familia (ver el fallo real que esto arregló: "renal_avanzada" y
+// "encefalopatia_hepatica" no aparecían nunca como bloqueantes porque
+// `PATOLOGIAS.find` no las encontraba).
+function datosPatologia(key) {
+  return PATOLOGIAS.find((p) => p.key === key) || OPCIONES_DE_FAMILIA_POR_CLAVE[key] || null;
+}
+
+// ¿Está esta familia activa? -- no basta con mirar si `patologias` incluye
+// la clave cabecera: puede estar activa con una hermana (p.ej. "renal_
+// avanzada" en vez de "renal").
+function familiaPatologiaActiva(cabecera, patologias) {
+  return patologias.some((k) => FAMILIA_DE_CLAVE[k] === cabecera);
+}
+
+// La pregunta de subtipo, si esta cabecera tiene familia y está activa.
+// `onCambiar` recibe el array de patologías YA actualizado.
+function SelectorSubtipoPatologia({ cabecera, patologias, onCambiar }) {
+  const familia = FAMILIAS_PATOLOGIA[cabecera];
+  if (!familia || !familiaPatologiaActiva(cabecera, patologias)) return null;
+  const actual = patologias.find((k) => FAMILIA_DE_CLAVE[k] === cabecera) || cabecera;
+  return (
+    <div className="ml-3 mt-1 mb-1.5 pl-3 flex flex-col gap-1" style={{ borderLeft: `2px solid #E3DAF0` }}>
+      <p className="text-[11px] leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+        {familia.pregunta}
+      </p>
+      {familia.opciones.map((o) => {
+        const elegido = actual === o.key;
+        return (
+          <button key={o.key} type="button" onClick={() => {
+            const sinHermanas = patologias.filter((k) => FAMILIA_DE_CLAVE[k] !== cabecera);
+            onCambiar([...sinHermanas, o.key]);
+          }}
+            className="text-left px-2.5 py-1.5 rounded-lg text-xs"
+            style={{ background: elegido ? "#F0EBF8" : "transparent",
+                     border: `1px solid ${elegido ? VIOLETA : "#E3DAF0"}`,
+                     color: elegido ? VIOLETA : MALVA, fontFamily: fontBody }}>
+            {o.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function especiesExcluidasDePerfil(perfil) {
   const especies = new Set();
@@ -2451,7 +2613,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                     Ahora usa el nombre real de lo que tiene el perro y habla claro. */}
                 {(() => {
                   const labels = patologias
-                    .map((k) => PATOLOGIAS.find((p) => p.key === k)?.label)
+                    .map((k) => datosPatologia(k)?.label)
                     .filter(Boolean);
                   const condicion = labels.length === 1
                     ? labels[0]
@@ -2871,7 +3033,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             // evitan sin ser alergia) ni las patologías -- ambas SÍ
             // afectan al menú generado, tenían que estar visibles igual.
             { label: "Exclusiones", valor: (perfil?.otrosEvitar || []).map((a) => a.alimento.replace("Todo: ", "")).join(", ") || "Ninguna" },
-            { label: "Patologías", valor: (perfil?.patologias || []).map((k) => PATOLOGIAS.find((p) => p.key === k)?.label || k).join(", ") || "Ninguna" },
+            { label: "Patologías", valor: (perfil?.patologias || []).map((k) => datosPatologia(k)?.label || k).join(", ") || "Ninguna" },
           ].map((campo) => (
             <div key={campo.label} className="flex items-center justify-between py-3" style={{ borderBottom: "1px solid #F0ECF7" }}>
               <span className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>{campo.label}</span>
@@ -7198,7 +7360,7 @@ function RawkuOnboardingInterna({
     if (!bcsPuesto) faltan.push("BCS");
     const puedeGuardar = faltan.length === 0;
     const bloqueantes = perfil.patologias
-      .map((k) => PATOLOGIAS.find((p) => p.key === k))
+      .map((k) => datosPatologia(k))
       .filter((p) => p && !p.segura);
 
     return (
@@ -7411,27 +7573,46 @@ function RawkuOnboardingInterna({
           <BloqueFicha titulo="Patologías diagnosticadas">
             <div className="flex flex-col gap-1.5">
               {PATOLOGIAS.map((pat) => {
-                const activo = perfil.patologias.includes(pat.key);
+                const activo = perfil.patologias.includes(pat.key)
+                  || familiaPatologiaActiva(pat.key, perfil.patologias);
                 return (
-                  <button key={pat.key} onClick={() => alternar("patologias", pat.key)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg text-left"
-                    style={{ background: activo ? VIOLETA : PAPEL,
-                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
-                    <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody, fontSize: 14 }}>
-                      {pat.label}
-                    </span>
-                    {activo && <Check size={15} style={{ color: ROSA }} />}
-                  </button>
+                  <div key={pat.key}>
+                    <button onClick={() => {
+                      if (activo) {
+                        // Quita la cabecera Y a cualquier hermana de su familia que
+                        // se hubiera elegido -- si no, el clic de "quitar" no
+                        // quitaría nada cuando el subtipo elegido es distinto de
+                        // la cabecera (p.ej. "cardiopatia_b2").
+                        set("patologias", perfil.patologias.filter(
+                          (k) => k !== pat.key && FAMILIA_DE_CLAVE[k] !== pat.key));
+                      } else {
+                        set("patologias", [...perfil.patologias, pat.key]);
+                      }
+                    }}
+                      className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left"
+                      style={{ background: activo ? VIOLETA : PAPEL,
+                               border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
+                      <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody, fontSize: 14 }}>
+                        {pat.label}
+                      </span>
+                      {activo && <Check size={15} style={{ color: ROSA }} />}
+                    </button>
+                    <SelectorSubtipoPatologia cabecera={pat.key} patologias={perfil.patologias}
+                      onCambiar={(nuevas) => set("patologias", nuevas)} />
+                  </div>
                 );
               })}
             </div>
             {bloqueantes.length > 0 && (
-              <div className="flex gap-2 items-start p-3 rounded-xl mt-2" style={{ background: "#FFF0F3" }}>
-                <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
-                <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-                  Depende de analíticas y de pH urinario que la app no lee, así que no se genera
-                  ración automática: la formulación es tuya.
-                </p>
+              <div className="flex flex-col gap-2 mt-2">
+                {bloqueantes.map((p) => (
+                  <div key={p.key} className="flex gap-2 items-start p-3 rounded-xl" style={{ background: "#FFF0F3" }}>
+                    <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
+                    <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                      {p.aviso}
+                    </p>
+                  </div>
+                ))}
               </div>
             )}
           </BloqueFicha>
@@ -8001,23 +8182,31 @@ function RawkuOnboardingInterna({
             {perfil.patologiaSi === "si" && (
               <div className="flex flex-col gap-2 mt-3">
                 {PATOLOGIAS.map((p) => {
-                  const activo = perfil.patologias.includes(p.key);
+                  const activo = perfil.patologias.includes(p.key)
+                    || familiaPatologiaActiva(p.key, perfil.patologias);
                   return (
-                    <button
-                      key={p.key}
-                      onClick={() => {
-                        if (activo) set("patologias", perfil.patologias.filter((k) => k !== p.key));
-                        else set("patologias", [...perfil.patologias, p.key]);
-                      }}
-                      className="flex items-center justify-between px-4 py-3 rounded-xl text-left"
-                      style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
-                    >
-                      <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{p.label}</span>
-                      {activo && <Check size={16} style={{ color: ROSA }} />}
-                    </button>
+                    <div key={p.key}>
+                      <button
+                        onClick={() => {
+                          if (activo) {
+                            set("patologias", perfil.patologias.filter(
+                              (k) => k !== p.key && FAMILIA_DE_CLAVE[k] !== p.key));
+                          } else {
+                            set("patologias", [...perfil.patologias, p.key]);
+                          }
+                        }}
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-left"
+                        style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
+                      >
+                        <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{p.label}</span>
+                        {activo && <Check size={16} style={{ color: ROSA }} />}
+                      </button>
+                      <SelectorSubtipoPatologia cabecera={p.key} patologias={perfil.patologias}
+                        onCambiar={(nuevas) => set("patologias", nuevas)} />
+                    </div>
                   );
                 })}
-                {perfil.patologias.some((k) => PATOLOGIAS.find((p) => p.key === k && !p.segura)) && (
+                {perfil.patologias.some((k) => { const d = datosPatologia(k); return d && !d.segura; }) && (
                   <div className="flex gap-2 items-start p-3 rounded-xl mt-1" style={{ background: "#FFF0F3" }}>
                     <AlertCircle size={16} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
                     <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
@@ -8041,7 +8230,7 @@ function RawkuOnboardingInterna({
               // tiene sentido llevar hasta ahí sabiendo ya que no va
               // a funcionar.
               const bloqueantes = perfil.patologias
-                .map((k) => PATOLOGIAS.find((p) => p.key === k))
+                .map((k) => datosPatologia(k))
                 .filter((p) => p && !p.segura);
               if (bloqueantes.length > 0) {
                 setMenuError(bloqueantes.map((p) => p.aviso).join(" "));
@@ -8493,7 +8682,7 @@ function RawkuOnboardingInterna({
         [
           perfil.alergias.length ? `Alergia: ${perfil.alergias.map((a) => a.alimento).join(", ")}` : null,
           perfil.otrosEvitar.length ? `Evitar: ${perfil.otrosEvitar.map((a) => a.alimento).join(", ")}` : null,
-          perfil.patologias.length ? `Patologías: ${perfil.patologias.map((k) => PATOLOGIAS.find((p) => p.key === k).label).join(", ")}` : null,
+          perfil.patologias.length ? `Patologías: ${perfil.patologias.map((k) => datosPatologia(k)?.label || k).join(", ")}` : null,
         ]
           .filter(Boolean)
           .join(" · ") || "Nada que destacar",
