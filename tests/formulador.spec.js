@@ -339,7 +339,10 @@ test("los menús de TODOS sus pacientes, y se pueden buscar", async ({ page, req
 
   // Las FILAS de la lista, no la burbuja de arriba (que también dice el
   // nombre del paciente abierto y haría pasar la prueba sin lista).
-  const filaDe = (nombre) => page.getByRole("button", { name: new RegExp(`^${nombre} `) });
+  // ⚠️ Desde el 7 de septiembre cada fila lleva su propio nombre
+  // («Menú de Nala»): antes su nombre accesible era el texto entero de la
+  // tarjeta, y «Nala» chocaba con la burbuja de la cabecera.
+  const filaDe = (nombre) => page.getByRole("button", { name: `Menú de ${nombre}` });
 
   // Están los de los dos pacientes, no solo los del que está abierto.
   await expect(page.getByRole("heading", { name: /Los menús de tus pacientes/ })).toBeVisible();

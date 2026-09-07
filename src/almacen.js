@@ -166,8 +166,8 @@ export async function eliminarPerro(perroId) {
  * porque es la puerta por la que salen los datos y saltársela una vez es
  * como se empiezan a tener dos.
  */
-export async function getMenusDelProfesional(userId) {
-  return getMenusDelProfesionalRemoto(userId)
+export async function getMenusDelProfesional(userId, idsPacientes = []) {
+  return getMenusDelProfesionalRemoto(userId, idsPacientes)
 }
 
 export async function getMenus(perroId) {

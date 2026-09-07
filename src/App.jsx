@@ -23,6 +23,9 @@ import {
 import Suscripcion from "./suscripcion";
 import PremiumGate from "./premiumgate";
 import FichaClinica from "./fichaclinica";
+// Lo que le cambia al motor cada patología, con su fuente y su margen. Los
+// números salen de GET /patologias, no de una copia aquí. Ver su cabecera.
+import QueCambiaLaPatologia from "./topespatologia.jsx";
 import { perrosDelModo } from "./pacientes";
 import { contiene } from "./texto.js";
 import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicion,
@@ -2004,6 +2007,33 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         <p className="text-[11px] tracking-[0.18em] uppercase mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>
           Semana de {nombrePerro}
         </p>
+        {/* ─── EL PACIENTE, SIEMPRE A LA VISTA (7 septiembre) ─────────────
+            En Nutrimenta, VetMenu o MyVetDiet los datos del caso no se
+            esconden detrás de una pestaña: acompañan a la formulación en
+            todo momento, porque es contra ellos contra lo que se decide si
+            un número está bien. Aquí pasaba lo contrario -- el peso, la
+            etapa, las kcal y la patología vivían cada uno en su pantalla, y
+            el veterinario tenía que recordarlos mientras miraba los gramos.
+            Una línea, en la cabecera, y solo en su modo: un tutor ya sabe
+            que su perro pesa 24 kilos. */}
+        {enModoProfesional && (
+          <p className="text-[11px] leading-snug mb-3" style={{ color: "#D8CFEC", fontFamily: fontBody }}>
+            {[
+              nombrePerro,
+              perfil?.raza ? nombreDeRaza(perfil.raza) : null,
+              pesoObjetivoKg ? `${pesoObjetivoKg} kg objetivo` : (perfil?.pesoActual ? `${perfil.pesoActual} kg` : null),
+              bcsVigente(perfil) ? `BCS ${bcsVigente(perfil)}` : null,
+              etapaLabel,
+              derReal ? `${Math.round(derReal)} kcal/día` : null,
+            ].filter(Boolean).join(" · ")}
+            {(patologias || []).length > 0 && (
+              <span style={{ color: ROSA }}>
+                {" · "}
+                {patologias.map((k) => datosPatologia(k)?.label || k).join(" · ")}
+              </span>
+            )}
+          </p>
+        )}
         {/* ⚠️ AQUÍ, Y NO EN LA LISTA DE DENTRO (26 agosto). Los puse primero
             en la sección "Mis menús" que VistaMenus tiene dentro, y esa
             sección NO SE PUEDE ABRIR: solo aparece si el padre pasa
@@ -2280,7 +2310,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 <div className="flex-1 rounded-2xl p-4 text-center flex flex-col items-center justify-center" style={{ background: col.fondo }}>
                   <div className="flex items-center gap-1">
                     <CheckCircle2 size={18} style={{ color: col.texto }} />
-                    <button onClick={() => setInfoNutrientes(!infoNutrientes)}><Info size={13} style={{ color: col.texto, opacity: 0.6 }} /></button>
+                    {/* Sin nombre, este botón era ilegible para un lector de
+                        pantalla y no había forma de pulsarlo desde una
+                        prueba: un icono suelto no dice qué hace. */}
+                    <button onClick={() => setInfoNutrientes(!infoNutrientes)}
+                            aria-label={infoNutrientes ? "Ocultar qué se ha verificado" : "Qué se ha verificado"}
+                            aria-expanded={infoNutrientes}>
+                      <Info size={13} style={{ color: col.texto, opacity: 0.6 }} />
+                    </button>
                   </div>
                   <p className="text-[10px] tracking-[0.1em] uppercase mt-1" style={{ color: col.texto, fontFamily: "monospace" }}>
                     {ficha ? `${ficha.correctos}/${ficha.total} OK` : "sin verificar"}
@@ -2532,7 +2569,18 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           </div>
         )}
 
-        {problemasSeguridad.length > 0 && problemasSeguridadVisible && (
+        {/* ⚠️ EN MODO PROFESIONAL ESTO NO VA AQUÍ (7 septiembre). CASO
+            REAL: «en el modo veterinario deberían desaparecer los avisos de
+            seguridad -- por ejemplo, costillas de cordero, le pones
+            seguridad y te salta el aviso. Eso tiene que estar abajo,
+            acomodado, que él puede editar».
+            El aviso está bien calculado y no se quita: lo que está mal es
+            dónde. A un tutor hay que pararle antes de que dé de comer algo;
+            un veterinario ya sabe lo que es la tiaminasa y lo que quiere es
+            formular primero y revisar las notas después. Así que en su modo
+            baja al final de la pantalla, junto al menú que puede editar.
+            Ver el bloque «NOTAS DE SEGURIDAD» más abajo. */}
+        {!enModoProfesional && problemasSeguridad.length > 0 && problemasSeguridadVisible && (
           <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
             <div className="flex items-center justify-between mb-1.5">
               <div className="flex items-center gap-1.5">
@@ -2576,11 +2624,27 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
             rojo: { fondo: "#FFE8EC", texto: ROSA },
           };
           const col = COLORES[ficha?.semaforo] || COLORES.verde;
-          const TEXTOS = {
+          // ⚠️ DOS REGISTROS, NO DOS VERDADES (7 septiembre). CASO REAL:
+          // «cuando me meto dentro de mis menús de algún menú de algún
+          // paciente en veterinario se ve igual que lo ve un usuario y no
+          // debería ser así».
+          //
+          // El texto del tutor explica QUÉ es FEDIAF, porque él no lo sabe.
+          // A quien va a firmar la pauta con su número de colegiado eso le
+          // sobra, y encima le esconde el único dato que le sirve: cuántos
+          // requisitos cumple de cuántos, también cuando van bien. Es el
+          // mismo semáforo y los mismos números; cambia a quién se le habla.
+          const TEXTOS_TUTOR = {
             verde: `Comprobamos los nutrientes clave para que ${nombrePerro} crezca y se mantenga sano: minerales, vitaminas y grasas esenciales, siguiendo las tablas de FEDIAF. Este menú los cumple todos.`,
             ambar: `Comprobamos los nutrientes clave para que ${nombrePerro} crezca y se mantenga sano. Este menú cumple ${ficha?.correctos ?? "?"} de ${ficha?.total ?? "?"} — el resto están cerca del mínimo, pero no llegan del todo. Conviene revisarlo.`,
             rojo: `Comprobamos los nutrientes clave para que ${nombrePerro} crezca y se mantenga sano. Este menú se queda corto en varios. No deberías usarlo tal cual — vuelve a generarlo o edítalo.`,
           };
+          const TEXTOS_PROFESIONAL = {
+            verde: `Verificado contra FEDIAF: cumple ${ficha?.correctos ?? "?"} de ${ficha?.total ?? "?"} requisitos, más el ratio Ca:P y los topes de seguridad crónica. El detalle por nutriente, con mínimo, máximo y margen, está en la ficha clínica.`,
+            ambar: `Verificado contra FEDIAF: cumple ${ficha?.correctos ?? "?"} de ${ficha?.total ?? "?"}. El resto se queda cerca del mínimo sin alcanzarlo — cuáles y por cuánto, en la ficha clínica.`,
+            rojo: `Verificado contra FEDIAF: no cumple ${ficha?.total && ficha?.correctos !== undefined ? ficha.total - ficha.correctos : "varios"} requisitos. Sin corregirlos no es una ración completa; cuáles y por cuánto, en la ficha clínica.`,
+          };
+          const TEXTOS = enModoProfesional ? TEXTOS_PROFESIONAL : TEXTOS_TUTOR;
           return (
             <div className="rounded-xl p-3 mb-4 flex gap-2 items-start" style={{ background: col.fondo }}>
               <Info size={14} style={{ color: col.texto, flexShrink: 0, marginTop: 2 }} />
@@ -2592,7 +2656,20 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         })()}
 
         <div className="flex flex-col gap-2 mb-3">
-        {(patologias || []).length > 0 && avisoPatologiaVisible && (
+        {/* ⚠️ ESTE AVISO NO ES PARA EL VETERINARIO (7 septiembre). CASO
+            REAL: «se ve igual que lo ve un usuario... además te pone esto,
+            debería ser revisado por un veterinario. Mal».
+            Tiene razón y no es un matiz de tono: decirle «enséñaselo a tu
+            veterinario» a la persona que ES el veterinario, y que va a
+            firmar esto con su número de colegiado, es decirle que lo que
+            tiene delante no cuenta. En su lugar va lo que sí le sirve: los
+            topes que la patología le ha metido al motor, con su fuente y
+            su margen. Ver `topespatologia.jsx`. */}
+        {enModoProfesional && (patologias || []).length > 0 && (
+          <QueCambiaLaPatologia claves={patologias}
+                                titulo="Lo que esta patología le ha impuesto al menú" />
+        )}
+        {!enModoProfesional && (patologias || []).length > 0 && avisoPatologiaVisible && (
           <div className="rounded-xl p-3 mb-3 flex gap-2 items-start"
                style={{ background: "#FFF4F6", border: `1.5px solid ${ROSA}` }}>
             <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
@@ -2947,13 +3024,45 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         </>)}
 
         <div className="flex-1" />
+
+        {/* ─── NOTAS DE SEGURIDAD (solo en modo profesional) ──────────────
+            Los mismos avisos que un tutor ve arriba en ámbar, aquí abajo y
+            sin alarma: al lado del menú que acaba de leer y que puede
+            editar. Ver el comentario del bloque de arriba.
+            No lleva X de cerrar a propósito: lo que un tutor cierra porque
+            ya lo ha leído, un profesional lo tiene que poder releer al
+            volver a abrir la pauta dentro de seis meses. */}
+        {enModoProfesional && problemasSeguridad.length > 0 && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: "#FFFFFF", border: "1px solid #E3DAF0" }}>
+            <div className="flex items-center gap-1.5 mb-1.5">
+              <AlertCircle size={14} style={{ color: MALVA }} />
+              <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
+                {problemasSeguridad.length === 1 ? "Nota de seguridad" : `${problemasSeguridad.length} notas de seguridad`}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1.5">
+              {problemasSeguridad.map((p, i) => (
+                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{p}</p>
+              ))}
+            </div>
+            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Los límites duros (vitamina D, yodo, selenio, mercurio y tiaminasa) ya están
+              aplicados dentro del cálculo: esto es lo que queda por encima del criterio, no
+              un límite roto. Cambia los gramos o el alimento desde el propio menú si quieres
+              moverlo.
+            </p>
+          </div>
+        )}
+
         {/* ⚠️ MOVIDO (5 agosto, madrugada) — pedido expreso: este texto
             estaba arriba del todo, compitiendo en importancia visual
             con avisos de verdad relevantes (nutrientes, seguridad). Va
             aquí abajo, en pequeño -- solo cuando no hay patología
             diagnosticada, porque en ese caso el aviso rojo de arriba ya
-            cubre este mismo mensaje con más fuerza. */}
-        {!((patologias || []).length > 0) && (
+            cubre este mismo mensaje con más fuerza.
+            ⚠️ Y NUNCA EN MODO PROFESIONAL (7 septiembre): «enséñaselo a tu
+            veterinario» no se le dice al veterinario. */}
+        {!enModoProfesional && !((patologias || []).length > 0) && (
           <p className="text-[11px] text-center mb-3 px-2" style={{ color: MALVA, fontFamily: fontBody }}>
             Este menú es una propuesta calculada sobre los requisitos FEDIAF, no una
             prescripción. Antes de cambiarle la alimentación a {nombrePerro}, enséñaselo a tu
@@ -4226,6 +4335,7 @@ function RawkuOnboardingInterna({
     setEleccionModo(valor);
     guardarEleccionModo(valor);
   };
+
   const [cargandoPerfil] = useState(false); // ya no necesario, carga en AuthGate
 
   useEffect(() => {
@@ -4307,6 +4417,21 @@ function RawkuOnboardingInterna({
   const [menusDeTodos, setMenusDeTodos] = useState(null);   // null = sin cargar
   const [filtroMenus, setFiltroMenus] = useState("");
 
+  // ⚠️ EL BUSCADOR DE PACIENTES (7 septiembre).
+  //
+  // PEDIDO EXPRESO: «van a tener muchísimos pacientes, igual tienen 50, y
+  // tiene que ser más accesible y de otra manera, tal como lo hacen los
+  // motores nutricionales».
+  //
+  // Y tiene razón en el fondo del asunto: en AnVet, BalanceIT, Animal Diet
+  // Formulator o MyVetDiet la casa del profesional NO es una mascota, es la
+  // LISTA de pacientes, con su buscador; un paciente es un sitio en el que
+  // entras y del que sales. Un desplegable de nombres funciona con los tres
+  // perros de una casa y deja de funcionar a los veinte, porque de un
+  // paciente no se recuerda el nombre del perro: se recuerda el apellido
+  // del dueño o la raza. Por eso se busca por los tres.
+  const [filtroPacientes, setFiltroPacientes] = useState("");
+
   // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
   // que hacía falta: "cuando terminas de generar por primera vez el perfil
   // del perro sí que tienes que tener ese botón, pero cuando entras a
@@ -4370,6 +4495,20 @@ function RawkuOnboardingInterna({
   // perro>", el componente acaba de montarse de cero con ESE perro y hay que
   // volver al generador. Sin esto, elegirlo te devolvía al perfil.
   const [fase, setFase] = useState(arrancarEn === "generador_solo" ? "generador" : "onboarding");
+
+  // ⚠️ AL APAGAR EL MODO, SALIR DE SUS PANTALLAS (7 septiembre).
+  //
+  // MEDIDO: apagando el interruptor estando en la lista de Pacientes, `fase`
+  // seguía valiendo "pacientes" -- una fase que en modo tutor ya no se pinta
+  // -- y la app se quedaba en una pantalla en blanco, sin error ninguno. No
+  // se arregla poniendo la lista también para el tutor: eso sería enseñarle
+  // una pantalla de pacientes a quien no tiene pacientes. Se arregla
+  // volviendo a donde estaría de todas formas.
+  useEffect(() => {
+    if (!enModoProfesional && (fase === "pacientes" || fase === "pautas")) {
+      setFase("onboarding");
+    }
+  }, [enModoProfesional, fase]);
 
   // Deja constancia en Sentry de la decisión de arranque. Si algún día
   // vuelve a fallar la navegación, en el error se verá con qué datos se
@@ -5199,6 +5338,23 @@ function RawkuOnboardingInterna({
     return guardados;
   })();
 
+  // ⚠️ CUÁNTOS PACIENTES TIENE DE VERDAD (7 septiembre).
+  //
+  // CASO REAL ENCONTRADO POR LA USUARIA: «cuando ya hay pacientes y voy a
+  // meter uno nuevo en modo veterinario me dice todavía no hay ningún
+  // paciente».
+  //
+  // Era verdad, y el motivo es que la puerta del veterinario se pintaba con
+  // `!yaTienePerroGuardado`, que NO significa «no tiene pacientes»: significa
+  // «ahora mismo no hay ningún perro montado». Y dar de alta a uno nuevo
+  // desmonta el perro a propósito (`anadirPerro`), así que un veterinario con
+  // treinta pacientes veía «Todavía no tienes ninguno» cada vez que iba a
+  // apuntar al treinta y uno.
+  //
+  // Esto cuenta los pacientes GUARDADOS: el que se está creando no cuenta
+  // (todavía no existe) y por eso se descarta `sinGuardar`.
+  const cuantosPacientesGuardados = listaDePerros.filter((p) => !p.sinGuardar).length;
+
   // ⚠️ AÑADIDO (24 agosto) — LA BURBUJA DE PERFIL Y EL ENGRANAJE.
   //
   // Pedido expreso: "que cambiar de perro esté metido en una pestaña del
@@ -5235,10 +5391,28 @@ function RawkuOnboardingInterna({
         // cosas que abren dos sitios distintos, en la esquina donde solo
         // cabe una idea. Ahora es UNA: se toca y la hoja lleva los perros
         // Y los ajustes.
-        onClick={() => setHojaDePerrosAbierta(true)}
-        aria-label={varios
-          ? `Perro actual: ${nombreMostrar}. Cambiar de perro y ajustes`
-          : `Perro actual: ${nombreMostrar}. Tus perros y ajustes`}
+        // ⚠️ EN MODO VETERINARIO NO DESPLIEGA LA LISTA (7 septiembre).
+        //
+        // CASO REAL: «aparecen los pacientes en la burbujita de perros en
+        // vet como en usuario y no debería ser así».
+        //
+        // Y no es sólo que sobre: es que la pieza está pensada para otra
+        // cosa. La hoja desplegable dice «de cuál de tus perros estás»,
+        // que con tres perros de una casa se responde de un vistazo. Con
+        // cincuenta pacientes, una lista sin buscador dentro de una hoja
+        // que tapa media pantalla no es una lista, es un muro. Así que en
+        // modo profesional la burbuja pasa a ser una MIGA DE PAN: dice en
+        // qué paciente estás y te devuelve a la lista, que es donde vive
+        // el buscador. Igual que los programas que ya usan.
+        onClick={() => {
+          if (enModoProfesional) { cerrarPaneles(); setFase("pacientes"); return; }
+          setHojaDePerrosAbierta(true);
+        }}
+        aria-label={enModoProfesional
+          ? `Paciente actual: ${nombreMostrar}. Ver todos los pacientes`
+          : varios
+            ? `Perro actual: ${nombreMostrar}. Cambiar de perro y ajustes`
+            : `Perro actual: ${nombreMostrar}. Tus perros y ajustes`}
         className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full shrink-0"
         style={{
           background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
@@ -5709,7 +5883,13 @@ function RawkuOnboardingInterna({
     if (!enModoProfesional || fase !== "misMenus" || !usuario?.id || sinCuenta) return;
     if (menusDeTodos !== null) return;
     let vivo = true;
-    getMenusDelProfesional(usuario.id)
+    // ⚠️ TAMBIÉN POR PACIENTE, NO SOLO POR `creado_por` (7 septiembre).
+    // CASO REAL: «cuando estoy dentro de mis menús no aparece nada». Los
+    // menús anteriores al 29 de agosto tienen `creado_por` a NULL porque la
+    // columna existía y no la rellenaba nadie, así que la lista salía vacía
+    // aunque estuvieran todos ahí. Ver `getMenusDelProfesional`.
+    const idsPacientes = perrosDelModo(perros ?? [], accesos, true).map((p) => p.id);
+    getMenusDelProfesional(usuario.id, idsPacientes)
       .then((filas) => { if (vivo) setMenusDeTodos(filas); })
       .catch((err) => {
         capturarError(err, { donde: "getMenusDelProfesional" });
@@ -5718,7 +5898,7 @@ function RawkuOnboardingInterna({
         if (vivo) setMenusDeTodos(undefined);
       });
     return () => { vivo = false; };
-  }, [enModoProfesional, fase, usuario, sinCuenta, menusDeTodos]);
+  }, [enModoProfesional, fase, usuario, sinCuenta, menusDeTodos, perros, accesos]);
 
   const cerrarPaneles = () => {
     setMenuLigeroAbierto(false);
@@ -5768,8 +5948,23 @@ function RawkuOnboardingInterna({
     // CINCO y esas cinco ("aparece el menú de la semana arriba"), y el menú
     // recién hecho no se pierde -- se guarda solo al generarlo, así que
     // está en "Mis menús". No había nada que rescatar.
+    // ⚠️ LA PRIMERA EN MODO PROFESIONAL (7 septiembre). Un tutor entra ya
+    // dentro de su perro y no tiene «lista» que visitar; un veterinario sí,
+    // y es su pantalla principal. Ver el comentario de la fase "pacientes".
+    ...(enModoProfesional ? [{
+      key: "pacientes", Icono: ClipboardList, label: "Pacientes", isPremium: false,
+      ir: () => { setSeccionSuelta(null); setFase("pacientes"); },
+    }] : []),
     { key: "perfil", Icono: Dog,
-      label: enModoProfesional ? `Ficha de ${nombreMostrar}` : `Perfil de ${nombreMostrar}`,
+      // ⚠️ EN MODO PROFESIONAL, SIN NOMBRE (7 septiembre). CASO REAL:
+      // «cuando estás dentro de un paciente te pone ficha de Cairo, no sé si
+      // debería ser así». No lo es: para un tutor «Perfil de Nala» funciona
+      // porque tiene un perro y el nombre es la app entera; para un
+      // veterinario con cincuenta pacientes el nombre en el menú de
+      // navegación no informa, confunde -- parece una entrada distinta cada
+      // vez que cambias de paciente. De quién es la ficha lo dice la miga de
+      // pan de la cabecera; el menú dice a dónde vas.
+      label: enModoProfesional ? "Ficha del paciente" : `Perfil de ${nombreMostrar}`,
       isPremium: false,
       ir: () => {
         setSeccionSuelta(null);
@@ -5810,8 +6005,20 @@ function RawkuOnboardingInterna({
     ...(enModoProfesional ? [] : [
       { key: "compra", Icono: ShoppingBasket, label: "La compra", isPremium: false,
         ir: () => abrirLaCompra() }]),
-    { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true,
-      ir: () => { setSeccionSuelta("analizar"); setFase("seccion"); } },
+    // ⚠️ FUERA DEL MODO PROFESIONAL (7 septiembre) — PEDIDO EXPRESO:
+    // «analizar la dieta actual tiene que desaparecer del modo veterinario».
+    //
+    // Es la herramienta del TUTOR: coge lo que ya le da de comer a su perro
+    // y le dice qué le falta. Un veterinario no analiza lo que él mismo
+    // pauta -- para eso tiene la ficha clínica del menú, con los 41
+    // nutrientes, su mínimo, su máximo y su margen. Y lo que le dé el dueño
+    // por su cuenta lo pregunta en consulta, no lo teclea en una app.
+    //
+    // «Evolución y crecimiento» SÍ se queda: la curva de peso entre
+    // consultas es seguimiento del paciente, no una herramienta de dueño.
+    ...(enModoProfesional ? [] : [
+      { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true,
+        ir: () => { setSeccionSuelta("analizar"); setFase("seccion"); } }]),
   ];
 
   const panelLigero = menuLigeroAbierto && (
@@ -7239,7 +7446,12 @@ function RawkuOnboardingInterna({
   // en modo veterinario significa "ningún paciente": desde el 29 de agosto
   // AuthGate elige el perro de arranque DENTRO del modo, así que tener el
   // perro propio ya no cuenta como tener paciente.
-  if (enModoProfesional && paso === 1 && !yaTienePerroGuardado && !puertaProfesionalPasada) {
+  //
+  // ⚠️ Y SOLO CUANDO NO TIENE NINGUNO (7 septiembre). Ver
+  // `cuantosPacientesGuardados`: antes bastaba con no tener perro montado, y
+  // eso pasa también cuando ya tiene pacientes y va a dar de alta a otro.
+  if (enModoProfesional && paso === 1 && !yaTienePerroGuardado
+      && !puertaProfesionalPasada && cuantosPacientesGuardados === 0) {
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
@@ -7615,6 +7827,12 @@ function RawkuOnboardingInterna({
                 ))}
               </div>
             )}
+            {/* ⚠️ AÑADIDO (7 septiembre) — PEDIDO EXPRESO: al marcar una
+                patología, un veterinario tiene que ver QUÉ cambia, qué puede
+                tocar y qué no, y con cuánto margen. Antes marcaba la casilla
+                y no veía nada; el tope que decide si sale menú vivía solo
+                dentro del solver. Ver `topespatologia.jsx`. */}
+            <QueCambiaLaPatologia claves={perfil.patologias} />
           </BloqueFicha>
 
           <BloqueFicha titulo="Dieta actual">
@@ -8330,6 +8548,176 @@ function RawkuOnboardingInterna({
   // Una lista de documentos, ordenados por fecha. No se edita ninguno: si
   // hay que cambiar algo se firma otra pauta, y ésta se queda. Es además la
   // única forma de poder mirar atrás y ver qué se le pautó y cuándo.
+  // ─── LA LISTA DE PACIENTES, QUE ES LA CASA DEL VETERINARIO ────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (7 septiembre): «van a tener muchísimos pacientes, es
+  // que igual tienen 50 y tiene que ser más accesible y de otra manera, o
+  // sea tal como lo hacen los motores nutricionales».
+  //
+  // Y otro, el mismo día, que es la otra mitad: «aparecen los pacientes en
+  // la burbujita de perros en vet como en usuario y no debería ser así».
+  //
+  // Los dos apuntan al mismo sitio. La app se construyó para una casa con
+  // perros: hay una mascota actual, una burbuja que la dice y una hoja que
+  // despliega las otras dos. Eso deja de funcionar a los veinte pacientes,
+  // y no por el tamaño de la lista -- por cómo se busca. De un paciente no
+  // se recuerda el nombre del perro; se recuerda el apellido del dueño, o
+  // «el bulldog de la señora del jueves». Por eso el campo busca en los
+  // tres a la vez (nombre, tutor y raza) en vez de obligar a elegir por
+  // cuál buscas antes de saber qué buscas -- el mismo criterio que ya se
+  // usó en el buscador de menús.
+  //
+  // NO se enseñan aquí los perros propios del veterinario: `perrosDelModo`
+  // ya reparte, y mezclarlos sería exactamente el fallo que `pacientes.js`
+  // existe para evitar.
+  if (fase === "pacientes" && enModoProfesional) {
+    const fichas = perrosDelModo(perros ?? [], accesos, enModoProfesional);
+    const filtradas = fichas.filter((p) => {
+      if (!filtroPacientes.trim()) return true;
+      return contiene(p.nombre || "", filtroPacientes)
+          || contiene(p.tutor_nombre || "", filtroPacientes)
+          || contiene(nombreDeRaza(p.raza) || "", filtroPacientes);
+    });
+    const irAlPaciente = (id) => {
+      // Mismo aviso que la hoja de perros: cambiar de paciente remonta la
+      // app, y un paciente a medio dar de alta se perdería sin decir nada.
+      if (!perfil._id && perfil.nombre.trim()) { setPerroAlQueIrmeTrasAvisar(id); return; }
+      cerrarPaneles();
+      onCambiarDePerro(id);
+    };
+    return (
+      <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
+        <Fuentes />
+        <div style={{ background: VIOLETA }} className="w-full px-6 pt-10 pb-8">
+          <div className="flex items-center justify-between mb-3">
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
+            <button onClick={() => { setHojaDePerrosAbierta(false); setAjustesAbiertos(true); }}
+                    aria-label="Ajustes"
+                    className="flex items-center justify-center w-9 h-9 rounded-full shrink-0"
+                    style={{ background: "rgba(255,255,255,0.14)", border: "none", cursor: "pointer" }}>
+              <Settings size={17} strokeWidth={1.8} style={{ color: "#FFFFFF" }} />
+            </button>
+          </div>
+          <p className="text-[11px] tracking-[0.18em] uppercase mb-2"
+             style={{ color: MALVA, fontFamily: "monospace" }}>Pacientes</p>
+          <h1 className="text-3xl leading-tight"
+              style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+            {fichas.length === 0
+              ? <>Todavía<br />ninguno.</>
+              : <>{fichas.length} {fichas.length === 1 ? "paciente" : "pacientes"}</>}
+          </h1>
+        </div>
+
+        <div className="flex-1 px-6 pt-5 pb-6 flex flex-col overflow-y-auto">
+          <button
+            onClick={() => {
+              if (!perfil._id) { cerrarPaneles(); setFase("onboarding"); setPaso(1); return; }
+              cerrarPaneles();
+              onAnadirPerro();
+            }}
+            className="w-full flex items-center justify-center gap-2 py-3.5 rounded-2xl mb-4"
+            style={{ background: VIOLETA, color: "#FFFFFF", border: "none",
+                     fontFamily: fontDisplay, fontSize: 16, cursor: "pointer" }}>
+            <Plus size={17} /> Dar de alta un paciente
+          </button>
+
+          {/* ⚠️ SIEMPRE VISIBLE, aunque haya dos fichas (7 septiembre).
+              Primero lo puse a partir de cuatro, por no ocupar sitio. Está
+              mal: en Nutrimenta, VetMenu o MyVetDiet el buscador del fichero
+              está siempre en el mismo píxel, y eso es justo lo que hace que
+              se use sin pensar. Un campo que aparece y desaparece según
+              cuántos pacientes tengas hoy obliga a mirar si está antes de
+              poder escribir. */}
+          {fichas.length > 0 && (
+            <div className="relative mb-3">
+              <Search size={16} style={{ position: "absolute", left: 12, top: 13, color: MALVA }} />
+              <input
+                value={filtroPacientes}
+                onChange={(e) => setFiltroPacientes(e.target.value)}
+                placeholder="Buscar por paciente, tutor o raza"
+                aria-label="Buscar pacientes"
+                className="w-full py-2.5 pl-9 pr-3 rounded-xl outline-none"
+                style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
+                         color: TINTA, fontFamily: fontBody }} />
+            </div>
+          )}
+
+          {fichas.length === 0 ? (
+            <p className="text-sm leading-relaxed" style={{ color: MALVA, fontFamily: fontBody }}>
+              Da de alta al primero y Rawku le calcula la ración con los requisitos de FEDIAF,
+              con su ficha clínica y con los topes de su patología si la tiene. Los pacientes
+              van aparte de tus propios perros: no se mezclan en ninguna lista.
+            </p>
+          ) : filtradas.length === 0 ? (
+            <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
+              Ningún paciente cuadra con «{filtroPacientes}».
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {filtradas.map((p) => {
+                const aqui = p.id === perfil._id;
+                // Lo que un veterinario mira para reconocer una ficha de un
+                // vistazo, en el orden en que lo mira: quién es el perro,
+                // de quién es, y qué tiene. Las patologías van con nombre y
+                // no con un contador: «2 patologías» no ahorra el clic.
+                const suyas = (p.patologias || [])
+                  .map((k) => datosPatologia(k)?.label)
+                  .filter(Boolean);
+                return (
+                  <button key={p.id} onClick={() => irAlPaciente(p.id)}
+                    aria-label={`Paciente ${p.nombre || "sin nombre"}`}
+                    className="w-full flex items-center gap-3 px-3 py-3 rounded-2xl text-left"
+                    style={{ background: aqui ? "#F3EDFB" : "#FFFFFF",
+                             border: `1.5px solid ${aqui ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
+                    <span aria-hidden="true"
+                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                          style={{ background: aqui ? VIOLETA : "#E3DAF0",
+                                   color: aqui ? "#FFFFFF" : VIOLETA,
+                                   fontFamily: fontDisplay, fontSize: 15, fontWeight: 700 }}>
+                      {(p.nombre || "?").trim().charAt(0).toUpperCase()}
+                    </span>
+                    <span className="flex-1 min-w-0">
+                      <span className="block truncate"
+                            style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
+                        {p.nombre || "Sin nombre"}
+                      </span>
+                      <span className="block text-[11px] truncate"
+                            style={{ color: MALVA, fontFamily: fontBody }}>
+                        {[nombreDeRaza(p.raza),
+                          p.peso_actual ? `${p.peso_actual} kg` : null,
+                          p.tutor_nombre].filter(Boolean).join(" · ") || "Ficha sin completar"}
+                      </span>
+                      {suyas.length > 0 && (
+                        <span className="block text-[10px] truncate mt-0.5"
+                              style={{ color: ROSA, fontFamily: fontBody }}>
+                          {suyas.join(" · ")}
+                        </span>
+                      )}
+                    </span>
+                    {aqui ? <Check size={17} style={{ color: VIOLETA }} />
+                          : <ChevronRight size={16} style={{ color: "#C9BEDD" }} />}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          <div className="flex-1" />
+          {/* Un veterinario con perro propio usa Rawku para las dos cosas.
+              Aquí, y no escondido en Ajustes, por lo mismo que en la puerta. */}
+          <button
+            onClick={() => cambiarModoProfesional(false)}
+            className="w-full text-center text-sm py-3 mt-4"
+            style={{ background: "transparent", border: "none", color: MALVA,
+                     fontFamily: fontBody, cursor: "pointer" }}>
+            Usar Rawku para mi propio perro
+          </button>
+        </div>
+        {drawerLigero}
+      </div>
+    );
+  }
+
   if (fase === "pautas") {
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -8489,6 +8877,11 @@ function RawkuOnboardingInterna({
                     const p = porPerro[fila.perro_id] || {};
                     return (
                       <button key={fila.id} onClick={() => abrirMenuGuardado(fila)}
+                        // Con nombre propio: en esta pantalla el nombre del
+                        // paciente aparece también en la burbuja de arriba, y
+                        // sin esto «Nala» era ambiguo para quien lee con
+                        // lector de pantalla (y para las pruebas).
+                        aria-label={`Menú de ${p.nombre || "un paciente"}`}
                         className="flex items-center gap-3 p-4 rounded-2xl text-left"
                         style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
                                  cursor: "pointer" }}>

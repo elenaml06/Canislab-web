@@ -183,6 +183,10 @@ export function crearFakeSupabase(opciones = {}) {
     casaAvisos: false,
     // Que cada menú pedido salga con un alimento distinto. Ver /menu/v2.
     menusDistintos: false,
+    // Los avisos de seguridad que devuelve el motor con el menú (tiaminasa,
+    // exceso de hueso, hígado...). Vacío por defecto: las pruebas que no van
+    // de esto siguen viendo el menú limpio de siempre.
+    problemasSeguridad: [],
     casaFalla: false,
     // Última petición recibida en /menu/varios-perros, para poder
     // comprobar que la app manda lo que dice mandar.
@@ -337,6 +341,8 @@ export function crearFakeSupabase(opciones = {}) {
       // "Alimento del menú 1" apareció en el menú de otra prueba y chocó
       // con su selector. Si no lo pides, se apaga.
       estado.menusDistintos = cfg.menusDistintos === true;
+      estado.problemasSeguridad = Array.isArray(cfg.problemasSeguridad)
+        ? cfg.problemasSeguridad.slice() : [];
       if (typeof cfg.casaFalla === "boolean") estado.casaFalla = cfg.casaFalla;
       if (typeof cfg.premium === "boolean") estado.premium = cfg.premium;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
@@ -472,6 +478,7 @@ export function crearFakeSupabase(opciones = {}) {
             faltan: [], se_pasa: [],
             datos_incompletos: {}, datos_dudosos: {},
           },
+      problemas_seguridad: estado.problemasSeguridad,
     };
 
     if (estado.colgarGenerador && (ruta === "/menu/v2" || ruta === "/menu/semana")) {
@@ -648,6 +655,50 @@ export function crearFakeSupabase(opciones = {}) {
               : {}),
           aviso_composicion: estado.avisoComposicion,
         })),
+      });
+    }
+    // ── LA TABLA DE PATOLOGÍAS ──────────────────────────────────────────
+    // Lo que sirve `GET /patologias` de la API: los topes con su fuente, su
+    // motivo y su margen contra FEDIAF. Aquí van DOS filas de mentira, con
+    // la forma exacta de las de verdad -- lo que se prueba es la pantalla
+    // (que el número y el margen se pintan al marcar la patología), no los
+    // números, que se comprueban contra `patologias.json` en la batería de
+    // la API.
+    if (ruta === "/patologias") {
+      return responder(200, {
+        unidad: "por 1000 kcal de energía metabolizable",
+        patologias: {
+          renal: {
+            nombre: "Insuficiencia renal crónica",
+            formulable: true, formulable_por_profesional: true,
+            necesita_bajo_fediaf: true, motivo_no_formulable: null,
+            solo_en_adulto: true, en_crecimiento: "bloquear",
+            nutriente_frontera: "fosforo", objetivo_terapeutico_por_1000kcal: 1000,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            topes: [{
+              nutriente: "fosforo", unidad: "mg", valor: 1200,
+              minimo_fediaf_adulto: 1160, maximo_fediaf_adulto: null,
+              margen_pct: 3.4,
+              fuente: "Freeman LM, dvm360 2009; WSAVA; IRIS",
+              por_que: "Las dietas renales comerciales aportan 480-1000 mg/1000 kcal.",
+            }],
+            suelos: [],
+            aviso_profesional: "Objetivo de proteína para insuficiencia renal, SACN5 cap.37.",
+            aviso_profesional_crecimiento: null,
+            aviso_general: "Se ha bajado el fósforo todo lo posible.",
+          },
+          artrosis: {
+            nombre: "Artrosis / osteoartritis",
+            formulable: true, formulable_por_profesional: true,
+            necesita_bajo_fediaf: false, motivo_no_formulable: null,
+            solo_en_adulto: false, en_crecimiento: null,
+            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            topes: [], suelos: [],
+            aviso_profesional: null, aviso_profesional_crecimiento: null,
+            aviso_general: null,
+          },
+        },
       });
     }
     if (ruta === "/alimentos") {
@@ -877,6 +928,15 @@ export function crearFakeSupabase(opciones = {}) {
         // que hace que el test detecte un perro_id mal guardado.
         const filtro = url.searchParams.get("perro_id");
         const perroId = filtro && filtro.startsWith("eq.") ? filtro.slice(3) : null;
+        // ⚠️ AÑADIDO (7 septiembre) — `perro_id=in.("a","b")`, que es como
+        // PostgREST escribe un `.in()`. El veterinario pide los menús de sus
+        // pacientes por aquí desde que se descubrió que filtrar SOLO por
+        // `creado_por` dejaba fuera todo lo anterior al 29 de agosto (la
+        // columna existía y valía NULL). Si esto no filtrara de verdad, la
+        // prueba de «salen todos» pasaría también con el fallo puesto.
+        const enLista = filtro && filtro.startsWith("in.(")
+          ? filtro.slice(4, -1).split(",").map((x) => x.replace(/^"|"$/g, "").trim())
+          : null;
         // ⚠️ Y por `creado_por`, que es como el veterinario pide los menús de
         // TODOS sus pacientes. Se filtra de verdad, igual que por perro: si
         // la app dejara de rellenar esa columna -- ya pasó, y por eso existe
@@ -886,6 +946,7 @@ export function crearFakeSupabase(opciones = {}) {
           ? filtroCreador.slice(3) : null;
         let filas = estado.menus;
         if (perroId) filas = filas.filter((m) => String(m.perro_id) === perroId);
+        if (enLista) filas = filas.filter((m) => enLista.includes(String(m.perro_id)));
         if (creador) filas = filas.filter((m) => String(m.creado_por) === creador);
         return responder(200, filas);
       }

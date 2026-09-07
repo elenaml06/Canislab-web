@@ -389,16 +389,63 @@ export async function getMenus(perroId) {
  * Se filtra por `creado_por`, que es la columna que se añadió justo para
  * esto y que hasta el 28 de agosto no rellenaba nadie: sin ella, un menú del
  * veterinario y uno que el dueño se hizo un domingo son la misma fila.
+ *
+ * ⚠️ Y POR LOS PACIENTES TAMBIÉN (7 septiembre). CASO REAL ENCONTRADO POR LA
+ * USUARIA: «cuando estoy dentro de mis menús no aparece nada... y tiene que
+ * aparecer todo, pero luego poder filtrar por búsqueda».
+ *
+ * Filtrar SOLO por `creado_por` deja fuera dos cosas, y las dos existen de
+ * verdad en la cuenta de cualquiera que lleve usando esto desde agosto:
+ *
+ *   · Los menús anteriores al 29 de agosto. La columna se creó el 28 y no la
+ *     rellenaba nadie: valen NULL. Son menús suyos, de sus pacientes, y no
+ *     salían por ningún lado -- ni buscando.
+ *   · Los que el TUTOR se haga de su propio perro cuando llegue la fase 3.
+ *     Ahí `creado_por` será el tutor y el veterinario no vería el historial
+ *     del paciente que lleva él.
+ *
+ * Así que se pide por las dos vías y se juntan: lo que hizo él, y lo que haya
+ * de los perros que son sus pacientes. Sin `idsPacientes` se comporta
+ * exactamente como antes -- quien no pase la lista no cambia de
+ * comportamiento.
  */
-export async function getMenusDelProfesional(userId) {
-  const { data, error } = await supabase
+export async function getMenusDelProfesional(userId, idsPacientes = []) {
+  const suyos = supabase
     .from('menus')
     .select('*')
     .eq('creado_por', userId)
     .order('created_at', { ascending: false })
     .limit(200)
-  if (error) throw error
-  return data ?? []
+
+  const ids = (idsPacientes || []).map(String).filter(Boolean)
+  const dePacientes = ids.length
+    ? supabase
+        .from('menus')
+        .select('*')
+        .in('perro_id', ids)
+        .order('created_at', { ascending: false })
+        .limit(200)
+    : null
+
+  const [a, b] = await Promise.all([suyos, dePacientes])
+  if (a.error) throw a.error
+  // ⚠️ Si falla SOLO la segunda consulta no se tira todo por tierra: es un
+  // complemento, y quedarse sin lista entera por un fallo en la mitad menos
+  // importante es peor que enseñar la otra mitad. Se avisa por Sentry desde
+  // quien llama, que es quien tiene el contexto.
+  const filas = [...(a.data ?? []), ...((b && !b.error && b.data) ? b.data : [])]
+
+  // Un menú puede venir por las dos vías (lo hizo él, de un paciente suyo):
+  // se queda una sola vez.
+  const vistos = new Set()
+  const unicas = []
+  for (const m of filas) {
+    if (!m || vistos.has(m.id)) continue
+    vistos.add(m.id)
+    unicas.push(m)
+  }
+  unicas.sort((x, y) => String(y.created_at).localeCompare(String(x.created_at)))
+  return unicas.slice(0, 200)
 }
 
 // ─── LAS PAUTAS FIRMADAS ─────────────────────────────────────────────────────

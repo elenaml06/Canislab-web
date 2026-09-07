@@ -31,10 +31,23 @@ async function entrar(page) {
   await esperarLaFicha(page);
 }
 
+// ⚠️ DOS CAMINOS DESDE EL 7 DE SEPTIEMBRE, y no es un capricho de la prueba.
+// En modo veterinario la burbuja dejó de desplegar la hoja de perros -- ahora
+// lleva a la pantalla de Pacientes, porque una lista de cincuenta fichas no
+// cabe en un desplegable -- así que Ajustes cuelga del engranaje de esa
+// pantalla. En modo tutor sigue donde estaba. Esta ayuda vale para los dos:
+// si hubiera que escribir cada camino en cada test, el siguiente cambio de
+// navegación volvería a costar un día (ver la cabecera de ayudas.js).
 const abrirAjustes = async (page) => {
-  await page.getByRole("button", { name: /Perro actual/ }).last().click();
-  await page.getByRole("dialog", { name: "Tus perros" })
-            .getByRole("button", { name: "Ajustes", exact: true }).click();
+  const burbujaTutor = page.getByRole("button", { name: /Perro actual/ });
+  if (await burbujaTutor.count()) {
+    await burbujaTutor.last().click();
+    await page.getByRole("dialog", { name: "Tus perros" })
+              .getByRole("button", { name: "Ajustes", exact: true }).click();
+    return;
+  }
+  await page.getByRole("button", { name: /Paciente actual/ }).last().click();
+  await page.getByRole("button", { name: "Ajustes", exact: true }).click();
 };
 
 test.describe("el modo veterinario", () => {
@@ -147,25 +160,49 @@ test.describe("los pacientes y el perro propio", () => {
     ...extra,
   });
 
+  // ⚠️ REESCRITOS (7 septiembre) — LA BURBUJA YA NO DESPLIEGA PACIENTES.
+  //
+  // CASO REAL: «aparecen los pacientes en la burbujita de perros en vet como
+  // en usuario y no debería ser así», y el mismo día: «van a tener muchísimos
+  // pacientes, igual tienen 50, y tiene que ser más accesible y de otra
+  // manera, tal como lo hacen los motores nutricionales».
+  //
+  // Así que en modo veterinario la burbuja pasó a ser una miga de pan: dice
+  // en qué paciente estás y te lleva a la pantalla de Pacientes, que es donde
+  // vive el buscador. Lo que se comprueba SIGUE SIENDO LO MISMO -- que sus
+  // pacientes y sus perros no se mezclan nunca --, solo que en su sitio nuevo.
+  const irAPacientes = async (page) => {
+    await page.getByRole("button", { name: /Paciente actual/ }).last().click();
+    await expect(page.getByRole("button", { name: /Dar de alta un paciente/ })).toBeVisible();
+  };
+
   test("en modo veterinario se ven los pacientes, no sus perros", async ({ page, request }) => {
     await montar(request);
     await entrar(page);
-    await page.getByRole("button", { name: /Perro actual/ }).last().click();
+    await irAPacientes(page);
 
-    const hoja = page.getByRole("dialog", { name: "Tus perros" });
-    await expect(hoja.getByText("Tus pacientes")).toBeVisible();
-    await expect(hoja.getByText("Nala")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Paciente Nala" })).toBeVisible();
     // Y su propio perro NO está en la lista de pacientes.
-    await expect(hoja.getByText("Cairo")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Paciente Cairo" })).toHaveCount(0);
+  });
+
+  test("la burbuja NO despliega ya la lista de pacientes", async ({ page, request }) => {
+    // La otra mitad del pedido, y la que se pasaría por alto: no basta con
+    // que exista la pantalla nueva, tiene que haber desaparecido la hoja --
+    // si se quedaran las dos, el veterinario tendría dos listas distintas
+    // del mismo sitio, que es peor que tener una mala.
+    await montar(request);
+    await entrar(page);
+    await page.getByRole("button", { name: /Paciente actual/ }).last().click();
+    await expect(page.getByRole("dialog", { name: "Tus perros" })).toHaveCount(0);
   });
 
   test("y en modo tutor, sus perros y no sus pacientes", async ({ page, request }) => {
     await montar(request);
     await entrar(page);
-    // Apagar el modo desde Ajustes.
-    await page.getByRole("button", { name: /Perro actual/ }).last().click();
-    await page.getByRole("dialog", { name: "Tus perros" })
-              .getByRole("button", { name: "Ajustes", exact: true }).click();
+    // Apagar el modo desde Ajustes, que en modo veterinario cuelga de la
+    // pantalla de Pacientes (la burbuja ya no abre una hoja).
+    await abrirAjustes(page);
     await page.getByRole("button", { name: /Modo veterinario/ }).click();
     await expect(page.getByText(/usas Rawku como cualquier tutor/)).toBeVisible();
     await page.getByRole("button", { name: "Volver" }).first().click();
@@ -186,9 +223,8 @@ test.describe("los pacientes y el perro propio", () => {
     // lo que pasa de verdad cuando la tabla no existe.
     await montar(request, { sinTablaAccesos: true });
     await entrar(page);
-    await page.getByRole("button", { name: /Perro actual/ }).last().click();
-    const hoja = page.getByRole("dialog", { name: "Tus perros" });
-    await expect(hoja.getByText("Nala")).toBeVisible();
-    await expect(hoja.getByText("Cairo")).toBeVisible();
+    await irAPacientes(page);
+    await expect(page.getByRole("button", { name: "Paciente Nala" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Paciente Cairo" })).toBeVisible();
   });
 });
