@@ -23,6 +23,7 @@
 // mentira, que es quien decide si la cuenta está acreditada.
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarElPaciente } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -94,7 +95,10 @@ test("con pacientes, la app se abre DENTRO del paciente y no de su perro", async
     menus: [],
   });
   await entrar(page);
-  await page.getByText("Nombre y sexo").waitFor();
+  // ⚠️ Y AQUÍ ATERRIZA EN LA FICHA DEL PACIENTE (8 septiembre), no en el
+  // «Perfil» del dueño: esperar la pantalla correcta es parte de lo que se
+  // comprueba, no un detalle de la espera.
+  await esperarElPaciente(page);
   await expect.poll(() => elPerroDeAhora(page),
     { message: "se ha abierto el perro que no toca" }).toContain(EL_PACIENTE.nombre);
 });
@@ -321,6 +325,6 @@ test("y en modo veterinario no se ofrece «¿tienes más perros?»", async ({ pa
     menus: [],
   });
   await entrar(page);
-  await page.getByText("Nombre y sexo").waitFor();
+  await esperarElPaciente(page);
   await expect(page.getByText(/¿Tienes más perros\?/)).toHaveCount(0);
 });

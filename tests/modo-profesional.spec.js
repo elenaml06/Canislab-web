@@ -13,7 +13,7 @@
 // perfil que sirve Supabase -- no un estado local que la app se invente.
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
-import { esperarLaFicha } from "./ayudas.js";
+import { esperarLaFicha, esperarElPaciente } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -23,12 +23,17 @@ async function configurarBackend(request, opciones) {
   return res.json();
 }
 
-async function entrar(page) {
+// ⚠️ HAY QUE DECIR EN QUÉ MODO SE ENTRA (8 septiembre). Desde que el
+// veterinario aterriza en la ficha clínica y no en el «Perfil» del tutor,
+// las dos pantallas de llegada son distintas -- y esperar la que toca es
+// justamente lo que comprueba que la app no se ha equivocado de modo.
+async function entrar(page, { comoProfesional = false } = {}) {
   await page.goto("/");
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await esperarLaFicha(page);
+  if (comoProfesional) await esperarElPaciente(page);
+  else await esperarLaFicha(page);
 }
 
 // ⚠️ DOS CAMINOS DESDE EL 7 DE SEPTIEMBRE, y no es un capricho de la prueba.
@@ -93,7 +98,7 @@ test.describe("el modo veterinario", () => {
       // acceso este test fallaría por el motivo equivocado.
       accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
     });
-    await entrar(page);
+    await entrar(page, { comoProfesional: true });
     await abrirAjustes(page);
 
     await expect(page.getByRole("button", { name: /Modo veterinario/ })).toBeVisible();
@@ -114,7 +119,7 @@ test.describe("el modo veterinario", () => {
       perros: [PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA],
       accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
     });
-    await entrar(page);
+    await entrar(page, { comoProfesional: true });
     await abrirAjustes(page);
     await page.getByRole("button", { name: /Modo veterinario/ }).click();
     await expect(page.getByText(/usas Rawku como cualquier tutor/)).toBeVisible();
@@ -122,6 +127,7 @@ test.describe("el modo veterinario", () => {
     // Y sigue apagado después de recargar: si volviera a encenderse solo,
     // el interruptor no serviría de nada.
     await page.reload();
+    // Ya en modo tutor: la pantalla de llegada vuelve a ser la del dueño.
     await esperarLaFicha(page);
     await abrirAjustes(page);
     await expect(page.getByText(/usas Rawku como cualquier tutor/)).toBeVisible();
@@ -178,7 +184,7 @@ test.describe("los pacientes y el perro propio", () => {
 
   test("en modo veterinario se ven los pacientes, no sus perros", async ({ page, request }) => {
     await montar(request);
-    await entrar(page);
+    await entrar(page, { comoProfesional: true });
     await irAPacientes(page);
 
     await expect(page.getByRole("button", { name: "Paciente Nala" })).toBeVisible();
@@ -192,14 +198,14 @@ test.describe("los pacientes y el perro propio", () => {
     // si se quedaran las dos, el veterinario tendría dos listas distintas
     // del mismo sitio, que es peor que tener una mala.
     await montar(request);
-    await entrar(page);
+    await entrar(page, { comoProfesional: true });
     await page.getByRole("button", { name: /Paciente actual/ }).last().click();
     await expect(page.getByRole("dialog", { name: "Tus perros" })).toHaveCount(0);
   });
 
   test("y en modo tutor, sus perros y no sus pacientes", async ({ page, request }) => {
     await montar(request);
-    await entrar(page);
+    await entrar(page, { comoProfesional: true });
     // Apagar el modo desde Ajustes, que en modo veterinario cuelga de la
     // pantalla de Pacientes (la burbuja ya no abre una hoja).
     await abrirAjustes(page);
@@ -222,7 +228,7 @@ test.describe("los pacientes y el perro propio", () => {
     // `sinTablaAccesos` hace que el servidor conteste con un error, que es
     // lo que pasa de verdad cuando la tabla no existe.
     await montar(request, { sinTablaAccesos: true });
-    await entrar(page);
+    await entrar(page, { comoProfesional: true });
     await irAPacientes(page);
     await expect(page.getByRole("button", { name: "Paciente Nala" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Paciente Cairo" })).toBeVisible();

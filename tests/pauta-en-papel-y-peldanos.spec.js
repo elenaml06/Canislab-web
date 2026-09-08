@@ -15,6 +15,7 @@
 //      se copian los gramos a mano en la plantilla de siempre.
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarElPaciente } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -47,7 +48,7 @@ const comoVeterinario = async (page, request, extra = {}) => {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByText("Nombre y sexo").waitFor();
+  await esperarElPaciente(page);
 };
 
 const irAlFormulador = async (page) => {

@@ -13,7 +13,7 @@
 // cuenta.
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
-import { esperarLaFicha } from "./ayudas.js";
+import { esperarLaFicha, esperarElPaciente } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -91,7 +91,7 @@ test("con pacientes, dar de alta a otro NO dice «todavía no tienes ninguno»",
     accesos: [activo(PACIENTE), activo(OTRO_PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   await irAPacientes(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
@@ -127,7 +127,7 @@ test("la pantalla de Pacientes busca por nombre, por tutor y por raza", async ({
               activo(TERCER_PACIENTE), activo(CUARTO_PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
   await irAPacientes(page);
 
   // Primero: SIN buscar nada, están todos. Es la mitad que se olvida.
@@ -157,7 +157,7 @@ test("desde la lista se entra en un paciente", async ({ page, request }) => {
     accesos: [activo(PACIENTE), activo(OTRO_PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
   await irAPacientes(page);
 
   await page.getByRole("button", { name: "Paciente Ruffo" }).click();
@@ -198,7 +198,7 @@ test("los menús del veterinario salen TODOS sin buscar nada", async ({ page, re
     menus: [conCreador, sinCreador],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await panel.getByRole("button", { name: "Menús", exact: true }).click();
@@ -269,7 +269,7 @@ test("«Analizar la dieta actual» no está en el panel del veterinario", async 
     perros: [PACIENTE], accesos: [activo(PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await expect(panel.getByRole("button", { name: "Analizar la dieta actual" })).toHaveCount(0);
@@ -327,7 +327,7 @@ test("dentro del menú de un paciente no le dicen que se lo enseñe a un veterin
     }],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await panel.getByRole("button", { name: "Menús", exact: true }).click();
@@ -385,7 +385,7 @@ test("y el aviso de seguridad baja al final, sin alarma pero sin perderse", asyn
     }],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await panel.getByRole("button", { name: "Menús", exact: true }).click();

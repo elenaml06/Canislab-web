@@ -27,6 +27,24 @@ export const laFichaHaCargado = (page) => page.getByText("Nombre y sexo");
 export const esperarLaFicha = (page, opciones = {}) =>
   laFichaHaCargado(page).waitFor(opciones);
 
+// ⚠️ Y LA DEL VETERINARIO, QUE ES OTRA PANTALLA (8 septiembre).
+//
+// Hasta hoy las dos eran la misma: en modo profesional la app también
+// aterrizaba en el «Perfil» del tutor, con sus filas y su lápiz. Se quitó
+// porque repetía la ficha clínica entera para acabar en un botón que
+// llevaba al generador -- ahora el veterinario aterriza DIRECTAMENTE en la
+// ficha del paciente, y la siguiente pantalla es formular.
+//
+// Son dos ayudas y no una que valga para las dos a propósito: una espera
+// que aceptara cualquiera de las dos pantallas daría por buena justamente
+// la regresión que esto arregla -- un veterinario cayendo en la app del
+// dueño --, y una prueba que aprueba el fallo no sirve de nada.
+export const laFichaClinicaHaCargado = (page) =>
+  page.getByRole("heading", { name: /Ficha del paciente|Nuevo paciente/ });
+
+export const esperarElPaciente = (page, opciones = {}) =>
+  laFichaClinicaHaCargado(page).waitFor(opciones);
+
 // Ir al generador desde donde sea. Desde el 25 de agosto se entra por "Mis
 // menús": la ficha del perro ya no ofrece hacer menús cuando vas a editarla.
 export async function irAlGenerador(page) {

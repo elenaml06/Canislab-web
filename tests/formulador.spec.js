@@ -20,7 +20,7 @@
 //     regla 2: el semáforo son los requisitos de un perro sano.
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
-import { irAlGenerador } from "./ayudas.js";
+import { irAlGenerador, esperarElPaciente, esperarLaFicha } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -52,7 +52,7 @@ const comoVeterinario = async (page, request, extra = {}) => {
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByText("Nombre y sexo").waitFor();   // el resumen del paciente
+  await esperarElPaciente(page);   // la ficha clínica del paciente
   await irAlFormulador(page);
 };
 
@@ -258,7 +258,11 @@ test("un tutor no ve las pautas firmadas por ningún lado", async ({ page, reque
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByText("Nombre y sexo").waitFor();
+  // ⚠️ ÉSTE ES EL TEST DEL TUTOR, y espera SU pantalla. Un tutor no ve nunca
+  // la «Ficha del paciente», así que esperarla aquí deja el test colgado un
+  // minuto y lo tira -- pasó al cambiar las esperas en bloque el 8 de
+  // septiembre. Las dos pantallas de llegada son distintas a propósito.
+  await esperarLaFicha(page);
   await page.getByRole("button", { name: "Menú", exact: true }).last().click();
   await expect(page.getByRole("dialog", { name: "Panel lateral" })
                    .getByRole("button", { name: "Pautas firmadas" })).toHaveCount(0);
@@ -332,7 +336,7 @@ test("los menús de TODOS sus pacientes, y se pueden buscar", async ({ page, req
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await page.getByText("Nombre y sexo").waitFor();
+  await esperarElPaciente(page);
   await page.getByRole("button", { name: "Menú", exact: true }).last().click();
   await page.getByRole("dialog", { name: "Panel lateral" })
             .getByRole("button", { name: "Menús", exact: true }).click();
