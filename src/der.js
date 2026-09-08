@@ -71,13 +71,45 @@ const RAZAS_MENOS_GASTO = new Set(["Dachshund Estándar","Dachshund Miniatura",
   "Lhasa Apso","Shih Tzu","West Highland White Terrier","Border Collie",
   "Collie de Pelo Largo","Airedale Terrier","American Staffordshire Terrier",
   "Golden Retriever"]);
+// ⚠️ LAS DOS RAZAS CON CIFRA PROPIA DE FEDIAF (8 septiembre).
+//
+// Tabla VII-7 de FEDIAF 2025, sección «Breed specific differences», la misma
+// tabla de la que salen los cinco escalones de actividad:
+//     Great Danes     200 (200 - 250) kcal ME per kg BW^0.75
+//     Newfoundlands   105 (80 - 132)
+//
+// Las dos están en la lista de 136 razas de la app y no se usaban. MEDIDO: un
+// Gran Danés de 67,5 kg marcado como «normal» recibía 2590 kcal/día donde
+// FEDIAF dice 4710 — el 55 %.
+//
+// El valor central sustituye a la base de «normal», el nivel de actividad
+// sigue moviendo su diferencia contra «normal», y el resultado se recorta al
+// rango que publica FEDIAF. Esa forma de aplicarlo es interpretación nuestra:
+// ver `PREGUNTAS_ABIERTAS.md` P-11 en el repo del motor.
+//
+// ⚠️ TIENE QUE SEGUIR SIENDO IDÉNTICO A `RAZAS_CIFRA_FEDIAF` de `der.py`.
+const RAZAS_CIFRA_FEDIAF = {
+  "Gran Danés": [200.0, 200.0, 250.0],
+  "Terranova":  [105.0,  80.0, 132.0],
+};
 const KLEIN_A = 1.063, KLEIN_B = 0.565, MJ_A_KCAL = 239.0;
-const CRECIMIENTO = [[0.50, 210], [0.80, 175], [null, 140]];
+// ⚠️ ERAN TRES ESCALONES Y SOLO SE USABA UNO (8 septiembre). Aquí había
+// `[[0.50,210],[0.80,175],[null,140]]` y el código leía SIEMPRE el último, en
+// los dos repos: un cachorro de dos meses sin peso adulto esperado recibía
+// 140 (= 2 x RER), que es lo que SACN5 da para DESPUÉS de los cuatro meses.
+//
+// FEDIAF no cubre este caso — su ecuación de crecimiento necesita el peso
+// adulto —, así que se tira de SACN5 (Tabla 5-2, parte 2 canina): «3 x RER
+// from weaning until four months of age. At four months of age energy intake
+// should be reduced to 2 x RER». Son dos escalones y cortan por EDAD.
+const CRECIMIENTO_SACN5_MESES = 4.0;
+const CRECIMIENTO_ANTES_4M = 210.0;   // 3 x RER
+const CRECIMIENTO_DESDE_4M = 140.0;   // 2 x RER
 
 function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones = {}) {
   if (!pesoActualKg || pesoActualKg <= 0) return null;
   const { pesoAdultoKg, pesoIdealKg, raza, nCachorros, semanaLactancia = 3,
-          machoEntero = false, conOtrosPerros = false } = opciones;
+          machoEntero = false, conOtrosPerros = false, mesesEdad } = opciones;
   const enCrecimiento = etapa === "cachorro_joven" || etapa === "cachorro_crecimiento";
 
   let pesoCalculo = pesoActualKg, subirPorDelgadez = false;
@@ -94,8 +126,10 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
     if (pesoAdultoKg > 0) {
       const frac = Math.min(pesoActualKg / pesoAdultoKg, 1.0);
       coef = Math.max((KLEIN_A - KLEIN_B * frac) * MJ_A_KCAL, 98.0);
+    } else if (mesesEdad != null && mesesEdad < CRECIMIENTO_SACN5_MESES) {
+      coef = CRECIMIENTO_ANTES_4M;
     } else {
-      coef = CRECIMIENTO[CRECIMIENTO.length - 1][1];
+      coef = CRECIMIENTO_DESDE_4M;
     }
     der = coef * Math.pow(pesoActualKg, 0.75);
   } else if (etapa === "gestante_temprana" || etapa === "gestante_tardia") {
@@ -105,14 +139,25 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
     const n = nCachorros > 0 ? nCachorros : 4;
     const extra = n <= 4 ? 24 * n * pesoCalculo : (96 + 12 * (n - 4)) * pesoCalculo;
     const pesoSem = [0.75, 0.95, 1.1, 1.2][Math.min(Math.max(semanaLactancia, 1), 4) - 1];
+    // ⚠️ SIN TOPE (8 septiembre). Aquí había un `Math.min(der, 6.0 * RER)` que
+    // no es de FEDIAF: FEDIAF (Tabla VII-8b) no pone ningún techo a esta
+    // fórmula. El x6 salía de SACN5, donde NO es un techo general sino la
+    // FILA de camadas de 9 o más cachorros. Recortaba hasta un 33 % (una
+    // perra de 60 kg con 8 cachorros recibía 9054 kcal donde FEDIAF dice
+    // 13.494). Ver `der.py`, que lleva el detalle.
     der = 145 * Math.pow(pesoCalculo, 0.75) + extra * pesoSem;
-    der = Math.min(der, 6.0 * 70 * Math.pow(pesoCalculo, 0.75));
   } else {
-    let coef = BASE_ACTIVIDAD[ACTIVIDAD_KEY[actividadIdx]] ?? BASE_ACTIVIDAD.normal;
+    const propia = RAZAS_CIFRA_FEDIAF[raza];
+    const base = BASE_ACTIVIDAD[ACTIVIDAD_KEY[actividadIdx]] ?? BASE_ACTIVIDAD.normal;
+    let coef = propia ? propia[0] + (base - BASE_ACTIVIDAD.normal) : base;
     coef += AJUSTE_EDAD[etapa === "senior" ? "senior" : "adulto"];
     if (conOtrosPerros) coef += 10;
     if (machoEntero) coef += 10;
-    if (RAZAS_MAS_GASTO.has(raza)) coef += 15;
+    if (propia) {
+      // El ±15 de Thes 2014 no se aplica encima: estas dos razas ya tienen su
+      // propia cifra medida. Y se recorta al rango que publica FEDIAF.
+      coef = Math.max(propia[1], Math.min(propia[2], coef));
+    } else if (RAZAS_MAS_GASTO.has(raza)) coef += 15;
     else if (RAZAS_MENOS_GASTO.has(raza)) coef -= 15;
     der = coef * Math.pow(pesoCalculo, 0.75);
   }
@@ -122,4 +167,4 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
 
 export { interpolar, finCrecimientoMeses, inicioSeniorAnios, pesoEsperado,
          determinarEtapa, calcularDER, ACTIVIDAD_KEY, RAZAS_MAS_GASTO,
-         RAZAS_MENOS_GASTO };
+         RAZAS_MENOS_GASTO, RAZAS_CIFRA_FEDIAF };

@@ -2,13 +2,13 @@
  "_que_es_esto": "EL CONTRATO DEL DER. Las kcal diarias de un perro se calculan DOS VECES en este proyecto: en der.py (Python, Canislab-api) y en calcularDER() de App.jsx (JavaScript, canislab-web). Misma formula, mismos coeficientes, mismas listas de razas -- escritas dos veces, en dos lenguajes y en dos repos.",
  "_por_que_existe": "La que MANDA es la del frontend: la app calcula el DER y lo manda en der_objetivo, asi que der.py solo se ejecuta si alguien llama a /der. Si las dos divergen, el usuario vera unas kcal en pantalla y el motor cumplira los 30 requisitos sobre otras -- y no dara ningun error, porque cada una por separado es coherente consigo misma. Es la familia de fallos que describe CLAUDE.md en 'Fallos que no puede encontrar la usuaria'.",
  "_como_se_usa": "Este archivo esta en LOS DOS REPOS, identico. Cada uno tiene una prueba que comprueba SU implementacion contra estos numeros, sin necesitar al otro repo ni a node. Si tocas la formula en un lado, la prueba de ESE lado se cae en el acto y te obliga a mirar el otro. Si el cambio es a proposito, se regeneran los esperados y se copia el archivo al otro repo -- los dos commits, o ninguno.",
- "_comprobado": "26 de agosto de 2026: los 85 casos dan lo mismo en las dos implementaciones. Estos esperados salen de esa coincidencia, no de una sola de las dos.",
+ "_comprobado": "26 de agosto de 2026: los 85 casos dan lo mismo en las dos implementaciones. Regenerado el 8 de septiembre de 2026 tras verificar el DER contra FEDIAF VII-7 y VII-8b.",
  "_campos": {
   "peso": "peso actual en kg",
   "etapa": "adulto | senior | cachorro_joven | cachorro_crecimiento | gestante_temprana | gestante_tardia | lactante",
   "actividad": "sedentario | normal | activo | muy_activo | trabajo (en el frontend es el indice en ese mismo orden)",
   "esterilizado": "true/false",
-  "opciones": "pesoAdultoKg, pesoIdealKg, raza, machoEntero, conOtrosPerros, nCachorros, semanaLactancia",
+  "opciones": "pesoAdultoKg, pesoIdealKg, raza, machoEntero, conOtrosPerros, nCachorros, semanaLactancia. NO se usa `mesesEdad`: der.py, al recibir la edad, DEDUCE el peso adulto con `peso_adulto_desde_curva` y pasa a la ecuacion de Klein, mientras que der.js no tiene esa funcion (la app deduce el peso adulto por su cuenta y lo pasa ya hecho). O sea que con `mesesEdad` los dos toman caminos distintos A PROPOSITO, y un caso asi no puede vivir en un contrato compartido. El respaldo de crecimiento por edad se prueba en cada lado por separado: BLOQUE 54 aqui, der-contrato allí.",
   "kcal": "el DER esperado, redondeado"
  },
  "casos": [
@@ -720,7 +720,7 @@
     "nCachorros": 6,
     "semanaLactancia": 3
    },
-   "kcal": 4696
+   "kcal": 4921
   },
   {
    "peso": 25,
@@ -731,7 +731,7 @@
     "nCachorros": 6,
     "semanaLactancia": 4
    },
-   "kcal": 4696
+   "kcal": 5221
   },
   {
    "peso": 25,
@@ -753,7 +753,7 @@
     "nCachorros": 9,
     "semanaLactancia": 2
    },
-   "kcal": 4696
+   "kcal": 5326
   },
   {
    "peso": 25,
@@ -764,7 +764,7 @@
     "nCachorros": 9,
     "semanaLactancia": 3
    },
-   "kcal": 4696
+   "kcal": 5911
   },
   {
    "peso": 25,
@@ -775,7 +775,161 @@
     "nCachorros": 9,
     "semanaLactancia": 4
    },
-   "kcal": 4696
+   "kcal": 6301
+  },
+  {
+   "peso": 67.5,
+   "etapa": "adulto",
+   "actividad": "sedentario",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Gran Danés"
+   },
+   "kcal": 4710
+  },
+  {
+   "peso": 67.5,
+   "etapa": "adulto",
+   "actividad": "normal",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Gran Danés"
+   },
+   "kcal": 4710
+  },
+  {
+   "peso": 67.5,
+   "etapa": "adulto",
+   "actividad": "activo",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Gran Danés"
+   },
+   "kcal": 5063
+  },
+  {
+   "peso": 67.5,
+   "etapa": "adulto",
+   "actividad": "muy_activo",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Gran Danés"
+   },
+   "kcal": 5652
+  },
+  {
+   "peso": 67.5,
+   "etapa": "adulto",
+   "actividad": "trabajo",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Gran Danés"
+   },
+   "kcal": 5887
+  },
+  {
+   "peso": 56.5,
+   "etapa": "adulto",
+   "actividad": "sedentario",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Terranova"
+   },
+   "kcal": 1855
+  },
+  {
+   "peso": 56.5,
+   "etapa": "adulto",
+   "actividad": "normal",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Terranova"
+   },
+   "kcal": 2164
+  },
+  {
+   "peso": 56.5,
+   "etapa": "adulto",
+   "actividad": "activo",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Terranova"
+   },
+   "kcal": 2473
+  },
+  {
+   "peso": 56.5,
+   "etapa": "adulto",
+   "actividad": "muy_activo",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Terranova"
+   },
+   "kcal": 2720
+  },
+  {
+   "peso": 56.5,
+   "etapa": "adulto",
+   "actividad": "trabajo",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Terranova"
+   },
+   "kcal": 2720
+  },
+  {
+   "peso": 67.5,
+   "etapa": "adulto",
+   "actividad": "normal",
+   "esterilizado": false,
+   "opciones": {
+    "raza": "Boxer"
+   },
+   "kcal": 2944
+  },
+  {
+   "peso": 40.0,
+   "etapa": "lactante",
+   "actividad": "normal",
+   "esterilizado": false,
+   "opciones": {
+    "nCachorros": 4,
+    "semanaLactancia": 4
+   },
+   "kcal": 6914
+  },
+  {
+   "peso": 40.0,
+   "etapa": "lactante",
+   "actividad": "normal",
+   "esterilizado": false,
+   "opciones": {
+    "nCachorros": 8,
+    "semanaLactancia": 4
+   },
+   "kcal": 9218
+  },
+  {
+   "peso": 40.0,
+   "etapa": "lactante",
+   "actividad": "normal",
+   "esterilizado": false,
+   "opciones": {
+    "nCachorros": 9,
+    "semanaLactancia": 4
+   },
+   "kcal": 9794
+  },
+  {
+   "peso": 60.0,
+   "etapa": "lactante",
+   "actividad": "normal",
+   "esterilizado": false,
+   "opciones": {
+    "nCachorros": 8,
+    "semanaLactancia": 4
+   },
+   "kcal": 13494
   }
  ]
 }

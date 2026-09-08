@@ -63,3 +63,56 @@ contrato.casos.forEach((caso, i) => {
       `tocado la fórmula de la app sin tocar der.py, o al revés.`).toBeLessThanOrEqual(1);
   });
 });
+
+// ─── LO QUE EL CONTRATO COMPARTIDO NO PUEDE CUBRIR ──────────────────────────
+//
+// ⚠️ AÑADIDO (8 septiembre). El respaldo de crecimiento —qué se hace con un
+// cachorro del que NO se sabe el peso adulto esperado— no puede vivir en
+// `der_casos.json`, y el motivo está escrito en el propio fichero: `der.py`,
+// al recibir la edad, DEDUCE el peso adulto con `peso_adulto_desde_curva` y
+// pasa a la ecuación de Klein, mientras que `der.js` no tiene esa función
+// (la app deduce el peso adulto por su cuenta y lo pasa ya hecho). Con la
+// edad los dos toman caminos distintos A PROPÓSITO.
+//
+// Pero la REGLA sí es la misma en los dos, y hay que vigilarla aquí. Antes
+// había una tabla de tres escalones (210 / 175 / 140) por % del peso adulto
+// de la que el código leía SIEMPRE el último: un cachorro de dos meses sin
+// peso adulto esperado recibía 140 (= 2 x RER), que es lo que corresponde
+// DESPUÉS de los cuatro meses. Un 33 % menos de lo que le toca.
+//
+// FEDIAF no cubre este caso (su ecuación necesita el peso adulto), así que
+// manda SACN5, Tabla 5-2, parte 2 canina: «Daily energy intake for growing
+// puppies should be 3 x RER from weaning until four months of age. At four
+// months of age energy intake should be reduced to 2 x RER until the puppy
+// reaches adult size.» 3 x RER = 210 · 2 x RER = 140, y cortan por EDAD.
+test.describe("el respaldo de crecimiento, cuando no se sabe el peso adulto", () => {
+  const kcal = (coef, peso) => Math.round(coef * Math.pow(peso, 0.75));
+
+  test("un cachorro de menos de 4 meses recibe los 3 x RER de SACN5", () => {
+    const got = calcularDER(5, "cachorro_joven", 1, false, { mesesEdad: 2 });
+    expect(got, "SACN5 da 3 x RER (210 kcal/kg^0,75) hasta los cuatro meses"
+    ).toBe(kcal(210, 5));
+  });
+
+  test("a partir de los 4 meses recibe los 2 x RER", () => {
+    const got = calcularDER(5, "cachorro_crecimiento", 1, false, { mesesEdad: 6 });
+    expect(got, "SACN5 baja a 2 x RER (140 kcal/kg^0,75) a los cuatro meses"
+    ).toBe(kcal(140, 5));
+  });
+
+  test("sin edad ni peso adulto se queda en el lado prudente", () => {
+    const got = calcularDER(5, "cachorro_crecimiento", 1, false, {});
+    expect(got).toBe(kcal(140, 5));
+  });
+
+  test("con peso adulto conocido manda la ecuación de FEDIAF, no el respaldo", () => {
+    // FEDIAF VII-8b: [254,1 − 135,0 × (actual/adulto)] × kg^0,75. Un cachorro
+    // de 5 kg que va para 20 está al 25 %: 254,1 − 33,75 = 220,4.
+    const got = calcularDER(5, "cachorro_crecimiento", 1, false,
+                            { pesoAdultoKg: 20, mesesEdad: 6 });
+    expect(got, "con el peso adulto en la mano no se usa el respaldo de SACN5"
+    ).not.toBe(kcal(140, 5));
+    expect(Math.abs(got - (1.063 - 0.565 * 0.25) * 239 * Math.pow(5, 0.75))
+    ).toBeLessThanOrEqual(1);
+  });
+});
