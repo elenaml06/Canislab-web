@@ -265,6 +265,54 @@ test("arriba a la derecha no pone el nombre del perro: pone «Pacientes»", asyn
   await expect(page.getByText(/Nala · 1211 kcal\/día/)).toBeVisible();
 });
 
+test("la rueda de ajustes está en TODAS las pantallas del veterinario", async ({ page, request }) => {
+  // ⚠️ CASO REAL, mirando Vercel (8 septiembre): «la burbuja de
+  // configuración desaparece, y esa tiene que estar en TODAS las pantallas».
+  //
+  // Y era verdad: al convertir la burbuja en miga de pan, los ajustes se
+  // quedaron colgando solo del engranaje de la pantalla de Pacientes. Desde
+  // la ficha, el formulador o los menús no había forma de llegar a su cuenta
+  // ni al interruptor de modo sin dar un rodeo.
+  //
+  // Es la misma regla que ya tenía escrita el tutor desde el 24 de agosto
+  // («tiene que existir en todas las pantallas»), que no se trasladó a su
+  // modo. Por eso esto RECORRE las pantallas en vez de mirar una: el día que
+  // se añada la séptima, esta prueba la caza.
+  await entrarComoVeterinario(page, request);
+
+  const irA = async (entrada) => {
+    await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+    await page.getByRole("dialog", { name: "Panel lateral" })
+              .getByRole("button", { name: entrada, exact: true }).click();
+  };
+
+  // En la ficha, que es donde se aterriza.
+  await expect(page.getByRole("button", { name: "Ajustes" }).first()).toBeVisible();
+
+  for (const pantalla of ["Pacientes", "Menús", "Pautas firmadas"]) {
+    await irA(pantalla);
+    await expect(page.getByRole("button", { name: "Ajustes" }).first())
+      .toBeVisible({ timeout: 10000 });
+  }
+
+  // Y en el formulador, que es donde más rato pasa y que NO lleva miga de
+  // pan: su cabecera solo tiene la hamburguesa. Ahí llega por el panel.
+  await irA("Menús");
+  await page.getByRole("button", { name: /Hacer otro menú/ }).click();
+  await expect(page.getByText("Formular la ración")).toBeVisible();
+  await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+  await expect(page.getByRole("dialog", { name: "Panel lateral" })
+                   .getByRole("button", { name: "Ajustes", exact: true })).toBeVisible();
+});
+
+test("y desde ahí se llega de verdad a la cuenta y al interruptor", async ({ page, request }) => {
+  // Que el botón exista no basta: tiene que abrir los ajustes de verdad.
+  await entrarComoVeterinario(page, request);
+  await page.getByRole("button", { name: "Ajustes" }).first().click();
+  await expect(page.getByRole("button", { name: /Modo veterinario/ })).toBeVisible();
+  await expect(page.getByText("Tu clínica")).toBeVisible();
+});
+
 test("y a un tutor le sigue saliendo su perro, como siempre", async ({ page, request }) => {
   await configurar(request, {
     rolProfesional: false, rolVerificado: false,

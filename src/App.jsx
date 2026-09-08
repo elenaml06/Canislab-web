@@ -5529,6 +5529,51 @@ function RawkuOnboardingInterna({
   const burbujaDePerfil = (sobreOscuro = true) => {
     const varios = listaDePerros.length > 1;
     const inicial = (nombreMostrar || "?").trim().charAt(0).toUpperCase();
+
+    // ⚠️ LA RUEDA DE AJUSTES VA EN TODAS LAS PANTALLAS (8 septiembre, tercera
+    // pasada). CASO REAL, mirando Vercel: «la burbuja de configuración
+    // desaparece, y esa tiene que estar en TODAS las pantallas».
+    //
+    // Y era verdad: al convertir la burbuja del veterinario en una miga de
+    // pan, sus ajustes se quedaron colgando SOLO del engranaje de la
+    // pantalla de Pacientes. O sea que desde la ficha, desde el formulador o
+    // desde los menús no había forma de llegar a su cuenta ni al interruptor
+    // de modo sin dar un rodeo. Es la misma regla que ya está escrita para
+    // la burbuja del tutor desde el 24 de agosto -- «tiene que existir en
+    // todas las pantallas» --, que se me olvidó trasladar a su modo.
+    const rueda = (
+      <button
+        onClick={() => { cerrarPaneles(); setAjustesAbiertos(true); }}
+        aria-label="Ajustes"
+        className="flex items-center justify-center w-8 h-8 rounded-full shrink-0"
+        style={{ background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
+                 border: sobreOscuro ? "none" : "1.5px solid #E3DAF0", cursor: "pointer" }}>
+        <Settings size={15} strokeWidth={1.8}
+                  style={{ color: sobreOscuro ? "#FFFFFF" : VIOLETA }} />
+      </button>
+    );
+
+    if (enModoProfesional) {
+      return (
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => { cerrarPaneles(); setFase("pacientes"); }}
+            aria-label={`Paciente actual: ${nombreMostrar}. Ver todos los pacientes`}
+            className="flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full shrink-0"
+            style={{ background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
+                     border: sobreOscuro ? "none" : "1.5px solid #E3DAF0", cursor: "pointer" }}>
+            <ChevronLeft size={14} aria-hidden="true"
+                         style={{ color: sobreOscuro ? "#D8CFEC" : MALVA }} />
+            <span style={{ color: sobreOscuro ? "#FFFFFF" : TINTA,
+                           fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
+              Pacientes
+            </span>
+          </button>
+          {rueda}
+        </div>
+      );
+    }
+
     return (
       <button
         // ⚠️ REHECHA (24 agosto) — CASO REAL: "NO QUIERO DOS, QUIERO UNA
@@ -5539,28 +5584,10 @@ function RawkuOnboardingInterna({
         // cosas que abren dos sitios distintos, en la esquina donde solo
         // cabe una idea. Ahora es UNA: se toca y la hoja lleva los perros
         // Y los ajustes.
-        // ⚠️ EN MODO VETERINARIO NO DESPLIEGA LA LISTA (7 septiembre).
-        //
-        // CASO REAL: «aparecen los pacientes en la burbujita de perros en
-        // vet como en usuario y no debería ser así».
-        //
-        // Y no es sólo que sobre: es que la pieza está pensada para otra
-        // cosa. La hoja desplegable dice «de cuál de tus perros estás»,
-        // que con tres perros de una casa se responde de un vistazo. Con
-        // cincuenta pacientes, una lista sin buscador dentro de una hoja
-        // que tapa media pantalla no es una lista, es un muro. Así que en
-        // modo profesional la burbuja pasa a ser una MIGA DE PAN: dice en
-        // qué paciente estás y te devuelve a la lista, que es donde vive
-        // el buscador. Igual que los programas que ya usan.
-        onClick={() => {
-          if (enModoProfesional) { cerrarPaneles(); setFase("pacientes"); return; }
-          setHojaDePerrosAbierta(true);
-        }}
-        aria-label={enModoProfesional
-          ? `Paciente actual: ${nombreMostrar}. Ver todos los pacientes`
-          : varios
-            ? `Perro actual: ${nombreMostrar}. Cambiar de perro y ajustes`
-            : `Perro actual: ${nombreMostrar}. Tus perros y ajustes`}
+        onClick={() => setHojaDePerrosAbierta(true)}
+        aria-label={varios
+          ? `Perro actual: ${nombreMostrar}. Cambiar de perro y ajustes`
+          : `Perro actual: ${nombreMostrar}. Tus perros y ajustes`}
         className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full shrink-0"
         style={{
           background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
@@ -5568,46 +5595,21 @@ function RawkuOnboardingInterna({
           cursor: "pointer",
         }}
       >
-        {/* ⚠️ EN MODO VETERINARIO ES UNA MIGA DE PAN, NO UNA MASCOTA
-            (8 septiembre, segunda pasada).
-            El 7 le cambié a dónde lleva -- a la lista de pacientes en vez
-            de a un desplegable de perros -- y me dejé lo que de verdad se
-            ve: el mismo círculo con la inicial y el mismo nombre del perro
-            que en la app del dueño. CASO REAL: «en tus capturas puedo ver
-            perfectamente que en el icono de arriba a la derecha sigue
-            apareciendo Nala».
-            Un veterinario no está «en Nala» como quien tiene un perro: está
-            DENTRO de una ficha y sale de ella. Así que dice a dónde vuelve,
-            no de quién es la ficha -- de quién es lo dice la pantalla, que
-            para eso lleva el caso en la cabecera. */}
-        {enModoProfesional ? (
-          <>
-            <ChevronLeft size={14} aria-hidden="true"
-                         style={{ color: sobreOscuro ? "#D8CFEC" : MALVA }} />
-            <span style={{ color: sobreOscuro ? "#FFFFFF" : TINTA,
-                           fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
-              Pacientes
-            </span>
-          </>
-        ) : (
-          <>
-            <span
-              aria-hidden="true"
-              className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-              style={{ background: sobreOscuro ? "#FFFFFF" : VIOLETA,
-                       color: sobreOscuro ? VIOLETA : "#FFFFFF",
-                       fontFamily: fontDisplay, fontSize: 12, fontWeight: 700 }}
-            >
-              {inicial}
-            </span>
-            <span className="truncate" style={{ maxWidth: 92, color: sobreOscuro ? "#FFFFFF" : TINTA,
-                                                fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
-              {nombreMostrar}
-            </span>
-            <ChevronRight size={13} aria-hidden="true"
-                          style={{ color: sobreOscuro ? "#D8CFEC" : MALVA, transform: "rotate(90deg)" }} />
-          </>
-        )}
+        <span
+          aria-hidden="true"
+          className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+          style={{ background: sobreOscuro ? "#FFFFFF" : VIOLETA,
+                   color: sobreOscuro ? VIOLETA : "#FFFFFF",
+                   fontFamily: fontDisplay, fontSize: 12, fontWeight: 700 }}
+        >
+          {inicial}
+        </span>
+        <span className="truncate" style={{ maxWidth: 92, color: sobreOscuro ? "#FFFFFF" : TINTA,
+                                            fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
+          {nombreMostrar}
+        </span>
+        <ChevronRight size={13} aria-hidden="true"
+                      style={{ color: sobreOscuro ? "#D8CFEC" : MALVA, transform: "rotate(90deg)" }} />
       </button>
     );
   };
@@ -6366,6 +6368,23 @@ function RawkuOnboardingInterna({
     ...(enModoProfesional ? [] : [
       { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true,
         ir: () => { setSeccionSuelta("analizar"); setFase("seccion"); } }]),
+    // ⚠️ AJUSTES TAMBIÉN AQUÍ, EN MODO PROFESIONAL (8 septiembre, tercera
+    // pasada). CASO REAL: «la burbuja de configuración desaparece, y esa
+    // tiene que estar en TODAS las pantallas».
+    //
+    // La rueda ya va junto a la miga de pan, pero hay una pantalla que NO
+    // lleva miga: el formulador, que tiene su propia cabecera con la
+    // hamburguesa y nada más -- y es donde el veterinario pasa más rato.
+    // El panel sí está en todas, así que aquí queda cubierto del todo.
+    //
+    // Al tutor no se le añade: él llega a sus ajustes por la hoja de la
+    // burbuja, que es donde se decidió el 24 de agosto («no quiero dos, una
+    // sola burbujita para configuración y los perros»), y ponerlo también en
+    // el panel sería ofrecer lo mismo dos veces.
+    ...(enModoProfesional ? [{
+      key: "ajustes", Icono: Settings, label: "Ajustes", isPremium: false,
+      ir: () => setAjustesAbiertos(true),
+    }] : []),
   ];
 
   const panelLigero = menuLigeroAbierto && (
