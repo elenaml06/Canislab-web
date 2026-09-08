@@ -736,7 +736,16 @@ const CATEGORIAS_ALIMENTO = {
     "Pavo": ["Cuello de pavo"],
     "Pollo": ["Carcasa de pollo"],
     "Ternera": ["Pecho de ternera con hueso", "Cuello de ternera"],
-    "Vaca": ["Laringe de vacuno"],
+    // ⚠️ QUITADA "Laringe de vacuno" DE AQUÍ (8 septiembre), y esto llevaba
+    // roto en producción desde el 7. En el motor dejó de ser "Hueso carnoso"
+    // ese día y pasó a "Extras": es cartílago, tiene 66 mg de calcio cuando
+    // un hueso carnoso de verdad trae 1.250-1.810, y además está bloqueada
+    // por tejido tiroideo, así que NUNCA puede aportar hueso a un menú.
+    // Ofrecerla aquí es el fallo de la regla 5 del CLAUDE.md en estado puro:
+    // elegirla no hacía nada y nadie se enteraba, porque el menú salía verde
+    // igual. Baja a "Extras", que es donde vive ahora.
+    // (Vaca se queda sin hueso carnoso propio, que es la verdad: los que hay
+    // son de ternera -- pecho y cuello.)
   },
   "Vísceras": {
     // ⚠️ CORREGIDO (5 agosto, madrugada): el pulmón vuelve aquí -- a
@@ -754,7 +763,17 @@ const CATEGORIAS_ALIMENTO = {
     // Timo y cerebro dan variedad adicional con datos USDA reales.
     "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero"],
     "Ternera": ["Pulmón de ternera", "Riñón de ternera", "Timo de ternera", "Cerebro de ternera"],
-    "Vaca": ["Bazo de vaca", "Páncreas de vaca"],
+    // ⚠️ AMPLIADO (8 septiembre) — LA MISMA HISTORIA DE AGOSTO, OTRA VEZ.
+    // El comentario de arriba cuenta que "Bazo de ternera" y "Páncreas de
+    // ternera" pasaron a "de vaca" porque sus datos eran de animal adulto.
+    // Al timo, al pulmón y al cerebro se les pasó: seguían llamándose "de
+    // ternera" con datos de VACA (coinciden celda a celda con los registros
+    // de vaca de USDA, no con los de ternera). En el motor se han partido en
+    // dos, cada especie con SUS datos, así que aquí entran las tres de vaca.
+    // Y la diferencia no es un decimal: el timo de vaca tiene 236 kcal y
+    // 20,35 g de grasa, el de ternera 101 y 3,07.
+    "Vaca": ["Bazo de vaca", "Páncreas de vaca", "Timo de vaca",
+             "Pulmón de vaca", "Cerebro de vaca"],
     // ⚠️ ELIMINADO (5 agosto, madrugada) — CASO REAL GRAVE, pedido
     // expreso: "Cerdo": ["Bazo de cerdo", "Páncreas de cerdo"] quitado
     // por completo -- riesgo real de enfermedad de Aujeszky
@@ -825,6 +844,10 @@ const CATEGORIAS_ALIMENTO = {
     "Grasa": ["Grasa de pollo", "Manteca"],
     "Semillas": ["Pipa de calabaza", "Pipa de girasol", "Semilla de lino", "Semilla de sésamo"],
     "Sal": ["Sal común (cloruro sódico)"],
+    // Bajó de "Hueso carnoso" el 8 de septiembre: en el motor es "Extras"
+    // desde el 7 (es cartílago, no hueso, y está bloqueada por tejido
+    // tiroideo). Ver el comentario en Hueso carnoso.
+    "Cartílago": ["Laringe de vacuno"],
   },
   // ⚠️ CORREGIDO (5 agosto): el backend tiene 6 multivitamínicos y un
   // yoduro potásico que el frontend no conocía -- por eso "V-INTEGRA

@@ -67,6 +67,58 @@ function alimentosDelMotor() {
     ).toEqual([]);
   });
 
+  // ─── Y LA CATEGORÍA TIENE QUE SER LA MISMA ────────────────────────────────
+  //
+  // ⚠️ AÑADIDO EL 8 DE SEPTIEMBRE, después de que este archivo dejara pasar
+  // un desajuste que llevaba un día en producción.
+  //
+  // Las dos comprobaciones de arriba miran si el alimento EXISTE en los dos
+  // sitios, y las dos daban verde con "Laringe de vacuno" ofrecida en la app
+  // como "Hueso carnoso" cuando en el motor era "Extras" desde el 7 de
+  // septiembre. Existía en los dos lados; lo que no coincidía era la
+  // CATEGORÍA, y eso no lo miraba nadie.
+  //
+  // Importa porque la categoría es lo que decide qué pasa al elegirlo: un
+  // alimento ofrecido en la categoría equivocada se puede elegir, no hace
+  // nada, y el menú sale verde igual -- que es literalmente el fallo que
+  // describe la regla 5 del CLAUDE.md del backend ("elegir en las que sobran
+  // no hará nada y nadie se enterará"). La laringe además es cartílago con 66
+  // mg de calcio: como hueso carnoso no aporta el calcio que su categoría
+  // promete.
+  //
+  // "Suplementos comerciales" queda fuera a propósito: es un grupo paraguas
+  // de la app cuyas subclaves ("Multivitamínico", "Omega-3", "Yodo"...) sí
+  // son las categorías reales del motor, así que comparar el nombre del
+  // paraguas contra el catálogo daría un falso positivo por cada suplemento.
+  test("la app no ofrece ningún alimento en una categoría que no es la suya", () => {
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const ini = app.indexOf("const CATEGORIAS_ALIMENTO");
+    const bloque = app.slice(ini, app.indexOf("\n};", ini))
+      .split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
+
+    const categoriaEnElMotor = new Map(
+      alimentosDelMotor().map((a) => [a.nombre, a.categoria]));
+
+    const desajustes = [];
+    for (const [, categoria, cuerpo] of bloque.matchAll(/\n  "([^"]+)": \{([\s\S]*?)\n  \},/g)) {
+      if (categoria === "Suplementos comerciales") continue;
+      for (const [, lista] of cuerpo.matchAll(/"[^"]+":\s*\[([^\]]*)\]/g)) {
+        for (const [, alimento] of lista.matchAll(/"([^"]+)"/g)) {
+          const real = categoriaEnElMotor.get(alimento);
+          if (real && real !== categoria) {
+            desajustes.push(`${alimento}: la app lo ofrece en «${categoria}» y el motor dice «${real}»`);
+          }
+        }
+      }
+    }
+
+    expect(desajustes.sort(),
+      "la app ofrece alimentos en una categoría distinta a la del motor: se " +
+      "pueden elegir, no hacen lo que la categoría promete, y el menú sale " +
+      "verde igual -- nadie se entera"
+    ).toEqual([]);
+  });
+
   test("la app no inventa alimentos que el motor no tiene", () => {
     const enElMotor = new Set(alimentosDelMotor().map((a) => a.nombre));
     const sospechosos = [...alimentosQueOfreceLaApp()].filter((n) => !enElMotor.has(n));
