@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, ChevronDown, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import Formulador from "./formulador.jsx";
 import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesional,
-         getPerfil, firmarPauta, getPautasFirmadas, guardarClinica } from "./supabase";
+         getPerfil, firmarPauta, getPautasFirmadas, guardarClinica,
+         getTokenDeSesion } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -957,6 +958,72 @@ const PATOLOGIAS = [
   { key: "otra", label: "Otra patología / no está en esta lista", segura: false,
     aviso: "Esta condición no está entre las que este sistema sabe ajustar automáticamente todavía, así que no generamos un menú que podría no estar realmente adaptado a lo que necesita: mejor que un veterinario valore su caso en concreto y paute la dieta." },
 ];
+
+// ─── LAS PATOLOGÍAS, POR APARATO ────────────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (8 de septiembre): «la lista de patologías me parece un
+// peñazo, es enorme; habría que hacer un desplegable o poner por categorías.
+// No me gusta que más de la mitad de la página sea una lista de patologías
+// hacia abajo».
+//
+// Y es literal: son 27 casillas seguidas en medio de la ficha, así que para
+// llegar a «Dieta actual» y a «Tutor» hay que pasarlas todas. Un veterinario
+// tampoco las lee: sabe lo que busca y quiere llegar a ello.
+//
+// Se agrupan por APARATO y no por «frecuencia» o por orden alfabético porque
+// es como está ordenada la cabeza de quien las busca: el paciente viene con
+// un problema renal, o digestivo, o de piel. Cada grupo se abre solo si
+// tiene algo marcado, y hay un buscador encima para quien ya sabe el nombre.
+//
+// ⚠️ LA LISTA DE CLAVES NO SE DUPLICA: los grupos se construyen a partir de
+// `PATOLOGIAS`, y lo que no esté en ningún grupo cae en «Otras». Escribir
+// aquí las 27 otra vez sería la segunda copia, y el día que se añadiera una
+// patología nueva desaparecería de la pantalla sin que saltara nada -- que
+// es exactamente lo que pasó con las seis categorías de Personalizar.
+const APARATOS = [
+  { titulo: "Renal y urinario",
+    claves: ["renal", "renal_proteinuria", "fracaso_renal_agudo", "oxalato",
+             "estruvita", "urato", "cistina"] },
+  { titulo: "Digestivo y páncreas",
+    claves: ["pancreatitis", "enteropatia_cronica", "ple_linfangiectasia",
+             "insuficiencia_pancreatica_exocrina"] },
+  // ⚠️ "Hepático" y no "Hígado": en esta misma ficha hay una categoría de
+  // ALIMENTO que se llama «Hígado» (la que se puede excluir), y dos botones
+  // con el mismo nombre en la misma pantalla se confunden -- lo vio primero
+  // una prueba, que no supo cuál de los dos pulsar, pero le pasaría igual a
+  // quien la use con un lector de pantalla.
+  { titulo: "Hepático y biliar",
+    claves: ["hepatopatia", "shunt_sin_encefalopatia"] },
+  { titulo: "Corazón",
+    claves: ["cardiopatia", "dcm_taurina_respondedora", "dcm_asociada_a_dieta"] },
+  { titulo: "Endocrino y metabólico",
+    claves: ["diabetes", "hipotiroidismo", "hiperlipidemia", "obesidad",
+             "cushing", "addison"] },
+  { titulo: "Piel",
+    claves: ["dermatitis_atopica", "dermatosis_zinc"] },
+  { titulo: "Locomotor y neurológico",
+    claves: ["artrosis", "mielopatia_degenerativa", "epilepsia_idiopatica",
+             "disfuncion_cognitiva"] },
+  { titulo: "Oncología e inmunidad",
+    claves: ["cancer_soporte", "inmunosupresion"] },
+  { titulo: "Otras",
+    claves: ["riesgo_gdv", "otra"] },
+];
+
+// Los grupos ya resueltos contra PATOLOGIAS, con las que no estén en ningún
+// aparato metidas en «Otras». Se calcula una vez, al cargar el módulo.
+const PATOLOGIAS_POR_APARATO = (() => {
+  const puestas = new Set(APARATOS.flatMap((g) => g.claves));
+  const huerfanas = PATOLOGIAS.filter((p) => !puestas.has(p.key));
+  return APARATOS.map((g) => ({
+    titulo: g.titulo,
+    patologias: [
+      ...g.claves.map((k) => PATOLOGIAS.find((p) => p.key === k)).filter(Boolean),
+      ...(g.titulo === "Otras" ? huerfanas : []),
+    ],
+  })).filter((g) => g.patologias.length > 0);
+})();
+
 
 // ─── LAS PATOLOGÍAS QUE EN REALIDAD SON UNA FAMILIA ─────────────────────────
 //
@@ -2181,6 +2248,37 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           <FichaClinica ficha={ficha} />
         )}
 
+        {/* ⚠️ EN MODO PROFESIONAL, LAS NOTAS DE SEGURIDAD VIVEN EN «CÓMO
+            DARLO» (8 septiembre, segunda pasada).
+            El 7 las bajé al final de la pestaña del menú; sigue sin ser su
+            sitio. CASO REAL: «tampoco cosas de seguridad, vale, el
+            veterinario sabe perfectamente eso; como mucho viene en cómo
+            darlo, cosas que él puede editar».
+            Tiene razón en las dos mitades. Una: no son un aviso para él,
+            que ya sabe lo que es la tiaminasa -- el límite duro lo aplica
+            el motor dentro del cálculo, esto es criterio por encima. Y
+            dos: si algo hay que decir, se dice donde se dice cómo se da
+            la comida, que es el texto que él corrige y que acaba impreso
+            en la pauta que se lleva el tutor. */}
+        {vistaActiva === "comoDarlo" && enModoProfesional && problemasSeguridad.length > 0 && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: "#FFFFFF", border: "1px solid #E3DAF0" }}>
+            <p className="text-[11px] tracking-[0.1em] uppercase mb-1.5"
+               style={{ color: MALVA, fontFamily: "monospace" }}>
+              {problemasSeguridad.length === 1 ? "Nota de manejo" : `${problemasSeguridad.length} notas de manejo`}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {problemasSeguridad.map((p, i) => (
+                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{p}</p>
+              ))}
+            </div>
+            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Los límites duros —vitamina D, yodo, selenio, mercurio y tiaminasa— ya están
+              dentro del cálculo. Esto es criterio por encima de ellos: si no te encaja,
+              cambia el alimento o los gramos.
+            </p>
+          </div>
+        )}
+
         {vistaActiva === "comoDarlo" && (
           <div className="flex flex-col gap-3 mb-4">
           {necesitaTransicion && (
@@ -3050,35 +3148,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         </>)}
 
         <div className="flex-1" />
-
-        {/* ─── NOTAS DE SEGURIDAD (solo en modo profesional) ──────────────
-            Los mismos avisos que un tutor ve arriba en ámbar, aquí abajo y
-            sin alarma: al lado del menú que acaba de leer y que puede
-            editar. Ver el comentario del bloque de arriba.
-            No lleva X de cerrar a propósito: lo que un tutor cierra porque
-            ya lo ha leído, un profesional lo tiene que poder releer al
-            volver a abrir la pauta dentro de seis meses. */}
-        {enModoProfesional && problemasSeguridad.length > 0 && (
-          <div className="rounded-xl p-3 mb-3" style={{ background: "#FFFFFF", border: "1px solid #E3DAF0" }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <AlertCircle size={14} style={{ color: MALVA }} />
-              <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
-                {problemasSeguridad.length === 1 ? "Nota de seguridad" : `${problemasSeguridad.length} notas de seguridad`}
-              </p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {problemasSeguridad.map((p, i) => (
-                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{p}</p>
-              ))}
-            </div>
-            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-              Los límites duros (vitamina D, yodo, selenio, mercurio y tiaminasa) ya están
-              aplicados dentro del cálculo: esto es lo que queda por encima del criterio, no
-              un límite roto. Cambia los gramos o el alimento desde el propio menú si quieres
-              moverlo.
-            </p>
-          </div>
-        )}
 
         {/* ⚠️ MOVIDO (5 agosto, madrugada) — pedido expreso: este texto
             estaba arriba del todo, compitiendo en importancia visual
@@ -4332,6 +4401,20 @@ function RawkuOnboardingInterna({
   const [acreditado, setAcreditado] = useState(false);
   // Nombre y número de colegiado de quien firma. Null mientras no se sabe.
   const [perfilProfesional, setPerfilProfesional] = useState(null);
+  const [tokenSesion, setTokenSesion] = useState(null);
+
+  // ⚠️ QUIÉN PIDE EL MENÚ (8 septiembre). La API sabe desde el 29 de agosto
+  // distinguir a un veterinario acreditado de un tutor -- y de eso cuelga
+  // que se le formulen las patologías que al dueño se le bloquean y que
+  // reciba los avisos profesionales -- pero la app no le mandaba nunca el
+  // token, así que ese camino entero no lo recorría nadie.
+  //
+  // Solo se manda en su modo: un tutor no tiene nada que ganar con ello, y
+  // un token es un token. Y se manda el TOKEN y no un `modo_profesional:
+  // true` porque un booleano lo escribe cualquiera desde la consola del
+  // navegador; quién está acreditado lo dice Supabase.
+  const conTokenProfesional = (cuerpo) =>
+    (enModoProfesional && tokenSesion) ? { ...cuerpo, token_usuario: tokenSesion } : cuerpo;
   // El historial de pautas firmadas del paciente que se está mirando. Es una
   // LISTA de documentos, no un documento que se va pisando: una pauta
   // firmada no se edita, se firma otra y la anterior se queda con su fecha.
@@ -4395,6 +4478,10 @@ function RawkuOnboardingInterna({
       // fallo, NO: preferimos no enseñar el modo a enseñarlo a quien no
       // le corresponde.
       esProfesional(usuario.id).then(setAcreditado).catch(() => setAcreditado(false));
+      // ⚠️ EL TOKEN, PARA QUE EL MOTOR SEPA QUIÉN PIDE (8 septiembre). Ver
+      // `getTokenDeSesion`: sin él la API trataba al veterinario como a un
+      // tutor y le bloqueaba las patologías que sí puede formular.
+      getTokenDeSesion().then(setTokenSesion).catch(() => setTokenSesion(null));
       // Y quién es, para poder firmar con su nombre y su número. Se lee de
       // `profiles` una vez y se COPIA en cada pauta al firmarla: un
       // documento firmado no puede cambiar porque su autor edite su ficha.
@@ -4487,6 +4574,11 @@ function RawkuOnboardingInterna({
   // paciente no se recuerda el nombre del perro: se recuerda el apellido
   // del dueño o la raza. Por eso se busca por los tres.
   const [filtroPacientes, setFiltroPacientes] = useState("");
+
+  // El buscador y los aparatos plegados de la lista de patologías. Ver
+  // `APARATOS`: eran 27 casillas seguidas en medio de la ficha.
+  const [busquedaPatologia, setBusquedaPatologia] = useState("");
+  const [aparatosAbiertos, setAparatosAbiertos] = useState([]);
 
   // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
   // que hacía falta: "cuando terminas de generar por primera vez el perfil
@@ -5437,6 +5529,51 @@ function RawkuOnboardingInterna({
   const burbujaDePerfil = (sobreOscuro = true) => {
     const varios = listaDePerros.length > 1;
     const inicial = (nombreMostrar || "?").trim().charAt(0).toUpperCase();
+
+    // ⚠️ LA RUEDA DE AJUSTES VA EN TODAS LAS PANTALLAS (8 septiembre, tercera
+    // pasada). CASO REAL, mirando Vercel: «la burbuja de configuración
+    // desaparece, y esa tiene que estar en TODAS las pantallas».
+    //
+    // Y era verdad: al convertir la burbuja del veterinario en una miga de
+    // pan, sus ajustes se quedaron colgando SOLO del engranaje de la
+    // pantalla de Pacientes. O sea que desde la ficha, desde el formulador o
+    // desde los menús no había forma de llegar a su cuenta ni al interruptor
+    // de modo sin dar un rodeo. Es la misma regla que ya está escrita para
+    // la burbuja del tutor desde el 24 de agosto -- «tiene que existir en
+    // todas las pantallas» --, que se me olvidó trasladar a su modo.
+    const rueda = (
+      <button
+        onClick={() => { cerrarPaneles(); setAjustesAbiertos(true); }}
+        aria-label="Ajustes"
+        className="flex items-center justify-center w-8 h-8 rounded-full shrink-0"
+        style={{ background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
+                 border: sobreOscuro ? "none" : "1.5px solid #E3DAF0", cursor: "pointer" }}>
+        <Settings size={15} strokeWidth={1.8}
+                  style={{ color: sobreOscuro ? "#FFFFFF" : VIOLETA }} />
+      </button>
+    );
+
+    if (enModoProfesional) {
+      return (
+        <div className="flex items-center gap-2 shrink-0">
+          <button
+            onClick={() => { cerrarPaneles(); setFase("pacientes"); }}
+            aria-label={`Paciente actual: ${nombreMostrar}. Ver todos los pacientes`}
+            className="flex items-center gap-1.5 pl-2 pr-2.5 py-1 rounded-full shrink-0"
+            style={{ background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
+                     border: sobreOscuro ? "none" : "1.5px solid #E3DAF0", cursor: "pointer" }}>
+            <ChevronLeft size={14} aria-hidden="true"
+                         style={{ color: sobreOscuro ? "#D8CFEC" : MALVA }} />
+            <span style={{ color: sobreOscuro ? "#FFFFFF" : TINTA,
+                           fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
+              Pacientes
+            </span>
+          </button>
+          {rueda}
+        </div>
+      );
+    }
+
     return (
       <button
         // ⚠️ REHECHA (24 agosto) — CASO REAL: "NO QUIERO DOS, QUIERO UNA
@@ -5447,28 +5584,10 @@ function RawkuOnboardingInterna({
         // cosas que abren dos sitios distintos, en la esquina donde solo
         // cabe una idea. Ahora es UNA: se toca y la hoja lleva los perros
         // Y los ajustes.
-        // ⚠️ EN MODO VETERINARIO NO DESPLIEGA LA LISTA (7 septiembre).
-        //
-        // CASO REAL: «aparecen los pacientes en la burbujita de perros en
-        // vet como en usuario y no debería ser así».
-        //
-        // Y no es sólo que sobre: es que la pieza está pensada para otra
-        // cosa. La hoja desplegable dice «de cuál de tus perros estás»,
-        // que con tres perros de una casa se responde de un vistazo. Con
-        // cincuenta pacientes, una lista sin buscador dentro de una hoja
-        // que tapa media pantalla no es una lista, es un muro. Así que en
-        // modo profesional la burbuja pasa a ser una MIGA DE PAN: dice en
-        // qué paciente estás y te devuelve a la lista, que es donde vive
-        // el buscador. Igual que los programas que ya usan.
-        onClick={() => {
-          if (enModoProfesional) { cerrarPaneles(); setFase("pacientes"); return; }
-          setHojaDePerrosAbierta(true);
-        }}
-        aria-label={enModoProfesional
-          ? `Paciente actual: ${nombreMostrar}. Ver todos los pacientes`
-          : varios
-            ? `Perro actual: ${nombreMostrar}. Cambiar de perro y ajustes`
-            : `Perro actual: ${nombreMostrar}. Tus perros y ajustes`}
+        onClick={() => setHojaDePerrosAbierta(true)}
+        aria-label={varios
+          ? `Perro actual: ${nombreMostrar}. Cambiar de perro y ajustes`
+          : `Perro actual: ${nombreMostrar}. Tus perros y ajustes`}
         className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full shrink-0"
         style={{
           background: sobreOscuro ? "rgba(255,255,255,0.14)" : "#FFFFFF",
@@ -6198,15 +6317,16 @@ function RawkuOnboardingInterna({
       ir: () => {
         setSeccionSuelta(null);
         setEditandoLaFicha(true);
-        // ⚠️ EN MODO VETERINARIO SE ABRE LA FICHA CLÍNICA (29 agosto). Con
-        // un paciente ya guardado, `paso` vale TOTAL_PASOS + 1 -- "el
-        // asistente ya está hecho" -- y eso pinta el resumen de tutor. La
-        // ficha de una sola pantalla vive en los pasos, así que entrar a
-        // editar tiene que devolver ahí: si no, el veterinario ve la ficha
-        // clínica UNA vez, al dar de alta, y nunca más -- y el BCS, las
-        // patologías y los datos del tutor se quedan sin sitio donde
-        // corregirse.
-        if (enModoProfesional) setPaso(1);
+        // ⚠️ EN MODO VETERINARIO ESTO YA NO TOCA `paso` (8 septiembre).
+        //
+        // Lo tocaba porque la ficha clínica vivía DENTRO de los seis pasos
+        // del asistente, así que para volver a ella había que rebobinar al
+        // 1. Desde que la ficha es toda la fase "onboarding" no hace falta
+        // -- y hacerlo era activamente malo: dejaba `paso` en 1, y con eso
+        // `if (paso === 1)` ganaba a cualquier `fase` en el render. MEDIDO
+        // abriendo la app: desde la ficha, pulsar «Pacientes» en el panel
+        // pintaba «Empecemos por lo esencial. 1 / 6», el asistente del
+        // dueño, encima de la lista de pacientes a la que ibas.
         setFase("onboarding");
       } },
     { key: "menus", Icono: ClipboardList, label: enModoProfesional ? "Menús" : "Mis menús",
@@ -6248,6 +6368,23 @@ function RawkuOnboardingInterna({
     ...(enModoProfesional ? [] : [
       { key: "analizar", Icono: Search, label: "Analizar la dieta actual", isPremium: true,
         ir: () => { setSeccionSuelta("analizar"); setFase("seccion"); } }]),
+    // ⚠️ AJUSTES TAMBIÉN AQUÍ, EN MODO PROFESIONAL (8 septiembre, tercera
+    // pasada). CASO REAL: «la burbuja de configuración desaparece, y esa
+    // tiene que estar en TODAS las pantallas».
+    //
+    // La rueda ya va junto a la miga de pan, pero hay una pantalla que NO
+    // lleva miga: el formulador, que tiene su propia cabecera con la
+    // hamburguesa y nada más -- y es donde el veterinario pasa más rato.
+    // El panel sí está en todas, así que aquí queda cubierto del todo.
+    //
+    // Al tutor no se le añade: él llega a sus ajustes por la hoja de la
+    // burbuja, que es donde se decidió el 24 de agosto («no quiero dos, una
+    // sola burbujita para configuración y los perros»), y ponerlo también en
+    // el panel sería ofrecer lo mismo dos veces.
+    ...(enModoProfesional ? [{
+      key: "ajustes", Icono: Settings, label: "Ajustes", isPremium: false,
+      ir: () => setAjustesAbiertos(true),
+    }] : []),
   ];
 
   const panelLigero = menuLigeroAbierto && (
@@ -7179,7 +7316,7 @@ function RawkuOnboardingInterna({
         fetchConTimeout(`${API_BASE}/menu/revalidar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...cuerpoBase, menu_actual_gramos: gramos }),
+          body: JSON.stringify(conTokenProfesional({ ...cuerpoBase, menu_actual_gramos: gramos })),
         })
           .then((res) => res.json())
           .then((data) => ({ original: gramos, data }))
@@ -7296,7 +7433,7 @@ function RawkuOnboardingInterna({
       fetchConTimeout(`${API_BASE}/menu/v2`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(conTokenProfesional({
           modo: modo || "automatico",
           nombres_alimentos:
             modo === "personalizar" ? eleccionesDelUsuario(modo, configDeEsteMenu) :
@@ -7359,7 +7496,7 @@ function RawkuOnboardingInterna({
           // manda siempre -- el servidor decide solo si puede usar la
           // vía rápida o no.
           tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
-        }),
+        })),
       }).then(async (res) => {
         // ⚠️ AÑADIDO (5 agosto, noche): antes esto era solo
         // `res.json()` -- si el servidor devolvía algo vacío o
@@ -7437,7 +7574,7 @@ function RawkuOnboardingInterna({
           const res = await fetchConTimeout(`${API_BASE}/menu/semana?numero_de_menus=${cuantos}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(cuerpoBase),
+            body: JSON.stringify(conTokenProfesional(cuerpoBase)),
           });
           let cuerpo;
           try {
@@ -7679,7 +7816,13 @@ function RawkuOnboardingInterna({
   // ⚠️ Y SOLO CUANDO NO TIENE NINGUNO (7 septiembre). Ver
   // `cuantosPacientesGuardados`: antes bastaba con no tener perro montado, y
   // eso pasa también cuando ya tiene pacientes y va a dar de alta a otro.
-  if (enModoProfesional && paso === 1 && !yaTienePerroGuardado
+  //
+  // ⚠️ Y SOLO EN SU FASE (8 septiembre). Sin el `fase === "onboarding"`, esta
+  // puerta ganaba también cuando el veterinario pedía «Pacientes» en el
+  // panel -- o sea que la lista vacía, con su buscador y su botón, era
+  // inalcanzable: siempre salía esta otra pantalla en su lugar. Dos pantallas
+  // distintas para decir lo mismo, y una de ellas imposible de ver.
+  if (enModoProfesional && fase === "onboarding" && paso === 1 && !yaTienePerroGuardado
       && !puertaProfesionalPasada && cuantosPacientesGuardados === 0) {
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -7744,7 +7887,35 @@ function RawkuOnboardingInterna({
   // mañana se añade un campo a la ficha, hay que añadirlo AQUÍ TAMBIÉN --
   // y a `ficha-ida-y-vuelta.spec.js` y a `sin-cuenta.spec.js`, que es lo
   // que impide que un campo se pierda en silencio.
-  if (enModoProfesional && paso <= TOTAL_PASOS) {
+  // ⚠️ LA FICHA ES TODA LA FASE, NO SEIS PASOS (8 septiembre).
+  //
+  // Antes esto era `paso <= TOTAL_PASOS`, y eso traía DOS cosas mal, las dos
+  // vistas abriendo la app y no leyendo el código:
+  //
+  //   1. LA PANTALLA DEL DUEÑO SE COLABA EN MEDIO. Al guardar la ficha,
+  //      `paso` pasaba a TOTAL_PASOS + 1 y se pintaba el «Perfil» del tutor:
+  //      el perro rosa, «Nala necesita 1211 kilocalorías al día», «pésalo
+  //      cada 2-3 semanas y ajusta si lo ves más delgado o más gordo» y
+  //      «Borrar a Nala de mi cuenta». Una pantalla entera que repite lo que
+  //      el veterinario acaba de rellenar, para que su único botón útil sea
+  //      «ir al generador» -- o sea un paso de más entre la ficha y el
+  //      trabajo. Y lo mismo al ABRIR un paciente desde la lista.
+  //      PEDIDO EXPRESO: «eso debería estar ahí simplemente en esa pantalla
+  //      [la ficha], y que la siguiente pantalla sea directamente ir al
+  //      generador de menús».
+  //
+  //   2. LA NAVEGACIÓN SE QUEDABA PEGADA. Con la ficha abierta `paso` vale
+  //      1, y esta condición gana a `fase` en el render: pulsar «Menús» o
+  //      «Pacientes» en el panel cambiaba `fase` de verdad y seguías viendo
+  //      la ficha. Sin error y sin nada que mirar: el botón parecía muerto.
+  //      Es exactamente el fallo que ya está escrito en `navegarDesdeElPanel`
+  //      («navegabas bien y no lo veías»), otra vez y en otro sitio.
+  //
+  // Mirando `fase` se arreglan los dos a la vez: en modo veterinario la fase
+  // "onboarding" ES la ficha clínica, entera y en una pantalla, y cualquier
+  // otra fase manda. `paso` se sigue moviendo para el modo tutor, pero aquí
+  // ya no decide nada.
+  if (enModoProfesional && fase === "onboarding") {
     const fechaISO = (() => {
       const m = String((perfil.mesIdx ?? 0) + 1).padStart(2, "0");
       const d = String(perfil.dia ?? 1).padStart(2, "0");
@@ -7807,9 +7978,85 @@ function RawkuOnboardingInterna({
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
         <Fuentes />
-        <Cabecera onAbrirMenu={() => setMenuLigeroAbierto(true)}
-                  titulo={perfil._id ? "Ficha del paciente" : "Nuevo paciente"} />
+        {/* ⚠️ CABECERA PROPIA, NO LA DEL ASISTENTE (8 septiembre).
+            `Cabecera` pinta «PERFIL NUEVO» y el contador «paso / 6» con sus
+            seis rayitas de progreso. Aquí no hay seis pasos: hay UNA
+            pantalla, que es justo lo que se pidió el 29 de agosto («un
+            veterinario debería tener prácticamente todo en la misma
+            pantalla»). El contador se veía en la app como «/ 6» con las
+            rayas apagadas -- prometiendo cinco pantallas más que no existen.
+
+            Y lleva la burbuja, como el resto de pantallas: desde aquí se
+            vuelve al fichero de pacientes sin pasar por el panel. */}
+        <div style={{ background: VIOLETA }} className="w-full px-6 pt-8 pb-6">
+          <div className="flex items-center justify-between mb-4">
+            <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color="#FFFFFF" />
+            {perfil._id ? burbujaDePerfil(true) : (
+              <span className="text-[11px] tracking-[0.18em] uppercase"
+                    style={{ color: MALVA, fontFamily: "monospace" }}>Alta</span>
+            )}
+          </div>
+          <h1 className="text-3xl leading-tight"
+              style={{ color: "#FFFFFF", fontFamily: fontDisplay, fontWeight: 500 }}>
+            {perfil._id ? "Ficha del paciente" : "Nuevo paciente"}
+          </h1>
+          {/* ⚠️ LAS KCAL, AQUÍ (8 septiembre). Vivían SOLO en la pantalla
+              del tutor, o sea que al quitarla se habrían perdido -- y es el
+              número del que cuelga todo lo demás. Puesto en la ficha, además,
+              se mueve delante de él mientras teclea el peso o el BCS, que es
+              como trabajan los programas que ya usa: los datos entran y la
+              necesidad energética sale sin pulsar nada. */}
+          {derReal ? (
+            <p className="text-[13px] mt-2 leading-snug"
+               style={{ color: "#D8CFEC", fontFamily: fontBody }}>
+              {perfil.nombre.trim() ? <>{perfil.nombre.trim()} · </> : null}
+              <span style={{ color: "#FFFFFF", fontWeight: 700 }}>{derReal} kcal/día</span>
+              {etapaLabel ? ` · ${etapaLabel}` : ""}
+              {pesoObjetivoKg ? ` · objetivo ${pesoObjetivoKg} kg` : ""}
+            </p>
+          ) : (
+            <p className="text-[13px] mt-2" style={{ color: "#D8CFEC", fontFamily: fontBody }}>
+              Las kcal salen solas al poner peso, fecha de nacimiento y BCS.
+            </p>
+          )}
+        </div>
         <div className="flex-1 overflow-y-auto px-5 pt-6 pb-6">
+
+          {/* ⚠️ EL AVISO DE PAUTA CADUCADA, TAMBIÉN AQUÍ (8 septiembre).
+              Vivía en la pantalla del tutor, que en modo veterinario ya no
+              se pinta -- y perderlo habría sido perder lo único clínicamente
+              urgente de esa pantalla: que el paciente ha cambiado de etapa o
+              de peso y la pauta que tiene ya no le cubre. */}
+          {revision.estado === "caducado" && (
+            <div className="rounded-2xl p-4 mb-4"
+                 style={{ background: "#FFF7E8", border: "1.5px solid #F5DFA8" }}>
+              <div className="flex gap-2 items-start mb-1.5">
+                <AlertCircle size={16} style={{ color: "#B37A00", flexShrink: 0, marginTop: 2 }} />
+                <p className="text-sm" style={{ color: "#7A5C00", fontFamily: fontBody, fontWeight: 700 }}>
+                  {revision.revisados > 1
+                    ? `${revision.caducados} de sus ${revision.revisados} menús se le han quedado cortos`
+                    : "Su menú guardado se le ha quedado corto"}
+                </p>
+              </div>
+              <p className="text-xs mb-2" style={{ color: "#7A5C00", fontFamily: fontBody }}>
+                Con los datos de ahora ({etapaLabel?.toLowerCase()}, {Math.round(derReal)} kcal/día)
+                ya no cubre todo lo que necesita.
+              </p>
+              {revision.porQue?.length > 0 && (
+                <ul className="text-xs mb-2 pl-4"
+                    style={{ color: "#7A5C00", fontFamily: fontBody, listStyle: "disc" }}>
+                  {revision.porQue.slice(0, 4).map((motivo, i) => <li key={i}>{motivo}</li>)}
+                </ul>
+              )}
+              {revision.menusNuevos?.length ? (
+                <button onClick={verMenuRevalidado} className="w-full py-2.5 rounded-xl text-sm"
+                        style={{ background: ROSA, color: "#FFFFFF", border: "none",
+                                 fontFamily: fontBody, fontWeight: 700, cursor: "pointer" }}>
+                  Ver la corrección →
+                </button>
+              ) : null}
+            </div>
+          )}
 
           <BloqueFicha titulo="Identificación">
             <input
@@ -8012,8 +8259,28 @@ function RawkuOnboardingInterna({
           </BloqueFicha>
 
           <BloqueFicha titulo="Patologías diagnosticadas">
-            <div className="flex flex-col gap-1.5">
-              {PATOLOGIAS.map((pat) => {
+            {/* ─── POR APARATO, PLEGADAS, Y CON BUSCADOR ────────────────────
+                ⚠️ PEDIDO EXPRESO (8 septiembre): «la lista de patologías me
+                parece un peñazo, es enorme; no me gusta que más de la mitad
+                de la página sea una lista hacia abajo».
+                Eran 27 casillas seguidas en medio de la ficha, así que para
+                llegar a «Dieta actual» y a «Tutor» había que pasarlas todas.
+                Ahora son nueve cabeceras: quien sabe el nombre lo escribe,
+                quien no, abre el aparato que le toca. Ver `APARATOS`. */}
+            <div className="relative mb-2">
+              <Search size={15} style={{ position: "absolute", left: 11, top: 11, color: MALVA }} />
+              <input
+                value={busquedaPatologia}
+                onChange={(e) => setBusquedaPatologia(e.target.value)}
+                placeholder="Buscar patología"
+                aria-label="Buscar patología"
+                className="w-full py-2 pl-8 pr-3 rounded-xl outline-none"
+                style={{ background: PAPEL, border: "1.5px solid #E3DAF0",
+                         color: TINTA, fontFamily: fontBody, fontSize: 14 }} />
+            </div>
+
+            {(() => {
+              const casilla = (pat) => {
                 const activo = perfil.patologias.includes(pat.key)
                   || familiaPatologiaActiva(pat.key, perfil.patologias);
                 return (
@@ -8042,20 +8309,72 @@ function RawkuOnboardingInterna({
                       onCambiar={(nuevas) => set("patologias", nuevas)} />
                   </div>
                 );
-              })}
-            </div>
-            {bloqueantes.length > 0 && (
-              <div className="flex flex-col gap-2 mt-2">
-                {bloqueantes.map((p) => (
-                  <div key={p.key} className="flex gap-2 items-start p-3 rounded-xl" style={{ background: "#FFF0F3" }}>
-                    <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
-                    <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-                      {p.aviso}
+              };
+
+              // Buscando, no hay grupos: hay resultados. Plegarlos por
+              // aparato obligaría a abrir cajas para ver lo que acabas de
+              // buscar, que es lo contrario de buscar.
+              if (busquedaPatologia.trim()) {
+                const encontradas = PATOLOGIAS.filter((p) => contiene(p.label, busquedaPatologia));
+                if (encontradas.length === 0) {
+                  return (
+                    <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                      Ninguna cuadra con «{busquedaPatologia}». Si no está en la lista, usa
+                      «Otra patología».
                     </p>
-                  </div>
-                ))}
-              </div>
-            )}
+                  );
+                }
+                return <div className="flex flex-col gap-1.5">{encontradas.map(casilla)}</div>;
+              }
+
+              return (
+                <div className="flex flex-col gap-1.5">
+                  {PATOLOGIAS_POR_APARATO.map((grupo) => {
+                    // Un aparato con algo marcado se abre solo: lo que el
+                    // paciente TIENE no puede quedarse escondido detrás de
+                    // un clic. Y por eso mismo se cuenta en la cabecera.
+                    const marcadas = grupo.patologias.filter(
+                      (p) => perfil.patologias.includes(p.key)
+                          || familiaPatologiaActiva(p.key, perfil.patologias));
+                    const abierto = aparatosAbiertos.includes(grupo.titulo) || marcadas.length > 0;
+                    return (
+                      <div key={grupo.titulo}>
+                        <button
+                          onClick={() => setAparatosAbiertos((abiertos) =>
+                            abiertos.includes(grupo.titulo)
+                              ? abiertos.filter((t) => t !== grupo.titulo)
+                              : [...abiertos, grupo.titulo])}
+                          aria-expanded={abierto}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left"
+                          style={{ background: PAPEL,
+                                   border: `1.5px solid ${marcadas.length ? VIOLETA : "#E3DAF0"}`,
+                                   cursor: "pointer" }}>
+                          <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>
+                            {grupo.titulo}
+                            {marcadas.length > 0 && (
+                              <span style={{ color: ROSA, fontWeight: 700 }}> · {marcadas.length}</span>
+                            )}
+                          </span>
+                          <ChevronDown size={15}
+                            style={{ color: MALVA, transform: abierto ? "rotate(180deg)" : "none" }} />
+                        </button>
+                        {abierto && (
+                          <div className="flex flex-col gap-1.5 mt-1.5 pl-3">
+                            {grupo.patologias.map(casilla)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            {/* ⚠️ EL AVISO DEL TUTOR NO SE LE PINTA (8 septiembre, segunda
+                pasada). Decía cosas como «no generamos menú automático:
+                necesitas una dieta pautada por tu veterinario» -- al
+                veterinario. Lo que va en su lugar es el bloque de abajo:
+                los topes reales, con su fuente, qué es inamovible y qué
+                decide él. */}
             {/* ⚠️ AÑADIDO (7 septiembre) — PEDIDO EXPRESO: al marcar una
                 patología, un veterinario tiene que ver QUÉ cambia, qué puede
                 tocar y qué no, y con cuánto margen. Antes marcaba la casilla
@@ -8104,24 +8423,66 @@ function RawkuOnboardingInterna({
               Falta: {faltan.join(", ")}.
             </p>
           )}
-          <BotonContinuar activo={puedeGuardar} texto="Guardar ficha" onClick={() => {
-            if (bloqueantes.length > 0) {
-              setMenuError(bloqueantes.map((pat) => pat.aviso).join(" "));
-              setNecesitaVeterinario(true);
-              setFase("generador");
-              setPantalla("veterinario_requerido");
-            } else {
+          {/* ⚠️ UN SOLO BOTÓN, Y DICE A DÓNDE VA (8 septiembre).
+              Antes decía «Guardar ficha» y te dejaba en la pantalla del
+              tutor, donde había que pulsar OTRO botón («Todo bien, ir al
+              generador de menús →») para llegar a formular. Dos pantallas y
+              dos botones para una sola decisión: ya he terminado la ficha,
+              vamos a la ración. PEDIDO EXPRESO: «que la siguiente pantalla
+              sea directamente ir al generador de menús».
+
+              Se reutiliza `irAlGeneradorDeMenus`, que es quien sabe guardar
+              la ficha CON SU ETAPA y el peso adulto -- guardar por otro
+              camino dejaba al perro con la etapa de antes, y de la etapa
+              salen los 43 requisitos. Con `true` porque un paciente se
+              formula solo: los pacientes de un veterinario no viven juntos
+              ni comen de la misma bolsa. */}
+          <BotonContinuar activo={puedeGuardar}
+            texto={perfil._id ? "Guardar y formular la ración →" : "Dar de alta y formular →"}
+            onClick={() => {
+              // ⚠️ AQUÍ NO SE BLOQUEA A NADIE (8 septiembre, segunda pasada).
+              //
+              // CASO REAL: «obviamente a un veterinario no le tiene que
+              // saltar ningún tipo de aviso de "necesitas una dieta pautada
+              // por tu veterinario". Eso es absurdo».
+              //
+              // Lo es. Guardar la ficha con una hepatopatía o un shunt le
+              // mandaba a la pantalla del tutor -- «Esto lo tiene que pautar
+              // tu veterinario» -- al veterinario que la está pautando. Y no
+              // era una incoherencia de tono: el motor YA le formula esas
+              // patologías desde el 29 de agosto
+              // (`formulable_por_profesional`, BLOQUE 39 de la batería), así
+              // que la pantalla era más restrictiva que el propio motor.
+              //
+              // Lo que sí ve, en su lugar, es qué le impone cada patología y
+              // qué puede tocar -- que es lo que un profesional necesita
+              // antes de firmar. Ver `topespatologia.jsx`.
+              // `paso` se deja terminado igualmente: si el veterinario apaga
+              // su modo estando aquí, el asistente del tutor no puede
+              // arrancarle desde el paso 1 una ficha que ya está hecha.
               setPaso(TOTAL_PASOS + 1);
               setEditandoLaFicha(false);
-            }
-          }} />
+              irAlGeneradorDeMenus(true);
+            }} />
         </div>
         {drawerLigero}
       </div>
     );
   }
 
-  if (paso === 1) {
+  // ⚠️ EL ASISTENTE DE SEIS PASOS ES DEL TUTOR, Y SOLO DE ÉL (8 sept).
+  //
+  // Estos seis `if` miran únicamente `paso`, así que ganan a cualquier
+  // `fase` que venga detrás en el render. Mientras la ficha del veterinario
+  // vivía también en los pasos daba igual; en cuanto dejó de hacerlo, un
+  // `paso` heredado empezó a secuestrarle pantallas -- ir a «Pacientes» y
+  // que se pintara «Empecemos por lo esencial, 1 / 6».
+  //
+  // Se nombra el modo en los seis a propósito, en vez de confiar en que
+  // nadie vuelva a poner `paso` a 1 desde otro sitio: el invariante que
+  // hace falta es «en modo profesional, `paso` no decide qué se pinta», y
+  // eso se escribe donde se decide qué se pinta.
+  if (!enModoProfesional && paso === 1) {
     const puedeContinuar = perfil.nombre.trim().length > 0 && perfil.sexo !== null;
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -8166,7 +8527,7 @@ function RawkuOnboardingInterna({
     );
   }
 
-  if (paso === 2) {
+  if (!enModoProfesional && paso === 2) {
     const puedeContinuar = (perfil.modoRaza === "raza" && perfil.raza) || (perfil.modoRaza === "sin_raza" && perfil.tamanoManual);
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -8264,7 +8625,7 @@ function RawkuOnboardingInterna({
     );
   }
 
-  if (paso === 3) {
+  if (!enModoProfesional && paso === 3) {
     const dias = Array.from({ length: 31 }, (_, i) => i + 1);
     const anioActual = new Date().getFullYear();
     const anios = Array.from({ length: 25 }, (_, i) => anioActual - i);
@@ -8301,7 +8662,7 @@ function RawkuOnboardingInterna({
     );
   }
 
-  if (paso === 4) {
+  if (!enModoProfesional && paso === 4) {
     const puedeContinuar = perfil.pesoActual && Number(perfil.pesoActual) > 0 && perfil.condicionTocado;
     const actual = CONDICIONES[perfil.condicionIdx];
     const tuck = perfil.condicionIdx / 4;
@@ -8482,7 +8843,7 @@ function RawkuOnboardingInterna({
     );
   }
 
-  if (paso === 5) {
+  if (!enModoProfesional && paso === 5) {
     const puedeContinuar = perfil.actividadTocado && perfil.esterilizado !== null;
     const actual = NIVELES[perfil.actividadIdx];
     const Icono = actual.Icono;
@@ -8533,7 +8894,7 @@ function RawkuOnboardingInterna({
     );
   }
 
-  if (paso === 6) {
+  if (!enModoProfesional && paso === 6) {
     const puedeContinuar =
       perfil.alergiaSi !== null &&
       (perfil.alergiaSi === "no" || perfil.alergias.length > 0) &&
@@ -8682,6 +9043,21 @@ function RawkuOnboardingInterna({
               if (bloqueantes.length > 0) {
                 setMenuError(bloqueantes.map((p) => p.aviso).join(" "));
                 setNecesitaVeterinario(true);
+                // ⚠️ Y HAY QUE SACAR `paso` DEL ASISTENTE (8 septiembre).
+                //
+                // FALLO QUE YA ESTABA, y que encontró la prueba nueva del
+                // muro del tutor: esto ponía `fase` y `pantalla` pero dejaba
+                // `paso` en 6, y en el render `if (paso === 6)` va ANTES que
+                // cualquier `fase`. O sea que la pantalla del muro era
+                // INALCANZABLE desde aquí: el dueño pulsaba «Terminar», la
+                // navegación ocurría de verdad por dentro, y él se quedaba
+                // mirando el mismo paso 6 con un botón que no hacía nada.
+                //
+                // Es exactamente el mismo fallo que `navegarDesdeElPanel`
+                // describe («navegabas bien y no lo veías») y el que dejaba
+                // pegada la ficha del veterinario. Tercera vez que aparece,
+                // y siempre por lo mismo: `paso` decide antes que `fase`.
+                setPaso(TOTAL_PASOS + 1);
                 setFase("generador");
                 setPantalla("veterinario_requerido");
               } else {
@@ -9439,6 +9815,10 @@ function RawkuOnboardingInterna({
                 </div>
                 <button
                   onClick={() => setPaso(f.paso)}
+                  // Sin nombre, seis lápices seguidos son seis botones
+                  // idénticos: ni un lector de pantalla ni una prueba saben
+                  // cuál es cuál. Dice qué edita.
+                  aria-label={`Editar ${f.titulo.toLowerCase()}`}
                   className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
                   style={{ background: PAPEL }}
                 >

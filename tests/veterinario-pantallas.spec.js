@@ -13,7 +13,7 @@
 // cuenta.
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
-import { esperarLaFicha } from "./ayudas.js";
+import { esperarLaFicha, esperarElPaciente } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -91,7 +91,7 @@ test("con pacientes, dar de alta a otro NO dice «todavía no tienes ninguno»",
     accesos: [activo(PACIENTE), activo(OTRO_PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   await irAPacientes(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
@@ -127,7 +127,7 @@ test("la pantalla de Pacientes busca por nombre, por tutor y por raza", async ({
               activo(TERCER_PACIENTE), activo(CUARTO_PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
   await irAPacientes(page);
 
   // Primero: SIN buscar nada, están todos. Es la mitad que se olvida.
@@ -157,7 +157,7 @@ test("desde la lista se entra en un paciente", async ({ page, request }) => {
     accesos: [activo(PACIENTE), activo(OTRO_PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
   await irAPacientes(page);
 
   await page.getByRole("button", { name: "Paciente Ruffo" }).click();
@@ -198,7 +198,7 @@ test("los menús del veterinario salen TODOS sin buscar nada", async ({ page, re
     menus: [conCreador, sinCreador],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await panel.getByRole("button", { name: "Menús", exact: true }).click();
@@ -233,6 +233,9 @@ test("al marcar una patología, el veterinario ve el tope, la fuente y el margen
   // concreta, no un cartel permanente.
   await expect(page.getByText(/Lo que le cambia al motor/)).toHaveCount(0);
 
+  // Desde el 8 de septiembre las patologías van por aparato y plegadas, así
+  // que se llega por el buscador. Ver `APARATOS` en App.jsx.
+  await page.getByLabel("Buscar patología").fill("renal");
   await page.getByText("Insuficiencia renal crónica", { exact: true }).click();
 
   await expect(page.getByText(/Lo que le cambia al motor/)).toBeVisible();
@@ -242,9 +245,12 @@ test("al marcar una patología, el veterinario ve el tope, la fuente y el margen
   await expect(page.getByText(/queda un 3,4 % de margen/)).toBeVisible();
   // La fuente, porque quien firma tiene derecho a saber de dónde sale.
   await expect(page.getByText(/Freeman LM, dvm360 2009/)).toBeVisible();
-  // Y qué SÍ puede tocar y qué no.
-  await expect(page.getByText(/Estos límites no se pueden levantar desde la app/)).toBeVisible();
-  await expect(page.getByText(/los alimentos, las categorías y las exclusiones/)).toBeVisible();
+  // Y qué SÍ puede tocar y qué no. ⚠️ Desde el 8 de septiembre son DOS
+  // listas enfrentadas y no una frase al final: «lo inamovible y lo que
+  // puede tocar, y él tiene que tener visibilidad de todo eso».
+  await expect(page.getByText("No se toca")).toBeVisible();
+  await expect(page.getByText("Lo decides tú")).toBeVisible();
+  await expect(page.getByText(/Qué alimentos entran y cuántos gramos/)).toBeVisible();
 });
 
 test("una patología sin topes lo dice, en vez de callarse", async ({ page, request }) => {
@@ -254,6 +260,7 @@ test("una patología sin topes lo dice, en vez de callarse", async ({ page, requ
   await entrar(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
 
+  await page.getByLabel("Buscar patología").fill("artrosis");
   await page.getByText("Artrosis / osteoartritis", { exact: true }).click();
   await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
 });
@@ -269,7 +276,7 @@ test("«Analizar la dieta actual» no está en el panel del veterinario", async 
     perros: [PACIENTE], accesos: [activo(PACIENTE)],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await expect(panel.getByRole("button", { name: "Analizar la dieta actual" })).toHaveCount(0);
@@ -327,7 +334,7 @@ test("dentro del menú de un paciente no le dicen que se lo enseñe a un veterin
     }],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await panel.getByRole("button", { name: "Menús", exact: true }).click();
@@ -385,19 +392,26 @@ test("y el aviso de seguridad baja al final, sin alarma pero sin perderse", asyn
     }],
   }));
   await entrar(page);
-  await esperarLaFicha(page);
+  await esperarElPaciente(page);
 
   const panel = await abrirElPanel(page);
   await panel.getByRole("button", { name: "Menús", exact: true }).click();
   await page.getByRole("button", { name: "Menú de Nala" }).click();
   await expect(page.getByText(/SEMANA DE/i)).toBeVisible();
 
-  // El aviso sigue ahí -- no se pierde ningún dato de seguridad...
-  await expect(page.getByText(AVISO)).toBeVisible();
-  // ...pero ya no como alarma ámbar de tutor.
+  // ⚠️ ACTUALIZADO (8 septiembre, segunda pasada). El 7 las bajé al final de
+  // la pestaña del menú; siguen sin ser su sitio. CASO REAL: «tampoco cosas
+  // de seguridad, el veterinario sabe perfectamente eso; como mucho viene en
+  // cómo darlo, cosas que él puede editar». Así que ahora viven ahí.
+  //
+  // En la pestaña del menú NO están: ni el aviso ni la alarma ámbar del
+  // tutor. Eso es la mitad del pedido.
+  await expect(page.getByText(AVISO)).toHaveCount(0);
   await expect(page.getByText(/avisos? de seguridad$/i)).toHaveCount(0);
-  await expect(page.getByText(/Nota de seguridad/)).toBeVisible();
-  // Y dicho lo que un profesional necesita saber: que los límites duros ya
-  // están dentro del cálculo, esto es criterio.
-  await expect(page.getByText(/ya están aplicados dentro del cálculo/)).toBeVisible();
+
+  // Y en «Cómo darlo» sí, sin alarma y sin perderse.
+  await page.getByRole("button", { name: "Cómo darlo" }).click();
+  await expect(page.getByText(AVISO)).toBeVisible();
+  await expect(page.getByText(/Nota de manejo/)).toBeVisible();
+  await expect(page.getByText(/ya están dentro del cálculo/)).toBeVisible();
 });

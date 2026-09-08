@@ -23,6 +23,7 @@
 // mentira, que es quien decide si la cuenta está acreditada.
 import { test, expect } from "@playwright/test";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA, SEGUNDO_PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { esperarElPaciente } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54321";
 
@@ -94,7 +95,10 @@ test("con pacientes, la app se abre DENTRO del paciente y no de su perro", async
     menus: [],
   });
   await entrar(page);
-  await page.getByText("Nombre y sexo").waitFor();
+  // ⚠️ Y AQUÍ ATERRIZA EN LA FICHA DEL PACIENTE (8 septiembre), no en el
+  // «Perfil» del dueño: esperar la pantalla correcta es parte de lo que se
+  // comprueba, no un detalle de la espera.
+  await esperarElPaciente(page);
   await expect.poll(() => elPerroDeAhora(page),
     { message: "se ha abierto el perro que no toca" }).toContain(EL_PACIENTE.nombre);
 });
@@ -249,6 +253,10 @@ test("cardiopatía despliega el estadio ACVIM, y elegirlo cambia la clave real",
   await entrar(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
 
+  // ⚠️ Desde el 8 de septiembre las patologías van por aparato y plegadas
+  // (eran 27 casillas seguidas en medio de la ficha), así que se llega por
+  // el buscador -- que es el camino que usaría quien ya sabe el nombre.
+  await page.getByLabel("Buscar patología").fill("cardio");
   await page.getByText("Cardiopatía", { exact: true }).click();
   await expect(page.getByText("¿Sabes el estadio ACVIM?")).toBeVisible();
 
@@ -278,36 +286,54 @@ test("estruvita/cistina/urato: elegir una NO deja la genérica puesta también",
   await entrar(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
 
+  await page.getByLabel("Buscar patología").fill("calculos urinarios");
   await page.getByText("Cálculos urinarios", { exact: false }).click();
   await expect(page.getByText("¿Qué tipo de cálculo, si se sabe?")).toBeVisible();
   await page.getByText("Urato (dálmata, shunt hepático)", { exact: true }).click();
 
-  // El aviso que ve el veterinario tiene que ser el de URATO (purinas),
-  // no el de estruvita (pH) -- es justo la confusión que este cambio
-  // arregla, así que el texto concreto es lo que hay que comprobar.
-  await expect(page.getByText(/carga de purinas/)).toBeVisible();
-  await expect(page.getByText(/pH de la orina/)).toHaveCount(0);
+  // ⚠️ QUÉ SE COMPRUEBA AHORA (8 septiembre). Antes se miraba el aviso del
+  // TUTOR («la carga de purinas...»), que a un veterinario ya no se le
+  // pinta: el motor le formula estas patologías, así que decirle que las
+  // pauta su veterinario era decírselo a él mismo.
+  //
+  // Lo que se prueba sigue siendo exactamente lo mismo -- que viaja la clave
+  // del SUBTIPO elegido y no la genérica de la cabecera --, y ahora se ve
+  // mejor: el bloque de «lo que le cambia al motor» busca la patología POR
+  // CLAVE, así que si llegara «estruvita» pintaría otro nombre.
+  await expect(page.getByText("Urolitos de urato").first()).toBeVisible();
+  await expect(page.getByText(/Restricción de purinas/)).toBeVisible();
 });
 
-test("renal moderada-grave bloquea, leve-moderada no", async ({ page, request }) => {
+test("renal moderada-grave es OTRA clave, y el veterinario ve lo suyo", async ({ page, request }) => {
   // ⚠️ AÑADIDO (7 septiembre) junto con `renal_avanzada` en patologias.json:
-  // esta clave solo existe dentro de la familia "renal", no como entrada
+  // esa clave solo existe dentro de la familia "renal", no como entrada
   // suelta de PATOLOGIAS -- así que si `datosPatologia()` no supiera mirar
-  // también las opciones de familia, este bloqueo desaparecería en
-  // silencio (exactamente el fallo que `datosPatologia` arregló).
+  // también las opciones de familia, el subtipo desaparecería en silencio.
+  //
+  // ⚠️ REESCRITO (8 septiembre). Antes comprobaba que moderada-grave
+  // BLOQUEABA, enseñándole el aviso del tutor («necesita una dieta renal
+  // terapéutica pautada por tu veterinario») al veterinario que la está
+  // pautando. Eso se quitó: el motor ya le formula esta patología. Lo que
+  // se prueba sigue siendo que la clave del subtipo llega y es distinta de
+  // la de la cabecera -- se ve porque el bloque de topes busca por clave.
   await configurar(request, { rolProfesional: true, rolVerificado: true, perros: [], accesos: [], menus: [] });
   await entrar(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
 
+  await page.getByLabel("Buscar patología").fill("renal");
   await page.getByText("Insuficiencia renal crónica", { exact: true }).click();
   await expect(page.getByText(/leve-moderada o moderada-grave/)).toBeVisible();
 
-  // Leve-moderada (la cabecera): no bloquea.
-  await expect(page.getByText(/dieta renal terapéutica pautada/)).toHaveCount(0);
+  // La cabecera: se pinta la renal de siempre.
+  await expect(page.getByText("Insuficiencia renal crónica").first()).toBeVisible();
+  await expect(page.getByText("Insuficiencia renal moderada-grave")).toHaveCount(0);
 
-  // Moderada-grave: sí.
+  // El subtipo: otra clave, y por eso otro nombre y otro aviso profesional.
   await page.getByText("Moderada-grave (creatinina/SDMA claramente altos)", { exact: true }).click();
-  await expect(page.getByText(/dieta renal terapéutica pautada/)).toBeVisible();
+  await expect(page.getByText("Insuficiencia renal moderada-grave")).toBeVisible();
+  await expect(page.getByText(/SACN5 cap.37/)).toBeVisible();
+  // Y nada del muro del dueño.
+  await expect(page.getByText(/dieta renal terapéutica pautada/)).toHaveCount(0);
 });
 
 test("y en modo veterinario no se ofrece «¿tienes más perros?»", async ({ page, request }) => {
@@ -321,6 +347,6 @@ test("y en modo veterinario no se ofrece «¿tienes más perros?»", async ({ pa
     menus: [],
   });
   await entrar(page);
-  await page.getByText("Nombre y sexo").waitFor();
+  await esperarElPaciente(page);
   await expect(page.getByText(/¿Tienes más perros\?/)).toHaveCount(0);
 });
