@@ -61,6 +61,10 @@ export default function Formulador({
   pesoObjetivoKg, patologias = [], especiesExcluidas = [], nombresExcluidos = [],
   categoriasExcluidas = [], gramosIniciales = null, onGuardar = null, onVolver = () => {},
   firmante = null, onFirmar = null, onAbrirPanel = null, dietaActual = null,
+  // La miga de pan «‹ Pacientes» y la rueda de ajustes, que van en TODAS las
+  // pantallas. Las pinta el padre porque son suyas (saben a qué paciente
+  // vuelven y qué ajustes abren); aquí solo se colocan en la cabecera.
+  burbuja = null,
   // Abre la vista de impresión de la pauta que se acaba de firmar. La pinta
   // el padre (`pautaimprimible.jsx`), que es quien tiene los datos de la
   // clínica: no son parte del documento firmado a propósito -- ver su
@@ -396,12 +400,15 @@ export default function Formulador({
                            border: "none", cursor: "pointer" }}>
             ← Volver
           </button>
-          {onAbrirPanel && (
-            <button onClick={onAbrirPanel} aria-label="Menú"
-                    style={{ background: "transparent", border: "none", cursor: "pointer" }}>
-              <Menu size={20} style={{ color: "#FFFFFF" }} />
-            </button>
-          )}
+          <div className="flex items-center gap-2 shrink-0">
+            {burbuja}
+            {onAbrirPanel && (
+              <button onClick={onAbrirPanel} aria-label="Menú"
+                      style={{ background: "transparent", border: "none", cursor: "pointer" }}>
+                <Menu size={20} style={{ color: "#FFFFFF" }} />
+              </button>
+            )}
+          </div>
         </div>
         <h1 className="text-2xl leading-tight" style={{ color: "#FFFFFF", fontFamily: fontDisplay }}>
           Formular la ración

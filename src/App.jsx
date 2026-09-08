@@ -4354,6 +4354,9 @@ function RawkuOnboardingInterna({
   // "generador_solo": el generador, con el menú pedido para este perro y no
   // para la casa. Ver el comentario de `arranqueTrasCambio`.
   arrancarEn = null,
+  // ¿Es la PRIMERA vez que se monta en esta sesión, o un remonte por cambio
+  // de paciente? Lo sabe el padre, que lleva el contador. Ver `fase`.
+  arranqueDeLaApp = false,
   onAnadirPerro = () => {},
   onPerroGuardado = () => {},
   onPerroEliminado = () => {},
@@ -4642,7 +4645,50 @@ function RawkuOnboardingInterna({
   // ⚠️ `arrancarEn` (26 agosto): si se llegó aquí eligiendo "Solo para <otro
   // perro>", el componente acaba de montarse de cero con ESE perro y hay que
   // volver al generador. Sin esto, elegirlo te devolvía al perfil.
-  const [fase, setFase] = useState(arrancarEn === "generador_solo" ? "generador" : "onboarding");
+  // ⚠️ CASO REAL ENCONTRADO (8 septiembre, entrando en rawku.app desplegado
+  // con un veterinario de tres pacientes): la app abría directamente la FICHA
+  // del último paciente mirado. Con tres ya desconcierta; con cincuenta, que
+  // es el número que se puso encima de la mesa, es la pantalla equivocada --
+  // nadie abre su motor para seguir con el mismo caso de ayer, lo abre para
+  // buscar el de hoy. Un veterinario entra a su lista; un tutor, al perro que
+  // tiene.
+  //
+  // Se mira `arranqueDeLaApp` y NO el hecho de que haya un paciente montado,
+  // porque abrir un paciente REMONTA este componente (ver `cambiarDePerro`):
+  // sin esa distinción, pulsar un paciente en la lista te devolvería a la
+  // lista, en bucle y sin error. Y se decide aquí y no marcando cada sitio
+  // que abre un paciente porque los sitios son seis y el día que se añada el
+  // séptimo nadie se acordaría -- fallaría en silencio, que es la familia de
+  // fallos contra la que está escrito medio este archivo.
+  const [fase, setFase] = useState(() => {
+    if (arrancarEn === "generador_solo") return "generador";
+    if (enModoProfesional && arranqueDeLaApp && yaTienePerroGuardado) return "pacientes";
+    return "onboarding";
+  });
+
+  // ⚠️ Y AQUÍ OTRA VEZ, PORQUE EL ROL LLEGA TARDE (8 septiembre, medido).
+  //
+  // El inicializador de arriba se ejecuta en el PRIMER render, y en ese
+  // momento `enModoProfesional` todavía vale false: la fila de `profiles`
+  // que dice que esta cuenta está acreditada se resuelve después. O sea que
+  // el veterinario entraba por la rama del tutor y aterrizaba en la ficha,
+  // exactamente igual que antes del arreglo -- la prueba de la lista lo
+  // cazó, no el código.
+  //
+  // Se deja el inicializador Y este efecto a propósito: el primero acierta
+  // cuando el rol ya se sabe al montar, el segundo cuando se sabe un
+  // instante después, y hacen lo mismo. La decisión se toma UNA vez
+  // (`decisionDeArranque`) y solo si nadie ha navegado todavía -- si `fase`
+  // ya no es la inicial, es que la pantalla la ha elegido una persona, y
+  // eso no se pisa.
+  const decisionDeArranque = useRef(false);
+  useEffect(() => {
+    if (decisionDeArranque.current) return;
+    if (!arranqueDeLaApp || arrancarEn === "generador_solo") return;
+    if (!enModoProfesional) return;          // todavía no se sabe, o es un tutor
+    decisionDeArranque.current = true;
+    if (yaTienePerroGuardado && fase === "onboarding") setFase("pacientes");
+  }, [enModoProfesional, arranqueDeLaApp, arrancarEn, yaTienePerroGuardado, fase]);
 
   // ⚠️ AL APAGAR EL MODO, SALIR DE SUS PANTALLAS (7 septiembre).
   //
@@ -10190,6 +10236,12 @@ function RawkuOnboardingInterna({
       <>
         <Fuentes />
         <Formulador
+          /* ⚠️ La rueda de ajustes va en TODAS las pantallas -- ver
+             `burbujaDePerfil`. El formulador tiene cabecera propia y se
+             quedó sin ella: desde aquí no había forma de llegar a la cuenta
+             ni al interruptor de modo, ni de volver a la lista de pacientes
+             sin pasar por el panel. */
+          burbuja={burbujaDePerfil(true)}
           perfil={perfil}
           derObjetivo={derReal}
           etapaRequisitos={ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto"}
@@ -11785,6 +11837,7 @@ function AuthGate() {
         accesos={accesos}
         onCambiarDePerro={cambiarDePerro}
         arrancarEn={arranqueTrasCambio}
+        arranqueDeLaApp={montaje === 0}
         onAnadirPerro={anadirPerro}
         onPerroGuardado={perroGuardado}
         onPerroEliminado={perroEliminado}
