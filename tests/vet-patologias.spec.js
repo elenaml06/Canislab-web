@@ -84,20 +84,57 @@ test("y varias de ésas a la vez tampoco le paran", async ({ page, request }) =>
   await expect(page.getByText("Formular la ración")).toBeVisible();
 });
 
-test("a un TUTOR se le sigue parando: eso no se ha tocado", async ({ page, request }) => {
-  // El otro lado, y el que importa de verdad: quitar el muro al veterinario
-  // no puede quitárselo al dueño. La frontera es quién está delante.
+test("a un TUTOR se le sigue parando en seco: eso no se ha tocado", async ({ page, request }) => {
+  // ⚠️ ESTA ES LA MITAD PELIGROSA, y no la tenía NADIE probada.
+  //
+  // Quitarle el muro al veterinario no puede quitárselo al dueño: la
+  // frontera es quién está delante, no la patología. Un tutor que marca
+  // hepatopatía tiene que seguir chocando con «Esto lo tiene que pautar tu
+  // veterinario», porque la restricción de cobre que hace falta está POR
+  // DEBAJO del mínimo que necesita cualquier perro para estar sano -- no es
+  // algo que se arregle eligiendo mejor los alimentos.
+  //
+  // Se entra con el perro YA guardado y se abre el paso 6 desde el lápiz de
+  // su perfil, que es como llega de verdad quien ya tiene ficha: recorrer
+  // los seis pasos a ciegas haría que la prueba dependiera de qué pide cada
+  // uno, y se rompería con el primer campo nuevo.
   await configurar(request, {
     rolProfesional: false, rolVerificado: false,
-    perros: [], accesos: [], menus: [],
+    perros: [PACIENTE], accesos: [], menus: [],
   });
   await page.goto("/");
   await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByText("Nombre y sexo").waitFor();
 
-  await page.getByPlaceholder("Nombre de tu perro").waitFor();
+  // El buscador por aparato es del profesional: al dueño no le sale.
   await expect(page.getByLabel("Buscar patología")).toHaveCount(0);
+
+  // Su paso 6, con su pregunta de sí/no antes de la lista: al dueño se le
+  // pregunta si tiene patologías, y la lista solo aparece si dice que sí.
+  // (En la ficha del profesional no hay pregunta: las listas SON la
+  // respuesta, que es lo que se decidió el 29 de agosto.)
+  await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
+  await page.getByText("¿Tiene alguna patología diagnosticada?").waitFor();
+
+  // Su paso 6 son CUATRO preguntas de sí/no, y «Terminar» no se enciende
+  // hasta que están las cuatro. Se contestan las tres primeras que no; la
+  // cuarta, la de patologías, que sí.
+  const noes = page.getByRole("button", { name: "No", exact: true });
+  for (let i = 0; i < 3; i += 1) await noes.nth(i).click();
+  await page.getByRole("button", { name: "Sí", exact: true }).last().click();
+
+  const hepatopatia = page.getByText("Hepatopatía / predisposición al cobre", { exact: true });
+  await expect(hepatopatia).toBeVisible();
+  await hepatopatia.click();
+
+  // Y al terminar, el muro. Se comprueba AQUÍ y no al marcarla porque el
+  // asistente del dueño no enseña el aviso en la casilla: le para al
+  // terminar el paso, que es donde se decidió el 5 de agosto («salta el
+  // aviso AQUÍ MISMO, sin dejar avanzar hasta elegir modo y generar»).
+  await page.getByRole("button", { name: /Terminar/ }).click();
+  await expect(page.getByText("Esto lo tiene que pautar tu veterinario")).toBeVisible();
 });
 
 

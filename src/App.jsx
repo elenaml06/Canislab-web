@@ -9024,6 +9024,21 @@ function RawkuOnboardingInterna({
               if (bloqueantes.length > 0) {
                 setMenuError(bloqueantes.map((p) => p.aviso).join(" "));
                 setNecesitaVeterinario(true);
+                // ⚠️ Y HAY QUE SACAR `paso` DEL ASISTENTE (8 septiembre).
+                //
+                // FALLO QUE YA ESTABA, y que encontró la prueba nueva del
+                // muro del tutor: esto ponía `fase` y `pantalla` pero dejaba
+                // `paso` en 6, y en el render `if (paso === 6)` va ANTES que
+                // cualquier `fase`. O sea que la pantalla del muro era
+                // INALCANZABLE desde aquí: el dueño pulsaba «Terminar», la
+                // navegación ocurría de verdad por dentro, y él se quedaba
+                // mirando el mismo paso 6 con un botón que no hacía nada.
+                //
+                // Es exactamente el mismo fallo que `navegarDesdeElPanel`
+                // describe («navegabas bien y no lo veías») y el que dejaba
+                // pegada la ficha del veterinario. Tercera vez que aparece,
+                // y siempre por lo mismo: `paso` decide antes que `fase`.
+                setPaso(TOTAL_PASOS + 1);
                 setFase("generador");
                 setPantalla("veterinario_requerido");
               } else {
@@ -9781,6 +9796,10 @@ function RawkuOnboardingInterna({
                 </div>
                 <button
                   onClick={() => setPaso(f.paso)}
+                  // Sin nombre, seis lápices seguidos son seis botones
+                  // idénticos: ni un lector de pantalla ni una prueba saben
+                  // cuál es cuál. Dice qué edita.
+                  aria-label={`Editar ${f.titulo.toLowerCase()}`}
                   className="shrink-0 w-9 h-9 rounded-full flex items-center justify-center"
                   style={{ background: PAPEL }}
                 >

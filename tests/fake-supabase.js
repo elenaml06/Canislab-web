@@ -712,6 +712,52 @@ export function crearFakeSupabase(opciones = {}) {
             aviso_profesional_crecimiento: null,
             aviso_general: "Se ha bajado el fósforo todo lo posible.",
           },
+          // Las de FAMILIA, para poder comprobar que la clave que se manda
+          // es la del SUBTIPO elegido y no la genérica de la cabecera: el
+          // bloque de «lo que le cambia al motor» busca por clave, así que
+          // si llegara la equivocada pintaría el nombre equivocado.
+          urato: {
+            nombre: "Urolitos de urato",
+            formulable: false, formulable_por_profesional: true,
+            necesita_bajo_fediaf: false, motivo_no_formulable: "Purinas",
+            solo_en_adulto: true, en_crecimiento: "bloquear",
+            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            topes: [], suelos: [],
+            aviso_profesional: "Restricción de purinas: fuera vísceras y carnes rojas.",
+            aviso_profesional_crecimiento: null, aviso_general: null,
+          },
+          renal_avanzada: {
+            nombre: "Insuficiencia renal moderada-grave",
+            formulable: false, formulable_por_profesional: true,
+            necesita_bajo_fediaf: true, motivo_no_formulable: "Proteína bajo FEDIAF",
+            solo_en_adulto: true, en_crecimiento: "bloquear",
+            nutriente_frontera: "proteina", objetivo_terapeutico_por_1000kcal: 45,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            topes: [{
+              nutriente: "fosforo", unidad: "mg", valor: 1200,
+              minimo_fediaf_adulto: 1160, maximo_fediaf_adulto: null, margen_pct: 3.4,
+              fuente: "IRIS 3-4", por_que: "Lo más estricto sin romper FEDIAF.",
+            }],
+            suelos: [],
+            aviso_profesional: "SACN5 cap.37: 14-20 % de materia seca de proteína.",
+            aviso_profesional_crecimiento: null, aviso_general: null,
+          },
+          cardiopatia_b2: {
+            nombre: "Cardiopatía ACVIM B2",
+            formulable: true, formulable_por_profesional: true,
+            necesita_bajo_fediaf: false, motivo_no_formulable: null,
+            solo_en_adulto: true, en_crecimiento: "bloquear",
+            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            topes: [{
+              nutriente: "sodio", unidad: "mg", valor: 900,
+              minimo_fediaf_adulto: 300, maximo_fediaf_adulto: null, margen_pct: 200,
+              fuente: "ACVIM 2019", por_que: "Restricción moderada en B2.",
+            }],
+            suelos: [],
+            aviso_profesional: null, aviso_profesional_crecimiento: null, aviso_general: null,
+          },
           pancreatitis: {
             nombre: "Pancreatitis",
             formulable: true, formulable_por_profesional: true,
