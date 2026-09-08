@@ -155,7 +155,16 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
       <p className="text-[11px] tracking-[0.14em] uppercase mb-2"
          style={{ color: VIOLETA, fontFamily: fontMono }}>{titulo}</p>
 
-      {fichas.map(([clave, p]) => (
+      {fichas.map(([clave, p]) => {
+        // Techos y suelos juntos: al veterinario le da igual por dentro cuál
+        // es cuál, lo que lee es qué puede mover y hasta dónde. Solo entran
+        // los que traen margen escrito -- si algún día se añade un tope y se
+        // olvida el margen, aquí no aparece en vez de salir un texto vacío,
+        // y el BLOQUE 51 de la batería de la API lo caza antes.
+        const margenes = [...p.topes, ...p.suelos]
+          .map((l) => ({ l, m: l.margen_del_profesional }))
+          .filter(({ m }) => m && (m.criterio || '').trim())
+        return (
         <div key={clave} className="mb-3 last:mb-0">
           <p className="mb-1.5" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 16 }}>
             {p.nombre}
@@ -171,6 +180,9 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
               {p.nota ? `. ${p.nota}` : '.'}
             </p>
           )}
+          {/* Los márgenes de los dos lados juntos: al veterinario le da igual
+              si por dentro es un techo o un suelo, lo que lee es qué puede
+              mover y hasta dónde. */}
           {p.topes.map((l) => <Limite key={`t-${l.nutriente}`} l={l} esTope />)}
           {p.suelos.map((l) => <Limite key={`s-${l.nutriente}`} l={l} esTope={false} />)}
 
@@ -200,11 +212,51 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
             <div className="rounded-xl px-3 py-2.5" style={{ background: '#F0F7F3' }}>
               <p className="text-[10px] tracking-[0.1em] uppercase mb-1"
                  style={{ color: VERDE, fontFamily: fontMono }}>Lo decides tú</p>
-              <ul className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-                <li className="mb-1">Qué alimentos entran y cuántos gramos de cada uno</li>
-                <li className="mb-1">Las categorías y las exclusiones</li>
-                <li>Las proporciones BARF (el peldaño, al formular)</li>
-              </ul>
+              {/* ⚠️ ESTO ERAN TRES LÍNEAS FIJAS, IGUALES EN LAS 40 PATOLOGÍAS
+                  (8 septiembre). CASO REAL, de la usuaria: «en qué puede tocar
+                  y qué no siempre pones lo mismo... y las proporciones BARF
+                  eso lo puede hacer siempre en cada menú, es redundante que
+                  pongas eso». Tenía razón por partida doble: era genérico Y
+                  repetía cosas que no dependen de la patología.
+
+                  Y es falso que sea lo mismo en todas. En pancreatitis el
+                  techo de grasa lo mueve la condición corporal y los
+                  triglicéridos; en EPI el valor de partida es el extremo ALTO
+                  del rango porque el tratamiento son las enzimas y no la
+                  dieta; en renal no se puede mover NADA, porque 1200 ya choca
+                  con el mínimo de FEDIAF. Tres respuestas distintas a la
+                  misma pregunta, y quien firma necesita la suya, con la
+                  fuente al lado. */}
+              {margenes.length === 0 ? (
+                <p className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                  Esta condición no fija ningún límite numérico, así que no hay
+                  ningún número suyo que ajustar.
+                </p>
+              ) : (
+                <ul className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                  {margenes.map(({ l, m }) => (
+                    <li key={`m-${l.nutriente}`} className="mb-1.5 last:mb-0">
+                      <b>{nombreDe(l.nutriente)}</b>
+                      {m.hasta == null ? (
+                        <span style={{ color: ROSA }}> · no se mueve</span>
+                      ) : (
+                        <span style={{ color: VERDE }}>
+                          {' '}· {m.direccion === 'subir' ? 'hasta' : 'hasta'} {cifra(m.hasta)}
+                          {l.unidad ? ` ${l.unidad}` : ''}
+                        </span>
+                      )}
+                      <br />
+                      <span style={{ color: MALVA }}>{m.criterio}</span>
+                      {m.donde_para && (
+                        <>
+                          <br />
+                          <span style={{ color: MALVA }}>Y ahí para: {m.donde_para}</span>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
           <p className="text-[11px] leading-snug mt-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -255,7 +307,8 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
             </div>
           )}
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

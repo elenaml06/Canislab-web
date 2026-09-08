@@ -155,8 +155,24 @@ test("al marcar una patología ve el tope, qué no se toca y qué decide él", a
   await expect(page.getByText("No se toca")).toBeVisible();
   await expect(page.getByText("Lo decides tú")).toBeVisible();
   await expect(page.getByText(/Los 43 requisitos de FEDIAF y el ratio Ca:P/)).toBeVisible();
-  await expect(page.getByText(/Qué alimentos entran y cuántos gramos/)).toBeVisible();
-  await expect(page.getByText(/Las proporciones BARF/)).toBeVisible();
+
+  // ⚠️ Y «Lo decides tú» dice lo de ESTA patología, no tres líneas fijas
+  // (8 septiembre). CASO REAL, de la usuaria: «en qué puede tocar y qué no
+  // siempre pones lo mismo... y las proporciones BARF eso lo puede hacer
+  // siempre en cada menú, es redundante que pongas eso».
+  //
+  // En renal la respuesta es que NO se mueve, y el motivo importa: 1200 ya
+  // choca con el mínimo de FEDIAF, así que bajarlo es prescribir por debajo.
+  // Un veterinario que lea «puedes ajustarlo» aquí perdería el tiempo
+  // buscando dónde.
+  await expect(page.getByText(/Fósforo/).first()).toBeVisible();
+  await expect(page.getByText(/no se mueve/)).toBeVisible();
+  await expect(page.getByText(/El estadio IRIS y la fosfatemia/)).toBeVisible();
+  await expect(page.getByText(/el minimo de FEDIAF de adulto es 1160/)).toBeVisible();
+
+  // Y las tres genéricas ya no están en ninguna patología.
+  await expect(page.getByText(/Las proporciones BARF/)).toHaveCount(0);
+  await expect(page.getByText(/Qué alimentos entran y cuántos gramos/)).toHaveCount(0);
 
   // Y la recomendación clínica, que no es un límite: el objetivo de la
   // literatura, que está por debajo de lo que el motor puede hacer.
@@ -171,6 +187,25 @@ test("una patología sin topes lo dice, y sigue diciendo qué decide él", async
 
   await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
   await expect(page.getByText("Lo decides tú")).toBeVisible();
+  // Sin límites propios no hay número suyo que ajustar, y se dice: es
+  // distinto de «no puedes tocar nada», que es lo que ponía antes.
+  await expect(page.getByText(/no hay ningún número suyo que ajustar/)).toBeVisible();
+});
+
+test("y en pancreatitis dice hasta dónde puede moverlo y qué lo decide", async ({ page, request }) => {
+  // ⚠️ EL CASO QUE LO MOTIVÓ, literal de la usuaria: «hay ciertos casos, por
+  // ejemplo en pancreatitis, según las analíticas y lo agudo del cuadro el
+  // veterinario puede decidir hasta dónde bajarla». Es la otra mitad del par
+  // que hay que poder distinguir en pantalla: renal no se mueve, pancreatitis
+  // sí, y con la razón clínica al lado.
+  await entrarComoVeterinario(page, request);
+  await page.getByLabel("Buscar patología").fill("pancrea");
+  await page.getByText("Pancreatitis", { exact: true }).click();
+
+  await expect(page.getByText(/hasta 37,5 g/)).toBeVisible();
+  await expect(page.getByText(/condicion corporal y los trigliceridos/)).toBeVisible();
+  await expect(page.getByText(/SACN5 Tabla 67-3/)).toBeVisible();
+  await expect(page.getByText(/no se mueve/)).toHaveCount(0);
 });
 
 test("con dos patologías se ven los topes de las dos", async ({ page, request }) => {

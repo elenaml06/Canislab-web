@@ -706,6 +706,14 @@ export function crearFakeSupabase(opciones = {}) {
               margen_pct: 3.4,
               fuente: "Freeman LM, dvm360 2009; WSAVA; IRIS",
               por_que: "Las dietas renales comerciales aportan 480-1000 mg/1000 kcal.",
+              // El caso «no se mueve»: el tope ya choca con el mínimo de
+              // FEDIAF, así que el veterinario no tiene recorrido. Es la
+              // mitad del par que hay que poder distinguir en pantalla.
+              margen_del_profesional: {
+                direccion: null, hasta: null,
+                criterio: "El estadio IRIS y la fosfatemia piden bajarlo mas.",
+                donde_para: "1200 ya es lo mas bajo que cabe: el minimo de FEDIAF de adulto es 1160 mg.",
+              },
             }],
             suelos: [],
             aviso_profesional: "Objetivo de proteína para insuficiencia renal, SACN5 cap.37.",
@@ -716,6 +724,33 @@ export function crearFakeSupabase(opciones = {}) {
           // es la del SUBTIPO elegido y no la genérica de la cabecera: el
           // bloque de «lo que le cambia al motor» busca por clave, así que
           // si llegara la equivocada pintaría el nombre equivocado.
+          // El caso «sí se mueve», y con la razón clínica al lado: es lo
+          // que la usuaria pedía -- «en pancreatitis, según las analíticas y
+          // lo agudo del cuadro, el veterinario puede decidir hasta dónde
+          // bajarla».
+          pancreatitis: {
+            nombre: "Pancreatitis",
+            formulable: true, formulable_por_profesional: true,
+            necesita_bajo_fediaf: false, motivo_no_formulable: null,
+            solo_en_adulto: true, en_crecimiento: "sin_tope",
+            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            topes: [{
+              nutriente: "grasa", unidad: "g", valor: 20,
+              minimo_fediaf_adulto: 13.75, maximo_fediaf_adulto: null,
+              margen_pct: 45.5,
+              fuente: "Merck Veterinary Manual",
+              por_que: "«feeding a low-fat diet (ie, less than 20 g fat/1,000 kcal)».",
+              margen_del_profesional: {
+                direccion: "subir", hasta: 37.5,
+                criterio: "La condicion corporal y los trigliceridos. SACN5 Tabla 67-3 pone el techo en <=15 % de materia seca si el perro NO es obeso ni hipertrigliceridemico, y lo baja a <=10 % si lo es.",
+                donde_para: "El valor por defecto, 20, es mas estricto que los dos.",
+              },
+            }],
+            suelos: [],
+            aviso_profesional: null, aviso_profesional_crecimiento: null,
+            aviso_general: "Se ha bajado la grasa a menos de 20 g por cada 1000 kcal.",
+          },
           urato: {
             nombre: "Urolitos de urato",
             formulable: false, formulable_por_profesional: true,
