@@ -902,7 +902,15 @@ const PATOLOGIAS = [
   // (restricción de purinas) veía el aviso.profesional de "estruvita"
   // (pH urinario), que es el equivocado. Ahora es la cabeza de una
   // familia con subtipo -- ver `FAMILIAS_PATOLOGIA`.
-  { key: "estruvita", label: "Cálculos urinarios (estruvita / oxalato de calcio ya cubierto arriba / urato / cistina)", segura: false,
+  // ⚠️ `segura` PASA A TRUE (8 septiembre): la estruvita se abrió a
+  // formulable en el motor. Su motivo para estar cerrada («depende del pH
+  // urinario y de analíticas que la app no puede ver») era cierto pero
+  // escondía que SACN5 Tabla 43-3 da tres cifras formulables para PREVENIR
+  // la recurrencia (magnesio ≤250, fósforo ≤1500, proteína ≤62,5), las tres
+  // por encima del mínimo de FEDIAF. Lo que sigue necesitando prescripción
+  // es DISOLVER un cálculo ya formado. El subtipo urato/cistina de esta
+  // familia sí sigue cerrado, y por eso la casilla lleva subtipo.
+  { key: "estruvita", label: "Cálculos urinarios (estruvita / oxalato de calcio ya cubierto arriba / urato / cistina)", segura: true,
     aviso: "Estos cálculos dependen del pH de la orina y de analíticas que la app no puede ver. Una dieta mal ajustada aquí puede empeorarlos, así que no generamos menú automático: necesitas una dieta pautada por tu veterinario." },
   { key: "urato", label: "Urolitos de urato", segura: false,
     aviso: "La carga de purinas de una ración cruda está muy por encima de cualquier objetivo seguro para esta condición, y no solo por las vísceras. No generamos menú automático: necesitas una dieta pautada por tu veterinario, a menudo con pienso terapéutico específico." },
@@ -933,6 +941,20 @@ const PATOLOGIAS = [
   { key: "ple_linfangiectasia", label: "Enteropatía pierde-proteínas / linfangiectasia intestinal", segura: true },
   { key: "insuficiencia_pancreatica_exocrina", label: "Insuficiencia pancreática exocrina (EPI)", segura: true },
   { key: "fracaso_renal_agudo", label: "Fracaso renal agudo (no crónico)", segura: true },
+  // ⚠️ AÑADIDAS (8 septiembre) — TRES DIGESTIVAS QUE LA FUENTE DECLARA Y NO
+  // OFRECÍAMOS. Salieron del barrido de las 70 tablas «Key nutritional
+  // factors» de SACN5 contra las patologías del motor: las tres tienen tabla
+  // propia con cifras, y las tres se formulan sin bajar de FEDIAF.
+  //
+  // OJO con la FLATULENCIA y el ESTREÑIMIENTO: son incompatibles entre sí a
+  // propósito -- una pide fibra ≤12,5 g/1000 kcal y la otra ≥17,5 --, igual
+  // que la flatulencia con la hiperlipidemia. Si alguien marca las dos, el
+  // motor no da menú y dice qué dos límites chocan. No es un fallo: son dos
+  // objetivos clínicos opuestos.
+  { key: "estrenimiento_cronico", label: "Estreñimiento crónico", segura: true },
+  { key: "flatulencia", label: "Gases (flatulencia excesiva)", segura: true },
+  { key: "intestino_irritable", label: "Síndrome de intestino irritable", segura: true },
+  { key: "sibo", label: "Sobrecrecimiento bacteriano intestinal (SIBO)", segura: true },
   { key: "enteropatia_cronica", label: "Enteropatía crónica / colitis", segura: true },
   { key: "artrosis", label: "Artrosis / osteoartritis", segura: true },
   { key: "riesgo_gdv", label: "Riesgo de torsión gástrica (razas de tórax profundo)", segura: true },
@@ -1075,10 +1097,17 @@ const FAMILIAS_PATOLOGIA = {
   },
   estruvita: {
     pregunta: "¿Qué tipo de cálculo, si se sabe?",
+    // ⚠️ AMPLIADA (8 septiembre): entran los dos tipos que faltaban, y con
+    // esto están los CINCO que reconoce la literatura. El de fosfato cálcico
+    // se formula (sus cifras están por encima del mínimo de FEDIAF); el de
+    // sílice no, porque su único eje dietético es bajar la proteína a 10-18 %
+    // de materia seca y todo ese rango cae por debajo del mínimo.
     opciones: [
       { key: "estruvita", label: "Estruvita (o no lo sé)" },
       { key: "urato", label: "Urato (dálmata, shunt hepático)" },
       { key: "cistina", label: "Cistina" },
+      { key: "urolitos_fosfato_calcico", label: "Fosfato cálcico" },
+      { key: "urolitos_silice", label: "Sílice" },
     ],
   },
 };

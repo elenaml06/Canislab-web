@@ -751,7 +751,7 @@ export function crearFakeSupabase(opciones = {}) {
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
-              nutriente: "sodio", unidad: "mg", valor: 900,
+              nutriente: "sodio", unidad: "mg", valor: 739,   // 8 sep: 900 -> 739, el techo legal del Reg. (UE) 2020/354 entrada 24
               minimo_fediaf_adulto: 300, maximo_fediaf_adulto: null, margen_pct: 200,
               fuente: "ACVIM 2019", por_que: "Restricción moderada en B2.",
             }],
@@ -766,7 +766,7 @@ export function crearFakeSupabase(opciones = {}) {
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
-              nutriente: "grasa", unidad: "g", valor: 20,
+              nutriente: "grasa", unidad: "g", valor: 37.5,   // 8 sep: 20 (Merck) -> 37,5 (SACN5 Tabla 67-3), por la regla de fuentes del motor
               minimo_fediaf_adulto: 13.75, maximo_fediaf_adulto: null,
               margen_pct: 45.5,
               fuente: "Merck Veterinary Manual",
@@ -811,7 +811,7 @@ export function crearFakeSupabase(opciones = {}) {
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [],
             suelos: [{
-              nutriente: "epa_dha", unidad: "g", valor: 1,
+              nutriente: "epa", unidad: "g", valor: 1,        // 8 sep: era "epa_dha" y la fuente (SACN5 Tabla 34-2) pide EPA SOLA
               minimo_fediaf_adulto: 0.11, maximo_fediaf_adulto: null,
               margen_pct: null,
               fuente: "SACN5 5ª ed., cap. 34, Tabla 34-2",
