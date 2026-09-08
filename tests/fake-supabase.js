@@ -719,9 +719,9 @@ export function crearFakeSupabase(opciones = {}) {
           urato: {
             nombre: "Urolitos de urato",
             formulable: false, formulable_por_profesional: true,
-            necesita_bajo_fediaf: false, motivo_no_formulable: "Purinas",
-            solo_en_adulto: true, en_crecimiento: "bloquear",
-            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            necesita_bajo_fediaf: true, motivo_no_formulable: "Purinas",
+            solo_en_adulto: false, en_crecimiento: null,
+            nutriente_frontera: "purinas", objetivo_terapeutico_por_1000kcal: 90,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [], suelos: [],
             aviso_profesional: "Restricción de purinas: fuera vísceras y carnes rojas.",
@@ -731,8 +731,8 @@ export function crearFakeSupabase(opciones = {}) {
             nombre: "Insuficiencia renal moderada-grave",
             formulable: false, formulable_por_profesional: true,
             necesita_bajo_fediaf: true, motivo_no_formulable: "Proteína bajo FEDIAF",
-            solo_en_adulto: true, en_crecimiento: "bloquear",
-            nutriente_frontera: "proteina", objetivo_terapeutico_por_1000kcal: 45,
+            solo_en_adulto: false, en_crecimiento: null,
+            nutriente_frontera: "proteina", objetivo_terapeutico_por_1000kcal: 42.5,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
               nutriente: "fosforo", unidad: "mg", valor: 1200,
@@ -745,7 +745,7 @@ export function crearFakeSupabase(opciones = {}) {
           },
           cardiopatia_b2: {
             nombre: "Cardiopatía ACVIM B2",
-            formulable: true, formulable_por_profesional: true,
+            formulable: true, formulable_por_profesional: false,
             necesita_bajo_fediaf: false, motivo_no_formulable: null,
             solo_en_adulto: true, en_crecimiento: "bloquear",
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
@@ -762,7 +762,7 @@ export function crearFakeSupabase(opciones = {}) {
             nombre: "Pancreatitis",
             formulable: true, formulable_por_profesional: true,
             necesita_bajo_fediaf: false, motivo_no_formulable: null,
-            solo_en_adulto: true, en_crecimiento: "bloquear",
+            solo_en_adulto: true, en_crecimiento: "sin_tope",
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
@@ -771,10 +771,36 @@ export function crearFakeSupabase(opciones = {}) {
               margen_pct: 45.5,
               fuente: "Merck Veterinary Manual",
               por_que: "Literal de la fuente: «feeding a low-fat diet».",
+            }, {
+              nutriente: "proteina", unidad: "g", valor: 75,
+              minimo_fediaf_adulto: 52.1, maximo_fediaf_adulto: null,
+              margen_pct: 44.0,
+              fuente: "SACN5 5ª ed., cap. 67, Tabla 67-3",
+              por_que: "«15 to 30 %» de materia seca.",
             }],
             suelos: [],
             aviso_profesional: null, aviso_profesional_crecimiento: null,
             aviso_general: null,
+          },
+          // ⚠️ AÑADIDA (8 septiembre) — LA ÚNICA SIN NINGÚN LÍMITE NUMÉRICO.
+          // Hacía falta porque `vet-patologias.spec.js` usaba `artrosis`
+          // como «patología sin topes», y artrosis SÍ tiene un suelo de
+          // EPA+DHA en el motor (1 g/1000 kcal, SACN5 cap.34). Lo que
+          // ocultaba el desajuste era este mismo servidor de mentira, que
+          // la servía con `suelos: []`. Hipotiroidismo sí es de verdad una
+          // patología que no mueve ningún número: su restricción es por
+          // ALIMENTO (grelo y nabo).
+          hipotiroidismo: {
+            nombre: "Hipotiroidismo",
+            formulable: true, formulable_por_profesional: true,
+            necesita_bajo_fediaf: false, motivo_no_formulable: null,
+            solo_en_adulto: false, en_crecimiento: null,
+            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null,
+            nota: "No hay tope numérico: la restricción es por alimento (grelo y nabo, Brassica rapa, ricos en progoitrina). No existe umbral canino publicado de crucíferas.",
+            topes: [], suelos: [],
+            aviso_profesional: null, aviso_profesional_crecimiento: null,
+            aviso_general: "No se cambia la composición, salvo que se quitan el grelo y el nabo.",
           },
           artrosis: {
             nombre: "Artrosis / osteoartritis",
@@ -783,7 +809,14 @@ export function crearFakeSupabase(opciones = {}) {
             solo_en_adulto: false, en_crecimiento: null,
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
-            topes: [], suelos: [],
+            topes: [],
+            suelos: [{
+              nutriente: "epa_dha", unidad: "g", valor: 1,
+              minimo_fediaf_adulto: 0.11, maximo_fediaf_adulto: null,
+              margen_pct: null,
+              fuente: "SACN5 5ª ed., cap. 34, Tabla 34-2",
+              por_que: "«0.4 to 1.1 %» de materia seca.",
+            }],
             aviso_profesional: null, aviso_profesional_crecimiento: null,
             aviso_general: null,
           },

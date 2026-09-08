@@ -256,12 +256,20 @@ test("al marcar una patología, el veterinario ve el tope, la fuente y el margen
 test("una patología sin topes lo dice, en vez de callarse", async ({ page, request }) => {
   // Callarse aquí sería peor que no enseñar nada: dejaría creer que el motor
   // ajusta algo cuando no ajusta ningún límite numérico.
+  //
+  // ⚠️ CAMBIADO (8 septiembre) DE `artrosis` A `hipotiroidismo`, y el motivo
+  // no es cosmético: ARTROSIS SÍ MUEVE UN LÍMITE. El motor le pone un suelo
+  // de EPA+DHA de 1 g/1000 kcal (SACN5 cap.34, Tabla 34-2). Esta prueba
+  // pasaba porque el servidor de mentira la servía con `suelos: []` -- se
+  // estaba comprobando la pantalla contra una ficción, que es el mismo fallo
+  // de `dentro_de_rango`. Hipotiroidismo sí es de verdad una patología sin
+  // ningún número: su restricción es por ALIMENTO (grelo y nabo).
   await configurar(request, comoVeterinario({ perros: [], accesos: [] }));
   await entrar(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
 
-  await page.getByLabel("Buscar patología").fill("artrosis");
-  await page.getByText("Artrosis / osteoartritis", { exact: true }).click();
+  await page.getByLabel("Buscar patología").fill("hipotiroid");
+  await page.getByText("Hipotiroidismo", { exact: true }).click();
   await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
 });
 

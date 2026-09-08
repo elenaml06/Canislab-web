@@ -22,6 +22,30 @@
 // el hueso crudo nunca se cocina, que el pescado crudo sólo vale si se ha
 // congelado, que el cuello de pollo se puede dar semicongelado a un tragón.
 
+// ⚠️ QUITADO EL «NO MÁS DE 1 VEZ POR SEMANA» DEL ATÚN (8 de septiembre).
+//
+// Aquí ponía «Si usas atún u otro pescado grande, no más de 1 vez por semana».
+// Esa regla existió en el motor como `TOPE_MERCURIO_DIAS_SEMANA = 1` y **se
+// borró el 25 de agosto**, con dos motivos escritos en `motor/seguridad.py`
+// del repo de la API:
+//
+//   1. No la usaba nadie. Estaba declarada y ninguna línea del repositorio la
+//      leía, así que la app decía tener una regla que no se aplicaba.
+//   2. No tiene base en perros. No hay estudio canino ni guía veterinaria que
+//      fije una frecuencia semanal de pescado con mercurio: ese «≤1 día/semana»
+//      es una transposición directa de las recomendaciones de FDA/EFSA para
+//      embarazadas y niños pequeños, grupos sensibles al metilmercurio por su
+//      efecto sobre un sistema nervioso EN DESARROLLO. Un perro adulto no es
+//      ese caso.
+//
+// El motor retiró la regla por no tener base y la app se la seguía dando al
+// dueño. Lo que SÍ se aplica, y como restricción dura dentro del solver, es
+// `TOPE_MERCURIO_KCAL = 0.10`: el atún no puede pasar del 10 % de las kcal del
+// día. Por eso el texto de ahora dice que el motor ya lo limita, en vez de
+// pedirle al dueño que lleve una cuenta que nadie comprueba.
+//
+// Lo vigila `tests/instrucciones-y-motor.spec.js`.
+
 export const INSTRUCCIONES_POR_CATEGORIA = {
   "Carne muscular": "Cruda. En trozos, no picada — picada tiene más riesgo bacteriano.",
   "Vísceras": "Crudas, en trozos pequeños.",
@@ -29,7 +53,7 @@ export const INSTRUCCIONES_POR_CATEGORIA = {
   "Verduras y frutas": "Cada una necesita algo distinto (triturar, cocer, quitar semillas...) — mira la indicación de este alimento en concreto, más abajo.",
   "Extras": "Aceites, semillas y huevo se añaden CRUDOS al final y nunca se cocinan — algunos, como el aceite de girasol o de linaza, pierden sus propiedades con el calor. Cada alimento de esta categoría tiene además su propia indicación aquí abajo.",
   "Hueso carnoso": "Crudo SIEMPRE, nunca cocinado — cocinado se astilla y es peligroso. Entero o en trozos grandes, nunca troceado pequeño: el perro tiene que roerlo, no tragarlo. Que coma tranquilo y supervisado, sobre todo las primeras veces. Espera a las 14 semanas para los huesos más duros, y ve variando el tipo entre menús.",
-  "Pescados y mariscos": "Crudo SOLO si se ha congelado antes; si no, cocinado. Los mariscos, SIEMPRE cocinados. Solo si se convierte en la proteína principal DE FORMA REPETIDA: el pescado crudo lleva una enzima que va destruyendo la Vitamina B1 poco a poco — con un uso normal, variando entre proteínas, no supone ningún problema. Si usas atún u otro pescado grande, no más de 1 vez por semana — acumulan más mercurio que la sardina, la caballa o el boquerón.",
+  "Pescados y mariscos": "Crudo SOLO si se ha congelado antes; si no, cocinado. Los mariscos, SIEMPRE cocinados. Solo si se convierte en la proteína principal DE FORMA REPETIDA: el pescado crudo lleva una enzima que va destruyendo la Vitamina B1 poco a poco — con un uso normal, variando entre proteínas, no supone ningún problema. El atún y otros pescados grandes acumulan más mercurio que la sardina, la caballa o el boquerón: el motor ya limita cuánto pueden pesar en las calorías del día, así que no tienes que contarlo tú.",
   "Suplementos comerciales": "Los gramos que te damos aquí YA están calculados respetando el límite máximo seguro del fabricante para el peso de tu perro — no hace falta que sigas la dosis del envase por tu cuenta, dale la cantidad que te mostramos. Se añaden al final, junto con los extras.",
 };
 

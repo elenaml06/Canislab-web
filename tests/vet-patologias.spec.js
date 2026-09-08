@@ -164,12 +164,37 @@ test("al marcar una patología ve el tope, qué no se toca y qué decide él", a
   await expect(page.getByText(/POR DEBAJO de algún mínimo de FEDIAF/)).toBeVisible();
 });
 
+// ⚠️ CORREGIDO (8 septiembre) — ESTE TEST USABA `artrosis` COMO EJEMPLO DE
+// «PATOLOGÍA SIN TOPES», Y ARTROSIS SÍ TIENE UNO.
+//
+// El motor le pone un SUELO de EPA+DHA de 1 g/1000 kcal (SACN5 cap.34, Tabla
+// 34-2). Lo que hacía pasar el test era el propio servidor de mentira, que
+// la servía con `suelos: []` -- o sea que la pantalla se comprobaba contra
+// una ficción. Es literalmente el fallo de `dentro_de_rango` otra vez: «las
+// pruebas pasaban, porque el Supabase de mentira devolvía el nombre
+// equivocado igual que el código».
+//
+// Ahora son DOS pruebas, y cada una comprueba lo suyo:
+//   · hipotiroidismo, que sí es de verdad una patología sin ningún número
+//     (su restricción es por ALIMENTO: grelo y nabo);
+//   · artrosis, que tiene que ENSEÑAR su suelo -- si no, un veterinario
+//     firma creyendo que esa patología no le impone nada al menú.
 test("una patología sin topes lo dice, y sigue diciendo qué decide él", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+  await page.getByLabel("Buscar patología").fill("hipotiroid");
+  await page.getByText("Hipotiroidismo", { exact: true }).click();
+
+  await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
+  await expect(page.getByText("Lo decides tú")).toBeVisible();
+});
+
+test("una patología con SUELO enseña el suelo, no dice que no mueve nada", async ({ page, request }) => {
   await entrarComoVeterinario(page, request);
   await page.getByLabel("Buscar patología").fill("artrosis");
   await page.getByText("Artrosis / osteoartritis", { exact: true }).click();
 
-  await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
+  await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toHaveCount(0);
+  await expect(page.getByText(/EPA/i).first()).toBeVisible();
   await expect(page.getByText("Lo decides tú")).toBeVisible();
 });
 
