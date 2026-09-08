@@ -47,8 +47,13 @@ const entrar = async (page) => {
   await page.getByRole("button", { name: "Entrar" }).click();
 };
 
+// ⚠️ LOS DOS RÓTULOS (7 septiembre). En modo veterinario la burbuja dejó de
+// desplegar la lista de pacientes -- ahora es una miga de pan que lleva a la
+// pantalla de Pacientes -- y con eso cambió su etiqueta: «Paciente actual».
+// Esta prueba mira DENTRO DE QUÉ PERRO se ha abierto la app, que es lo mismo
+// en los dos modos, así que acepta las dos.
 const elPerroDeAhora = async (page) =>
-  (await page.getByRole("button", { name: /Perro actual/ }).first()
+  (await page.getByRole("button", { name: /(Perro|Paciente) actual/ }).first()
              .getAttribute("aria-label")) || "";
 
 test("un veterinario sin pacientes entra por su lista, no por «tu perro»", async ({ page, request }) => {
