@@ -42,8 +42,26 @@ export const esperarLaFicha = (page, opciones = {}) =>
 export const laFichaClinicaHaCargado = (page) =>
   page.getByRole("heading", { name: /Ficha del paciente|Nuevo paciente/ });
 
-export const esperarElPaciente = (page, opciones = {}) =>
-  laFichaClinicaHaCargado(page).waitFor(opciones);
+// ⚠️ Y DESDE EL 8 DE SEPTIEMBRE HAY QUE ABRIR EL PACIENTE PRIMERO.
+//
+// La app ya no arranca en la ficha del último paciente mirado: arranca en la
+// LISTA, que es lo que hace un fichero clínico de verdad (encontrado abriendo
+// rawku.app desplegado, con un veterinario de tres pacientes). Así que esta
+// ayuda, que existe para dejar la prueba PLANTADA en la ficha, tiene que dar
+// ese paso.
+//
+// Va aquí y no repetido en las siete pruebas que la usan para que el día que
+// la pantalla de entrada vuelva a cambiar se toque un sitio. Y no oculta la
+// regresión que arregla: quién aterriza dónde lo comprueba, a pelo y sin
+// ayudas, `vet-arranque-y-rueda.spec.js`.
+export async function esperarElPaciente(page, opciones = {}) {
+  const enLaLista = page.getByRole("button", { name: /Dar de alta un paciente/ });
+  if (await enLaLista.count()) {
+    const primero = page.getByRole("button", { name: /^Paciente / }).first();
+    if (await primero.count()) await primero.click();
+  }
+  await laFichaClinicaHaCargado(page).waitFor(opciones);
+}
 
 // Ir al generador desde donde sea. Desde el 25 de agosto se entra por "Mis
 // menús": la ficha del perro ya no ofrece hacer menús cuando vas a editarla.
