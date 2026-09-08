@@ -20,7 +20,7 @@
 // diría una cosa y el motor comprobaría otra, y no saltaría ningún error.
 // Esta pantalla solo pinta y ordena.
 import { useState, useEffect, useRef, useMemo } from "react";
-import { AlertCircle, Check, Menu, Plus, Search, Sparkles, Trash2, X } from "lucide-react";
+import { AlertCircle, Check, ChevronDown, Menu, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
 import { API_BASE, fetchConTimeout } from "./api.js";
 import { agruparNutrientes, resumenDeLaFicha, nombreLegible } from "./nutrientes.js";
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -31,6 +31,20 @@ const PAPEL = "#FBF7FC";
 const TINTA = "#231539";
 const MALVA = "#9A8CB8";
 const VERDE = "#2E7D5B";
+// La raza llega a veces como objeto o como JSON en texto (viene del
+// buscador de razas). Aquí solo hace falta el nombre, y que no salga
+// "[object Object]" impreso en una pauta firmada.
+function nombreDeRazaCorto(valor) {
+  if (!valor) return "";
+  if (typeof valor === "object") return String(valor.nombre || "");
+  const t = String(valor).trim();
+  if (!t || t === "[object Object]") return "";
+  if (t.startsWith("{")) {
+    try { return String(JSON.parse(t)?.nombre || ""); } catch { return ""; }
+  }
+  return t;
+}
+
 const fontDisplay = "Georgia, 'Times New Roman', serif";
 const fontBody = "'DM Sans', system-ui, sans-serif";
 
@@ -47,6 +61,11 @@ export default function Formulador({
   pesoObjetivoKg, patologias = [], especiesExcluidas = [], nombresExcluidos = [],
   categoriasExcluidas = [], gramosIniciales = null, onGuardar = null, onVolver = () => {},
   firmante = null, onFirmar = null, onAbrirPanel = null, dietaActual = null,
+  // Abre la vista de impresión de la pauta que se acaba de firmar. La pinta
+  // el padre (`pautaimprimible.jsx`), que es quien tiene los datos de la
+  // clínica: no son parte del documento firmado a propósito -- ver su
+  // cabecera.
+  onImprimir = null,
 }) {
   const [gramos, setGramos] = useState(() => ({ ...(gramosIniciales || {}) }));
   const [catalogo, setCatalogo] = useState(null);
@@ -82,7 +101,40 @@ export default function Formulador({
   // escribe una letra, deja de moverse debajo de sus manos.
   const [indicaciones, setIndicaciones] = useState("");
   const [indicacionesTocadas, setIndicacionesTocadas] = useState(false);
+
+  // ─── EL PELDAÑO DE LA ESCALERA, ELEGIDO ───────────────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO, y estaba escrito en la fase 1 de VETERINARIOS.md
+  // desde el 28 de agosto: «qué peldaño de la escalera de relajación se usó,
+  // Y PODER ELEGIRLO. Hoy se baja solo y se avisa; un profesional quiere
+  // decidir si prefiere otro reparto antes que soltar la proporción de
+  // hueso».
+  //
+  // Y aquí importaba el doble, porque autocompletar NO recorría la escalera
+  // nunca: formulaba con las proporciones completas y, si no salía, decía
+  // que no. O sea que un veterinario tenía MENOS margen que un tutor, al que
+  // el motor sí le baja de peldaño solo.
+  //
+  // Lo que un peldaño mueve son las proporciones de BARF y cuántos
+  // suplementos caben — criterio nuestro, no de FEDIAF. Los 43 requisitos,
+  // el ratio Ca:P y los topes de seguridad y de patología son idénticos en
+  // todos, y la ración sigue pasando por la misma verificación.
+  const [peldanos, setPeldanos] = useState(null);   // null = sin cargar
+  const [peldano, setPeldano] = useState("estricto");
+  const [peldanosAbiertos, setPeldanosAbiertos] = useState(false);
   const peticion = useRef(0);
+
+  // La escalera se pide una vez. Si la API no la sirve todavía (versión
+  // anterior desplegada), no se pinta el selector y todo sigue como antes:
+  // sin `peldano` el motor formula en el primero, que es lo de siempre.
+  useEffect(() => {
+    let vivo = true;
+    fetchConTimeout(`${API_BASE}/relajacion`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (vivo && d?.peldanos?.length) setPeldanos(d.peldanos); })
+      .catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   const cuerpoBase = useMemo(() => ({
     der_objetivo: derObjetivo,
@@ -94,8 +146,13 @@ export default function Formulador({
     especies_excluidas: especiesExcluidas || [],
     nombres_excluidos: nombresExcluidos || [],
     categorias_excluidas: categoriasExcluidas || [],
+    // El peldaño viaja en TODAS las llamadas y no solo en autocompletar:
+    // `/formular/estado` lo ignora (solo mide lo que hay puesto), pero
+    // mandarlo desde un solo sitio es lo que impide que autocompletar
+    // formule en un peldaño y la pantalla enseñe otro.
+    peldano,
   }), [derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg, pesoObjetivoKg,
-      patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas]);
+      patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas, peldano]);
 
   // El catálogo, una vez. Es la misma lista que usa el analizador.
   useEffect(() => {
@@ -220,10 +277,26 @@ export default function Formulador({
           Object.entries(d.menu).map(([k, v]) => [k, redondea(v)])));
         if (d.estado) setEstado(d.estado);
       } else {
-        setAvisoAuto(d?.motivo || "No se ha podido completar la ración.");
+        // ⚠️ «NO SALE» TIENE QUE DECIR EN QUÉ PELDAÑO NO SALE (8 septiembre).
+        // Sin eso, un no se lee como «no existe» cuando muchas veces es «no
+        // existe con ESTAS proporciones» -- y queda escalera por debajo. Es
+        // la diferencia entre cerrar la pantalla y probar lo siguiente.
+        const usado = (peldanos || []).find((p) => p.clave === (d?.peldano || peldano));
+        const quedan = peldanos && usado ? peldanos.filter((p) => p.orden > usado.orden) : [];
+        const cola = usado && usado.orden === 0 && quedan.length
+          ? " Es con las proporciones BARF completas: en Proporciones puedes soltarlas."
+          : usado && quedan.length
+            ? ` Es con «${usado.titulo}»: quedan ${quedan.length} ${quedan.length === 1 ? "peldaño" : "peldaños"} por debajo.`
+            : usado
+              ? ` Es con «${usado.titulo}», el último peldaño: no queda forma que soltar.`
+              : "";
+        setAvisoAuto((d?.motivo || "No se ha podido completar la ración.") + cola);
         // La alternativa se OFRECE, no se aplica: cambiarle las cantidades
         // sin decírselo sería justo lo que el endpoint promete no hacer.
         if (d?.alternativa) setAlternativa(d.alternativa);
+        // Y se abre el selector: si la salida está ahí, que se vea sin
+        // tener que descubrir un desplegable plegado.
+        if (quedan.length) setPeldanosAbiertos(true);
       }
     } catch (err) {
       setAvisoAuto(err?.message || "No se ha podido completar la ración.");
@@ -251,8 +324,15 @@ export default function Formulador({
           // Lo que él ha escrito para el tutor va DENTRO de lo que firma:
           // una pauta son los gramos y qué hacer con ellos.
           indicaciones,
+          // ⚠️ LO QUE VA IMPRESO SE CONGELA AQUÍ (8 septiembre). La raza y
+          // el sexo no cambian el cálculo, así que hasta hoy no viajaban --
+          // pero salen en el papel que se lleva el tutor, y un documento
+          // firmado no puede ir a buscarlos a la ficha del perro un año
+          // después: para entonces la ficha es otra, o el perro ya no está.
           paciente: {
             nombre: perfil?.nombre || "",
+            raza: nombreDeRazaCorto(perfil?.raza),
+            sexo: perfil?.sexo || "",
             peso_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
             bcs: perfil?.bcs ?? null,
             tutor_nombre: perfil?.tutorNombre || "",
@@ -474,6 +554,65 @@ export default function Formulador({
             Tus cantidades no se tocan: el motor completa alrededor, y lo que rellena se puede
             seguir editando.
           </p>
+
+          {/* ─── LAS PROPORCIONES CON LAS QUE COMPLETA ─────────────────────
+              Ver el comentario de `peldano`, arriba. Va aquí y no en un
+              panel de ajustes porque es una decisión de ESTA ración: se
+              cambia cuando autocompletar dice que no, no una vez y para
+              siempre. Plegado por defecto — con las proporciones completas
+              no hay nada que decidir. */}
+          {peldanos && (
+            <div className="mt-3 rounded-xl" style={{ background: PAPEL, border: "1px solid #E3DAF0" }}>
+              <button onClick={() => setPeldanosAbiertos((v) => !v)}
+                aria-expanded={peldanosAbiertos}
+                className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+                style={{ background: "none", border: "none", cursor: "pointer" }}>
+                <span>
+                  <span className="block text-[10px] tracking-[0.1em] uppercase"
+                        style={{ color: MALVA, fontFamily: "monospace" }}>
+                    Proporciones
+                  </span>
+                  <span className="block" style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
+                    {(peldanos.find((p) => p.clave === peldano) || peldanos[0]).titulo}
+                  </span>
+                </span>
+                <ChevronDown size={16}
+                  style={{ color: MALVA, transform: peldanosAbiertos ? "rotate(180deg)" : "none" }} />
+              </button>
+              {peldanosAbiertos && (
+                <div className="px-3 pb-3">
+                  <p className="text-[11px] leading-snug mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                    Solo mueven la forma de la ración. Los 43 requisitos de FEDIAF, el ratio
+                    Ca:P y los topes de seguridad y de patología son idénticos en todos, y la
+                    ración se verifica igual.
+                  </p>
+                  <div className="flex flex-col gap-1.5">
+                    {peldanos.map((p) => {
+                      const puesto = p.clave === peldano;
+                      return (
+                        <button key={p.clave}
+                          onClick={() => setPeldano(p.clave)}
+                          aria-label={p.titulo}
+                          className="text-left px-3 py-2 rounded-lg"
+                          style={{ background: puesto ? "#F3EDFB" : "#FFFFFF",
+                                   border: `1.5px solid ${puesto ? VIOLETA : "#E3DAF0"}`,
+                                   cursor: "pointer" }}>
+                          <span className="block" style={{ color: TINTA, fontFamily: fontBody,
+                                                           fontSize: 13, fontWeight: puesto ? 700 : 400 }}>
+                            {p.titulo}
+                          </span>
+                          <span className="block text-[11px] leading-snug mt-0.5"
+                                style={{ color: MALVA, fontFamily: fontBody }}>
+                            {p.que_se_suelta}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {avisoAuto && (
@@ -597,6 +736,18 @@ export default function Formulador({
               Queda guardada tal cual, con la ficha con la que se comprobó. No se edita: si
               hay que cambiar algo, se firma otra y ésta se queda en el historial.
             </p>
+            {/* ⚠️ AQUÍ MISMO (8 septiembre). Firmar y no poder entregar el
+                papel en el mismo sitio obligaba a salir a «Pautas firmadas»
+                a buscar la que se acaba de hacer. El final del trabajo es
+                lo que se lleva el tutor. */}
+            {onImprimir && (
+              <button onClick={() => onImprimir(pautaFirmada)}
+                className="w-full flex items-center justify-center gap-2 py-3 rounded-xl mt-3"
+                style={{ background: VIOLETA, color: "#FFFFFF", border: "none",
+                         fontFamily: fontDisplay, fontSize: 15, cursor: "pointer" }}>
+                <Printer size={16} /> Imprimir o guardar en PDF
+              </button>
+            )}
           </div>
         ) : firmando ? (
           <div className="rounded-2xl px-4 py-4 mb-6"

@@ -1,10 +1,10 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, MoreVertical, Pencil, Pill, Plus, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import Formulador from "./formulador.jsx";
 import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesional,
-         getPerfil, firmarPauta, getPautasFirmadas } from "./supabase";
+         getPerfil, firmarPauta, getPautasFirmadas, guardarClinica } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -26,6 +26,9 @@ import FichaClinica from "./fichaclinica";
 // Lo que le cambia al motor cada patología, con su fuente y su margen. Los
 // números salen de GET /patologias, no de una copia aquí. Ver su cabecera.
 import QueCambiaLaPatologia from "./topespatologia.jsx";
+// La pauta en papel, con el logo de la clínica. Ver su cabecera para por qué
+// imprime el DOCUMENTO firmado y no la pantalla.
+import PautaImprimible from "./pautaimprimible.jsx";
 import { perrosDelModo } from "./pacientes";
 import { contiene } from "./texto.js";
 import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicion,
@@ -4310,6 +4313,27 @@ function RawkuOnboardingInterna({
   // LISTA de documentos, no un documento que se va pisando: una pauta
   // firmada no se edita, se firma otra y la anterior se queda con su fecha.
   const [pautasFirmadas, setPautasFirmadas] = useState([]);
+  // El documento firmado que se está mirando en papel. `null` = ninguno.
+  // ⚠️ Va AQUÍ ARRIBA y no con los demás estados de Ajustes: `laPautaEnPapel`
+  // se calcula justo debajo, durante el render, y un `useState` declarado
+  // dos mil líneas más abajo revienta con un ReferenceError -- que además no
+  // lo caza el build, solo se ve abriendo la pantalla.
+  const [pautaAImprimir, setPautaAImprimir] = useState(null);
+
+  // ⚠️ LA VISTA DE IMPRESIÓN SE MONTA EN UN SOLO SITIO (8 septiembre). Se
+  // abre desde dos (el formulador al firmar, y el historial de pautas), y
+  // dos copias de una capa `fixed` es exactamente como se acaba teniendo dos
+  // que se pisan. Los datos de la clínica NO viajan dentro del documento:
+  // el logo no es parte de lo que se verificó, así que puede cambiar sin
+  // invalidar el sello. Ver `pautaimprimible.jsx`.
+  const laPautaEnPapel = pautaAImprimir && (
+    <PautaImprimible
+      documento={pautaAImprimir}
+      clinica={{ nombre: perfilProfesional?.clinica_nombre || "",
+                 contacto: perfilProfesional?.clinica_contacto || "",
+                 logo: perfilProfesional?.clinica_logo || "" }}
+      onCerrar={() => setPautaAImprimir(null)} />
+  );
 
   // ⚠️ CORREGIDO (28 agosto) — UN VETERINARIO ACREDITADO ENTRA EN SU MODO.
   //
@@ -4352,8 +4376,17 @@ function RawkuOnboardingInterna({
       // `profiles` una vez y se COPIA en cada pauta al firmarla: un
       // documento firmado no puede cambiar porque su autor edite su ficha.
       getPerfil(usuario.id)
-        .then((p) => setPerfilProfesional(p ? { nombre: p.nombre || "",
-                                                num_colegiado: p.num_colegiado || "" } : null))
+        .then((p) => setPerfilProfesional(p ? {
+          nombre: p.nombre || "",
+          num_colegiado: p.num_colegiado || "",
+          // ⚠️ La clínica NO va dentro del documento firmado (8 septiembre):
+          // el logo no es parte de lo que se verificó, así que puede cambiar
+          // sin invalidar el sello. Se lee aquí y se le pasa a la vista de
+          // impresión. Ver `pautaimprimible.jsx`.
+          clinica_nombre: p.clinica_nombre || "",
+          clinica_contacto: p.clinica_contacto || "",
+          clinica_logo: p.clinica_logo || "",
+        } : null))
         .catch(() => setPerfilProfesional(null));
     }
     const params = new URLSearchParams(window.location.search);
@@ -5560,6 +5593,99 @@ function RawkuOnboardingInterna({
   // las mascotas. Antes no había NINGÚN sitio donde cambiar la contraseña
   // estando dentro: la única forma era salir, pedir el enlace de "olvidé
   // mi contraseña" y abrir el correo.
+  // ─── LOS DATOS DE LA CLÍNICA ──────────────────────────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (8 septiembre): el informe imprimible «con el logo de
+  // la clínica». Van en `profiles`, junto al número de colegiado, porque son
+  // lo mismo: los datos de quien firma. Ver `supabase/migracion-clinica.sql`.
+  const [clinicaNombre, setClinicaNombre] = useState("");
+  const [clinicaContacto, setClinicaContacto] = useState("");
+  const [clinicaLogo, setClinicaLogo] = useState("");
+  const [clinicaEstado, setClinicaEstado] = useState(null);   // {tipo, texto}
+  const [clinicaGuardando, setClinicaGuardando] = useState(false);
+  // Se rellenan cuando llega el perfil, no antes: si se inicializaran con
+  // `useState(perfilProfesional?.…)` se quedarían vacíos para siempre,
+  // porque el perfil llega DESPUÉS del primer render.
+  useEffect(() => {
+    if (!perfilProfesional) return;
+    setClinicaNombre(perfilProfesional.clinica_nombre || "");
+    setClinicaContacto(perfilProfesional.clinica_contacto || "");
+    setClinicaLogo(perfilProfesional.clinica_logo || "");
+  }, [perfilProfesional]);
+
+  // ⚠️ EL LOGO SE REDIMENSIONA ANTES DE GUARDARLO (8 septiembre).
+  //
+  // Va como data: URI dentro de una columna de texto de `profiles` -- ver
+  // `supabase/migracion-clinica.sql` para por qué ahí y no en Storage --, y
+  // eso tiene un precio: viaja en cada `select *` del perfil, que se hace al
+  // entrar. Un PNG recién exportado de un logo son 2-4 MB, y eso metido en
+  // una columna que se lee en cada arranque es la app entera más lenta para
+  // siempre por una imagen que se enseña a 64 px de alto.
+  //
+  // Así que se dibuja en un canvas a 320 px de ancho como mucho y se
+  // recodifica. Un logo de cabecera a ese tamaño son 20-40 KB. Si aun así
+  // pasa de 200 KB, no se guarda y se dice -- callarlo y guardar un
+  // monstruo es peor.
+  const MAX_ANCHO_LOGO = 320;
+  const MAX_BYTES_LOGO = 200 * 1024;
+
+  const elegirLogo = (archivo) => {
+    if (!archivo) return;
+    setClinicaEstado(null);
+    if (!/^image\//.test(archivo.type || "")) {
+      setClinicaEstado({ tipo: "error", texto: "Eso no es una imagen. Sube un PNG o un JPG." });
+      return;
+    }
+    const lector = new FileReader();
+    lector.onerror = () => setClinicaEstado(
+      { tipo: "error", texto: "No se ha podido leer el archivo." });
+    lector.onload = () => {
+      const img = new Image();
+      img.onerror = () => setClinicaEstado(
+        { tipo: "error", texto: "No se ha podido abrir esa imagen." });
+      img.onload = () => {
+        const escala = Math.min(1, MAX_ANCHO_LOGO / (img.width || MAX_ANCHO_LOGO));
+        const lienzo = document.createElement("canvas");
+        lienzo.width = Math.max(1, Math.round(img.width * escala));
+        lienzo.height = Math.max(1, Math.round(img.height * escala));
+        lienzo.getContext("2d").drawImage(img, 0, 0, lienzo.width, lienzo.height);
+        // PNG y no JPEG: un logo suele llevar fondo transparente, y en JPEG
+        // ese fondo sale negro sobre el papel blanco de la pauta.
+        const dataUri = lienzo.toDataURL("image/png");
+        if (dataUri.length > MAX_BYTES_LOGO) {
+          setClinicaEstado({ tipo: "error", texto:
+            "Ese logo pesa demasiado incluso reducido. Prueba con uno más sencillo o en PNG." });
+          return;
+        }
+        setClinicaLogo(dataUri);
+      };
+      img.src = String(lector.result || "");
+    };
+    lector.readAsDataURL(archivo);
+  };
+
+  const guardarLaClinica = async () => {
+    if (!usuario?.id) return;
+    setClinicaGuardando(true);
+    setClinicaEstado(null);
+    try {
+      await guardarClinica(usuario.id, {
+        nombre: clinicaNombre, contacto: clinicaContacto, logo: clinicaLogo });
+      // Y se refresca lo que tiene el resto de la app: si no, la vista de
+      // impresión seguiría enseñando el logo de antes hasta recargar.
+      setPerfilProfesional((p) => ({ ...(p || {}), clinica_nombre: clinicaNombre.trim(),
+                                     clinica_contacto: clinicaContacto.trim(),
+                                     clinica_logo: clinicaLogo }));
+      setClinicaEstado({ tipo: "ok", texto: "Guardado. Sale en la próxima pauta que firmes." });
+    } catch (err) {
+      capturarError(err, { donde: "guardarClinica" });
+      setClinicaEstado({ tipo: "error", texto: err?.message ||
+        "No se ha podido guardar. Inténtalo otra vez." });
+    } finally {
+      setClinicaGuardando(false);
+    }
+  };
+
   const [ajusteCampo, setAjusteCampo] = useState(null);   // "password" | "correo"
   const [ajusteValor, setAjusteValor] = useState("");
   const [ajusteValor2, setAjusteValor2] = useState("");
@@ -5797,6 +5923,86 @@ function RawkuOnboardingInterna({
               filaAjuste(Award, "Soy veterinario/a", "Pedir el modo profesional", () => {
                 setAjusteCampo("colegiado"); setAjusteValor(""); setAjusteEstado(null);
               })
+            )}
+
+            {/* ─── LA CLÍNICA QUE FIRMA (8 septiembre) ────────────────────
+                PEDIDO EXPRESO: el informe imprimible «con el logo de la
+                clínica». Solo para acreditados: a un tutor esto no le dice
+                nada, y a quien todavía no lo es tampoco -- primero se
+                acredita, luego pone su marca.
+
+                POR QUÉ AQUÍ Y NO EN LA PAUTA. Se pone una vez y sale en
+                todas. Pedirlo al firmar sería pedirlo cada vez. */}
+            {acreditado && (
+              <div className="mt-3 px-4 py-4 rounded-2xl"
+                   style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
+                  Tu clínica
+                </p>
+                <p className="text-xs leading-snug mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
+                  Sale impreso en la cabecera de cada pauta que firmes. No cambia el cálculo
+                  ni el sello del documento.
+                </p>
+                <input
+                  type="text" value={clinicaNombre}
+                  onChange={(e) => { setClinicaNombre(e.target.value); setClinicaEstado(null); }}
+                  placeholder="Nombre de la clínica"
+                  aria-label="Nombre de la clínica"
+                  className="w-full px-3 py-2.5 rounded-xl mb-2"
+                  style={{ border: "1.5px solid #E3DAF0", fontFamily: fontBody, fontSize: 14, color: TINTA }} />
+                <input
+                  type="text" value={clinicaContacto}
+                  onChange={(e) => { setClinicaContacto(e.target.value); setClinicaEstado(null); }}
+                  placeholder="Dirección, teléfono o correo"
+                  aria-label="Contacto de la clínica"
+                  className="w-full px-3 py-2.5 rounded-xl mb-3"
+                  style={{ border: "1.5px solid #E3DAF0", fontFamily: fontBody, fontSize: 14, color: TINTA }} />
+
+                <div className="flex items-center gap-3 mb-3">
+                  {clinicaLogo ? (
+                    <img src={clinicaLogo} alt="Logo de la clínica"
+                         style={{ maxHeight: 48, maxWidth: 120, objectFit: "contain" }} />
+                  ) : (
+                    <span className="w-12 h-12 rounded-xl flex items-center justify-center shrink-0"
+                          style={{ background: "#F0EAF8" }}>
+                      <Award size={18} style={{ color: VIOLETA }} />
+                    </span>
+                  )}
+                  <div className="flex-1 flex flex-col gap-1.5">
+                    <label className="text-xs px-3 py-2 rounded-xl text-center"
+                           style={{ background: "#F0EBF8", color: VIOLETA, fontFamily: fontBody,
+                                    fontWeight: 600, cursor: "pointer" }}>
+                      {clinicaLogo ? "Cambiar el logo" : "Subir el logo"}
+                      <input type="file" accept="image/*" className="hidden"
+                             aria-label="Subir el logo de la clínica"
+                             onChange={(e) => elegirLogo(e.target.files?.[0])} />
+                    </label>
+                    {clinicaLogo && (
+                      <button onClick={() => { setClinicaLogo(""); setClinicaEstado(null); }}
+                              className="text-xs py-1"
+                              style={{ background: "none", border: "none", color: MALVA,
+                                       fontFamily: fontBody, cursor: "pointer" }}>
+                        Quitar el logo
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {clinicaEstado && (
+                  <p className="text-xs mb-2 leading-snug"
+                     style={{ color: clinicaEstado.tipo === "ok" ? VERDE_TEXTO : ROSA,
+                              fontFamily: fontBody }}>
+                    {clinicaEstado.texto}
+                  </p>
+                )}
+                <button onClick={guardarLaClinica} disabled={clinicaGuardando}
+                        className="w-full py-2.5 rounded-xl"
+                        style={{ background: VIOLETA, color: "#FFFFFF", border: "none",
+                                 fontFamily: fontBody, fontSize: 14,
+                                 opacity: clinicaGuardando ? 0.6 : 1, cursor: "pointer" }}>
+                  {clinicaGuardando ? "Guardando…" : "Guardar"}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -8778,11 +8984,25 @@ function RawkuOnboardingInterna({
                 <p className="text-[11px] mt-2" style={{ color: MALVA, fontFamily: "monospace" }}>
                   sello {fila.sello}
                 </p>
+                {/* ⚠️ IMPRIMIR DESDE EL HISTORIAL (8 septiembre). Es donde se
+                    vuelve cuando el tutor llama pidiendo otra copia, o
+                    cuando hay que llevar la pauta a la consulta seis meses
+                    después. Se imprime el documento GUARDADO, no la ficha
+                    del perro de hoy. */}
+                <button onClick={() => setPautaAImprimir(doc)}
+                  aria-label={`Imprimir la pauta del ${new Date(fila.firmada_en)
+                    .toLocaleDateString("es-ES", { day: "numeric", month: "long", year: "numeric" })}`}
+                  className="flex items-center gap-2 mt-3 px-4 py-2 rounded-xl"
+                  style={{ background: "#F0EBF8", color: VIOLETA, border: "none",
+                           fontFamily: fontBody, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+                  <Printer size={15} /> Imprimir o guardar en PDF
+                </button>
               </div>
             );
           })}
         </div>
         {drawerLigero}
+        {laPautaEnPapel}
       </div>
     );
   }
@@ -9581,6 +9801,7 @@ function RawkuOnboardingInterna({
           onAbrirPanel={() => setMenuLigeroAbierto(true)}
           dietaActual={dietaActual}
           firmante={perfilProfesional}
+          onImprimir={(documento) => setPautaAImprimir(documento)}
           onFirmar={async (documento) => {
             // Se guarda TAL CUAL lo que selló la API. La seguridad por fila
             // de Supabase es lo que impide que firme quien no está
@@ -9634,6 +9855,7 @@ function RawkuOnboardingInterna({
           }}
         />
         {drawerLigero}
+        {laPautaEnPapel}
       </>
     );
   }

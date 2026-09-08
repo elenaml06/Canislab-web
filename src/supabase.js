@@ -147,6 +147,39 @@ export async function pedirRolProfesional(userId, numColegiado) {
   if (error) throw error
 }
 
+// ─── LA CLÍNICA QUE FIRMA ────────────────────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (8 septiembre): la pauta tiene que poder imprimirse «con
+// el logo de la clínica». Ver `supabase/migracion-clinica.sql` para por qué
+// el logo va como data: URI en una columna de texto y no en Storage.
+//
+// ⚠️ SI LA MIGRACIÓN NO ESTÁ EJECUTADA, esto falla con un error de columna
+// desconocida -- y hay que DECIRLO, no tragárselo. Es la diferencia entre
+// «tu logo no se ha guardado, falta un paso en Supabase» y un botón que
+// parece funcionar y no guarda nada, que es la familia de fallos que
+// persigue este proyecto entero (ver CLAUDE.md, «fallos que no puede
+// encontrar la usuaria»).
+export async function guardarClinica(userId, { nombre, contacto, logo }) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({
+      clinica_nombre: (nombre || '').trim() || null,
+      clinica_contacto: (contacto || '').trim() || null,
+      // `undefined` = no lo toques (está editando el nombre); null = quítalo.
+      ...(logo === undefined ? {} : { clinica_logo: logo || null }),
+    })
+    .eq('id', userId)
+  if (error) {
+    if (/clinica_/.test(error.message || '')) {
+      const e = new Error('Falta ejecutar migracion-clinica.sql en Supabase: la tabla ' +
+                          'todavía no tiene dónde guardar los datos de la clínica.')
+      e.faltaMigracion = true
+      throw e
+    }
+    throw error
+  }
+}
+
 // ─── ACCESOS: QUIÉN PUEDE VER QUÉ PERRO ──────────────────────────────────────
 //
 // Ver `pacientes.js` para la regla y `supabase/migracion-pacientes.sql` para

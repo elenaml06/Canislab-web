@@ -187,6 +187,13 @@ export function crearFakeSupabase(opciones = {}) {
     // exceso de hueso, hígado...). Vacío por defecto: las pruebas que no van
     // de esto siguen viendo el menú limpio de siempre.
     problemasSeguridad: [],
+    // El caso de la pancreatitis: solo sale en el último peldaño.
+    soloSaleEnElUltimoPeldano: false,
+    // Lo que la cuenta tenga guardado de su clínica (y de su nº de
+    // colegiado, que se escribe por el mismo PATCH).
+    clinica: {},
+    // Simula que migracion-clinica.sql no se ha ejecutado todavía.
+    sinColumnasDeClinica: false,
     casaFalla: false,
     // Última petición recibida en /menu/varios-perros, para poder
     // comprobar que la app manda lo que dice mandar.
@@ -343,6 +350,20 @@ export function crearFakeSupabase(opciones = {}) {
       estado.menusDistintos = cfg.menusDistintos === true;
       estado.problemasSeguridad = Array.isArray(cfg.problemasSeguridad)
         ? cfg.problemasSeguridad.slice() : [];
+      estado.soloSaleEnElUltimoPeldano = cfg.soloSaleEnElUltimoPeldano === true;
+      estado.sinColumnasDeClinica = cfg.sinColumnasDeClinica === true;
+      // ⚠️ LEER NO PUEDE BORRAR (8 septiembre). `leer()` hace un POST con el
+      // cuerpo vacío para mirar el estado, y aquí `clinica` no es un
+      // interruptor de escenario: es lo que la app ACABA DE GUARDAR. Si se
+      // reseteara con cada lectura, la prueba de "se guarda de verdad"
+      // compararía siempre contra vacío -- y pasaría en verde con el
+      // guardado roto, que es justo lo contrario de para lo que está. Es el
+      // mismo tropiezo que ya tiene escrito `formulador.spec.js` con las
+      // peticiones. Solo se limpia cuando alguien está CONFIGURANDO.
+      if (Object.keys(cfg).length > 0) {
+        estado.clinica = cfg.clinica && typeof cfg.clinica === "object"
+          ? { ...cfg.clinica } : {};
+      }
       if (typeof cfg.casaFalla === "boolean") estado.casaFalla = cfg.casaFalla;
       if (typeof cfg.premium === "boolean") estado.premium = cfg.premium;
       // Permite sembrar un perro con campos concretos: por ejemplo con la
@@ -380,6 +401,10 @@ export function crearFakeSupabase(opciones = {}) {
         peticionesFormular: estado.peticionesFormular.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesFirmar: estado.peticionesFirmar.map((p) => JSON.parse(JSON.stringify(p))),
         pautasFirmadas: estado.pautasFirmadas.map((p) => JSON.parse(JSON.stringify(p))),
+        // Lo que quedó GUARDADO de la clínica, para poder comprobarlo sin
+        // mirar la pantalla (que se pinta del estado local y puede verse
+        // perfecta con la fila vacía detrás).
+        clinica: { ...estado.clinica },
         peticionesSemana: estado.peticionesSemana.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesEdicion: estado.peticionesEdicion.map((p) => JSON.parse(JSON.stringify(p))),
         menusPorPerro: estado.menus.reduce((cuenta, m) => {
@@ -707,6 +732,28 @@ export function crearFakeSupabase(opciones = {}) {
         "Hueso carnoso": [{ nombre: "Hueso carnoso de pollo", kcal_100g: 150 }],
       });
     }
+    // ── LA ESCALERA DE RELAJACIÓN ───────────────────────────────────────
+    // Los peldaños que el motor recorre cuando no hay menú con las
+    // proporciones BARF completas. Aquí van TRES, con la forma exacta de los
+    // de verdad: lo que se prueba es la pantalla (que se puedan elegir, que
+    // el que no sale diga cuántos quedan), no la escalera, que se comprueba
+    // contra el motor en pruebas_completas.py.
+    if (ruta === "/relajacion") {
+      return responder(200, {
+        que_es: "Solo mueven la forma de la ración.",
+        peldanos: [
+          { clave: "estricto", orden: 0, titulo: "Proporciones BARF completas",
+            que_se_suelta: "Carne, hueso, vísceras, hígado y verdura dentro de sus rangos habituales.",
+            max_suplementos: 2 },
+          { clave: "proporcion_minima_visceras_higado_verdura", orden: 1,
+            titulo: "Sin mínimo de vísceras, hígado y verdura",
+            que_se_suelta: "Pueden quedarse a cero si no hacen falta.", max_suplementos: 2 },
+          { clave: "tope_maximo_de_visceras_higado_y_verdura", orden: 2,
+            titulo: "Sin tope de vísceras, hígado y verdura",
+            que_se_suelta: "Se levanta el techo de lo accesorio.", max_suplementos: 4 },
+        ],
+      });
+    }
     // ── EL FORMULADOR DEL VETERINARIO ───────────────────────────────────
     // Lo que se prueba aquí NO es la nutrición -- eso se comprueba contra el
     // motor de verdad, en `pruebas_completas.py`. Es la pantalla: que llame
@@ -768,11 +815,28 @@ export function crearFakeSupabase(opciones = {}) {
           motivo: "Con esas cantidades no sale, pero con estos mismos alimentos sí. " +
                   "Lo que no cuadra son las cifras, no los ingredientes.",
           alternativa: { ...gramos, "Hueso carnoso de pollo": 200 },
+          // El peldaño en el que NO ha salido, igual que la API de verdad.
+          peldano: peticion.peldano || "estricto",
+        });
+      }
+      // ⚠️ Y CON `soloSaleEnElUltimoPeldano`, se comporta como el caso real
+      // que motivó todo esto: la pancreatitis de 25 kg, que no sale con las
+      // proporciones completas y sí soltando el techo de la verdura. Sin
+      // esto una prueba no puede distinguir "manda el peldaño" de "el
+      // selector es un adorno que no llega al motor".
+      if (estado.soloSaleEnElUltimoPeldano
+          && peticion.peldano !== "tope_maximo_de_visceras_higado_y_verdura") {
+        return responder(200, {
+          factible: false,
+          motivo: "Con esas cantidades fijas no existe ninguna ración que cumpla los " +
+                  "requisitos de este paciente.",
+          peldano: peticion.peldano || "estricto",
         });
       }
       const completado = { ...gramos, "Hueso carnoso de pollo": 180,
                            "Carne muscular de pollo": Number(gramos["Carne muscular de pollo"]) || 400 };
       return responder(200, { factible: true, menu: completado, gramos_fijos_movidos: [],
+                              peldano: peticion.peldano || "estricto",
                               estado: haceEstado(completado) });
     }
 
@@ -903,7 +967,27 @@ export function crearFakeSupabase(opciones = {}) {
     }
 
     if (ruta === "/rest/v1/profiles") {
+      // ⚠️ LA CLÍNICA SE GUARDA DE VERDAD (8 septiembre). Antes este camino
+      // devolvía siempre el mismo perfil hiciera lo que hiciera la app, así
+      // que un PATCH que no guardara nada habría pasado en verde. Y ése es
+      // justo el fallo que hay que poder cazar: un botón de Guardar que
+      // parece funcionar. Ver CLAUDE.md, "fallos que no puede encontrar la
+      // usuaria" -- se comprueba lo GUARDADO, no lo que enseña la pantalla.
+      if (req.method === "PATCH") {
+        const cambios = JSON.parse(cuerpo || "{}");
+        // Y sin la migración ejecutada, PostgREST contesta que la columna no
+        // existe. Es lo que pasa de verdad hasta que alguien lanza el SQL, y
+        // la app tiene que decirlo en vez de callarse.
+        if (estado.sinColumnasDeClinica
+            && Object.keys(cambios).some((k) => k.startsWith("clinica_"))) {
+          return responder(400, { code: "PGRST204",
+            message: "Could not find the 'clinica_nombre' column of 'profiles' in the schema cache" });
+        }
+        estado.clinica = { ...estado.clinica, ...cambios };
+        return responder(200, unSoloObjeto ? { id: USER_ID, ...estado.clinica } : []);
+      }
       const perfil = {
+        ...estado.clinica,
         id: USER_ID,
         plan: estado.premium ? "premium" : "free",
         suscripcion_activa_hasta: estado.premium
