@@ -1,10 +1,11 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, ChevronDown, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import Formulador from "./formulador.jsx";
 import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesional,
-         getPerfil, firmarPauta, getPautasFirmadas, guardarClinica } from "./supabase";
+         getPerfil, firmarPauta, getPautasFirmadas, guardarClinica,
+         getTokenDeSesion } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -957,6 +958,72 @@ const PATOLOGIAS = [
   { key: "otra", label: "Otra patología / no está en esta lista", segura: false,
     aviso: "Esta condición no está entre las que este sistema sabe ajustar automáticamente todavía, así que no generamos un menú que podría no estar realmente adaptado a lo que necesita: mejor que un veterinario valore su caso en concreto y paute la dieta." },
 ];
+
+// ─── LAS PATOLOGÍAS, POR APARATO ────────────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (8 de septiembre): «la lista de patologías me parece un
+// peñazo, es enorme; habría que hacer un desplegable o poner por categorías.
+// No me gusta que más de la mitad de la página sea una lista de patologías
+// hacia abajo».
+//
+// Y es literal: son 27 casillas seguidas en medio de la ficha, así que para
+// llegar a «Dieta actual» y a «Tutor» hay que pasarlas todas. Un veterinario
+// tampoco las lee: sabe lo que busca y quiere llegar a ello.
+//
+// Se agrupan por APARATO y no por «frecuencia» o por orden alfabético porque
+// es como está ordenada la cabeza de quien las busca: el paciente viene con
+// un problema renal, o digestivo, o de piel. Cada grupo se abre solo si
+// tiene algo marcado, y hay un buscador encima para quien ya sabe el nombre.
+//
+// ⚠️ LA LISTA DE CLAVES NO SE DUPLICA: los grupos se construyen a partir de
+// `PATOLOGIAS`, y lo que no esté en ningún grupo cae en «Otras». Escribir
+// aquí las 27 otra vez sería la segunda copia, y el día que se añadiera una
+// patología nueva desaparecería de la pantalla sin que saltara nada -- que
+// es exactamente lo que pasó con las seis categorías de Personalizar.
+const APARATOS = [
+  { titulo: "Renal y urinario",
+    claves: ["renal", "renal_proteinuria", "fracaso_renal_agudo", "oxalato",
+             "estruvita", "urato", "cistina"] },
+  { titulo: "Digestivo y páncreas",
+    claves: ["pancreatitis", "enteropatia_cronica", "ple_linfangiectasia",
+             "insuficiencia_pancreatica_exocrina"] },
+  // ⚠️ "Hepático" y no "Hígado": en esta misma ficha hay una categoría de
+  // ALIMENTO que se llama «Hígado» (la que se puede excluir), y dos botones
+  // con el mismo nombre en la misma pantalla se confunden -- lo vio primero
+  // una prueba, que no supo cuál de los dos pulsar, pero le pasaría igual a
+  // quien la use con un lector de pantalla.
+  { titulo: "Hepático y biliar",
+    claves: ["hepatopatia", "shunt_sin_encefalopatia"] },
+  { titulo: "Corazón",
+    claves: ["cardiopatia", "dcm_taurina_respondedora", "dcm_asociada_a_dieta"] },
+  { titulo: "Endocrino y metabólico",
+    claves: ["diabetes", "hipotiroidismo", "hiperlipidemia", "obesidad",
+             "cushing", "addison"] },
+  { titulo: "Piel",
+    claves: ["dermatitis_atopica", "dermatosis_zinc"] },
+  { titulo: "Locomotor y neurológico",
+    claves: ["artrosis", "mielopatia_degenerativa", "epilepsia_idiopatica",
+             "disfuncion_cognitiva"] },
+  { titulo: "Oncología e inmunidad",
+    claves: ["cancer_soporte", "inmunosupresion"] },
+  { titulo: "Otras",
+    claves: ["riesgo_gdv", "otra"] },
+];
+
+// Los grupos ya resueltos contra PATOLOGIAS, con las que no estén en ningún
+// aparato metidas en «Otras». Se calcula una vez, al cargar el módulo.
+const PATOLOGIAS_POR_APARATO = (() => {
+  const puestas = new Set(APARATOS.flatMap((g) => g.claves));
+  const huerfanas = PATOLOGIAS.filter((p) => !puestas.has(p.key));
+  return APARATOS.map((g) => ({
+    titulo: g.titulo,
+    patologias: [
+      ...g.claves.map((k) => PATOLOGIAS.find((p) => p.key === k)).filter(Boolean),
+      ...(g.titulo === "Otras" ? huerfanas : []),
+    ],
+  })).filter((g) => g.patologias.length > 0);
+})();
+
 
 // ─── LAS PATOLOGÍAS QUE EN REALIDAD SON UNA FAMILIA ─────────────────────────
 //
@@ -2181,6 +2248,37 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           <FichaClinica ficha={ficha} />
         )}
 
+        {/* ⚠️ EN MODO PROFESIONAL, LAS NOTAS DE SEGURIDAD VIVEN EN «CÓMO
+            DARLO» (8 septiembre, segunda pasada).
+            El 7 las bajé al final de la pestaña del menú; sigue sin ser su
+            sitio. CASO REAL: «tampoco cosas de seguridad, vale, el
+            veterinario sabe perfectamente eso; como mucho viene en cómo
+            darlo, cosas que él puede editar».
+            Tiene razón en las dos mitades. Una: no son un aviso para él,
+            que ya sabe lo que es la tiaminasa -- el límite duro lo aplica
+            el motor dentro del cálculo, esto es criterio por encima. Y
+            dos: si algo hay que decir, se dice donde se dice cómo se da
+            la comida, que es el texto que él corrige y que acaba impreso
+            en la pauta que se lleva el tutor. */}
+        {vistaActiva === "comoDarlo" && enModoProfesional && problemasSeguridad.length > 0 && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: "#FFFFFF", border: "1px solid #E3DAF0" }}>
+            <p className="text-[11px] tracking-[0.1em] uppercase mb-1.5"
+               style={{ color: MALVA, fontFamily: "monospace" }}>
+              {problemasSeguridad.length === 1 ? "Nota de manejo" : `${problemasSeguridad.length} notas de manejo`}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {problemasSeguridad.map((p, i) => (
+                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{p}</p>
+              ))}
+            </div>
+            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Los límites duros —vitamina D, yodo, selenio, mercurio y tiaminasa— ya están
+              dentro del cálculo. Esto es criterio por encima de ellos: si no te encaja,
+              cambia el alimento o los gramos.
+            </p>
+          </div>
+        )}
+
         {vistaActiva === "comoDarlo" && (
           <div className="flex flex-col gap-3 mb-4">
           {necesitaTransicion && (
@@ -3050,35 +3148,6 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         </>)}
 
         <div className="flex-1" />
-
-        {/* ─── NOTAS DE SEGURIDAD (solo en modo profesional) ──────────────
-            Los mismos avisos que un tutor ve arriba en ámbar, aquí abajo y
-            sin alarma: al lado del menú que acaba de leer y que puede
-            editar. Ver el comentario del bloque de arriba.
-            No lleva X de cerrar a propósito: lo que un tutor cierra porque
-            ya lo ha leído, un profesional lo tiene que poder releer al
-            volver a abrir la pauta dentro de seis meses. */}
-        {enModoProfesional && problemasSeguridad.length > 0 && (
-          <div className="rounded-xl p-3 mb-3" style={{ background: "#FFFFFF", border: "1px solid #E3DAF0" }}>
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <AlertCircle size={14} style={{ color: MALVA }} />
-              <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: MALVA, fontFamily: "monospace" }}>
-                {problemasSeguridad.length === 1 ? "Nota de seguridad" : `${problemasSeguridad.length} notas de seguridad`}
-              </p>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              {problemasSeguridad.map((p, i) => (
-                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{p}</p>
-              ))}
-            </div>
-            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-              Los límites duros (vitamina D, yodo, selenio, mercurio y tiaminasa) ya están
-              aplicados dentro del cálculo: esto es lo que queda por encima del criterio, no
-              un límite roto. Cambia los gramos o el alimento desde el propio menú si quieres
-              moverlo.
-            </p>
-          </div>
-        )}
 
         {/* ⚠️ MOVIDO (5 agosto, madrugada) — pedido expreso: este texto
             estaba arriba del todo, compitiendo en importancia visual
@@ -4332,6 +4401,20 @@ function RawkuOnboardingInterna({
   const [acreditado, setAcreditado] = useState(false);
   // Nombre y número de colegiado de quien firma. Null mientras no se sabe.
   const [perfilProfesional, setPerfilProfesional] = useState(null);
+  const [tokenSesion, setTokenSesion] = useState(null);
+
+  // ⚠️ QUIÉN PIDE EL MENÚ (8 septiembre). La API sabe desde el 29 de agosto
+  // distinguir a un veterinario acreditado de un tutor -- y de eso cuelga
+  // que se le formulen las patologías que al dueño se le bloquean y que
+  // reciba los avisos profesionales -- pero la app no le mandaba nunca el
+  // token, así que ese camino entero no lo recorría nadie.
+  //
+  // Solo se manda en su modo: un tutor no tiene nada que ganar con ello, y
+  // un token es un token. Y se manda el TOKEN y no un `modo_profesional:
+  // true` porque un booleano lo escribe cualquiera desde la consola del
+  // navegador; quién está acreditado lo dice Supabase.
+  const conTokenProfesional = (cuerpo) =>
+    (enModoProfesional && tokenSesion) ? { ...cuerpo, token_usuario: tokenSesion } : cuerpo;
   // El historial de pautas firmadas del paciente que se está mirando. Es una
   // LISTA de documentos, no un documento que se va pisando: una pauta
   // firmada no se edita, se firma otra y la anterior se queda con su fecha.
@@ -4395,6 +4478,10 @@ function RawkuOnboardingInterna({
       // fallo, NO: preferimos no enseñar el modo a enseñarlo a quien no
       // le corresponde.
       esProfesional(usuario.id).then(setAcreditado).catch(() => setAcreditado(false));
+      // ⚠️ EL TOKEN, PARA QUE EL MOTOR SEPA QUIÉN PIDE (8 septiembre). Ver
+      // `getTokenDeSesion`: sin él la API trataba al veterinario como a un
+      // tutor y le bloqueaba las patologías que sí puede formular.
+      getTokenDeSesion().then(setTokenSesion).catch(() => setTokenSesion(null));
       // Y quién es, para poder firmar con su nombre y su número. Se lee de
       // `profiles` una vez y se COPIA en cada pauta al firmarla: un
       // documento firmado no puede cambiar porque su autor edite su ficha.
@@ -4487,6 +4574,11 @@ function RawkuOnboardingInterna({
   // paciente no se recuerda el nombre del perro: se recuerda el apellido
   // del dueño o la raza. Por eso se busca por los tres.
   const [filtroPacientes, setFiltroPacientes] = useState("");
+
+  // El buscador y los aparatos plegados de la lista de patologías. Ver
+  // `APARATOS`: eran 27 casillas seguidas en medio de la ficha.
+  const [busquedaPatologia, setBusquedaPatologia] = useState("");
+  const [aparatosAbiertos, setAparatosAbiertos] = useState([]);
 
   // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
   // que hacía falta: "cuando terminas de generar por primera vez el perfil
@@ -5476,21 +5568,46 @@ function RawkuOnboardingInterna({
           cursor: "pointer",
         }}
       >
-        <span
-          aria-hidden="true"
-          className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
-          style={{ background: sobreOscuro ? "#FFFFFF" : VIOLETA,
-                   color: sobreOscuro ? VIOLETA : "#FFFFFF",
-                   fontFamily: fontDisplay, fontSize: 12, fontWeight: 700 }}
-        >
-          {inicial}
-        </span>
-        <span className="truncate" style={{ maxWidth: 92, color: sobreOscuro ? "#FFFFFF" : TINTA,
-                                            fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
-          {nombreMostrar}
-        </span>
-        <ChevronRight size={13} aria-hidden="true"
-                      style={{ color: sobreOscuro ? "#D8CFEC" : MALVA, transform: "rotate(90deg)" }} />
+        {/* ⚠️ EN MODO VETERINARIO ES UNA MIGA DE PAN, NO UNA MASCOTA
+            (8 septiembre, segunda pasada).
+            El 7 le cambié a dónde lleva -- a la lista de pacientes en vez
+            de a un desplegable de perros -- y me dejé lo que de verdad se
+            ve: el mismo círculo con la inicial y el mismo nombre del perro
+            que en la app del dueño. CASO REAL: «en tus capturas puedo ver
+            perfectamente que en el icono de arriba a la derecha sigue
+            apareciendo Nala».
+            Un veterinario no está «en Nala» como quien tiene un perro: está
+            DENTRO de una ficha y sale de ella. Así que dice a dónde vuelve,
+            no de quién es la ficha -- de quién es lo dice la pantalla, que
+            para eso lleva el caso en la cabecera. */}
+        {enModoProfesional ? (
+          <>
+            <ChevronLeft size={14} aria-hidden="true"
+                         style={{ color: sobreOscuro ? "#D8CFEC" : MALVA }} />
+            <span style={{ color: sobreOscuro ? "#FFFFFF" : TINTA,
+                           fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
+              Pacientes
+            </span>
+          </>
+        ) : (
+          <>
+            <span
+              aria-hidden="true"
+              className="w-6 h-6 rounded-full flex items-center justify-center shrink-0"
+              style={{ background: sobreOscuro ? "#FFFFFF" : VIOLETA,
+                       color: sobreOscuro ? VIOLETA : "#FFFFFF",
+                       fontFamily: fontDisplay, fontSize: 12, fontWeight: 700 }}
+            >
+              {inicial}
+            </span>
+            <span className="truncate" style={{ maxWidth: 92, color: sobreOscuro ? "#FFFFFF" : TINTA,
+                                                fontFamily: fontBody, fontSize: 13, fontWeight: 600 }}>
+              {nombreMostrar}
+            </span>
+            <ChevronRight size={13} aria-hidden="true"
+                          style={{ color: sobreOscuro ? "#D8CFEC" : MALVA, transform: "rotate(90deg)" }} />
+          </>
+        )}
       </button>
     );
   };
@@ -7180,7 +7297,7 @@ function RawkuOnboardingInterna({
         fetchConTimeout(`${API_BASE}/menu/revalidar`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...cuerpoBase, menu_actual_gramos: gramos }),
+          body: JSON.stringify(conTokenProfesional({ ...cuerpoBase, menu_actual_gramos: gramos })),
         })
           .then((res) => res.json())
           .then((data) => ({ original: gramos, data }))
@@ -7297,7 +7414,7 @@ function RawkuOnboardingInterna({
       fetchConTimeout(`${API_BASE}/menu/v2`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+        body: JSON.stringify(conTokenProfesional({
           modo: modo || "automatico",
           nombres_alimentos:
             modo === "personalizar" ? eleccionesDelUsuario(modo, configDeEsteMenu) :
@@ -7360,7 +7477,7 @@ function RawkuOnboardingInterna({
           // manda siempre -- el servidor decide solo si puede usar la
           // vía rápida o no.
           tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
-        }),
+        })),
       }).then(async (res) => {
         // ⚠️ AÑADIDO (5 agosto, noche): antes esto era solo
         // `res.json()` -- si el servidor devolvía algo vacío o
@@ -7438,7 +7555,7 @@ function RawkuOnboardingInterna({
           const res = await fetchConTimeout(`${API_BASE}/menu/semana?numero_de_menus=${cuantos}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(cuerpoBase),
+            body: JSON.stringify(conTokenProfesional(cuerpoBase)),
           });
           let cuerpo;
           try {
@@ -7873,6 +7990,7 @@ function RawkuOnboardingInterna({
           {derReal ? (
             <p className="text-[13px] mt-2 leading-snug"
                style={{ color: "#D8CFEC", fontFamily: fontBody }}>
+              {perfil.nombre.trim() ? <>{perfil.nombre.trim()} · </> : null}
               <span style={{ color: "#FFFFFF", fontWeight: 700 }}>{derReal} kcal/día</span>
               {etapaLabel ? ` · ${etapaLabel}` : ""}
               {pesoObjetivoKg ? ` · objetivo ${pesoObjetivoKg} kg` : ""}
@@ -8122,8 +8240,28 @@ function RawkuOnboardingInterna({
           </BloqueFicha>
 
           <BloqueFicha titulo="Patologías diagnosticadas">
-            <div className="flex flex-col gap-1.5">
-              {PATOLOGIAS.map((pat) => {
+            {/* ─── POR APARATO, PLEGADAS, Y CON BUSCADOR ────────────────────
+                ⚠️ PEDIDO EXPRESO (8 septiembre): «la lista de patologías me
+                parece un peñazo, es enorme; no me gusta que más de la mitad
+                de la página sea una lista hacia abajo».
+                Eran 27 casillas seguidas en medio de la ficha, así que para
+                llegar a «Dieta actual» y a «Tutor» había que pasarlas todas.
+                Ahora son nueve cabeceras: quien sabe el nombre lo escribe,
+                quien no, abre el aparato que le toca. Ver `APARATOS`. */}
+            <div className="relative mb-2">
+              <Search size={15} style={{ position: "absolute", left: 11, top: 11, color: MALVA }} />
+              <input
+                value={busquedaPatologia}
+                onChange={(e) => setBusquedaPatologia(e.target.value)}
+                placeholder="Buscar patología"
+                aria-label="Buscar patología"
+                className="w-full py-2 pl-8 pr-3 rounded-xl outline-none"
+                style={{ background: PAPEL, border: "1.5px solid #E3DAF0",
+                         color: TINTA, fontFamily: fontBody, fontSize: 14 }} />
+            </div>
+
+            {(() => {
+              const casilla = (pat) => {
                 const activo = perfil.patologias.includes(pat.key)
                   || familiaPatologiaActiva(pat.key, perfil.patologias);
                 return (
@@ -8152,20 +8290,72 @@ function RawkuOnboardingInterna({
                       onCambiar={(nuevas) => set("patologias", nuevas)} />
                   </div>
                 );
-              })}
-            </div>
-            {bloqueantes.length > 0 && (
-              <div className="flex flex-col gap-2 mt-2">
-                {bloqueantes.map((p) => (
-                  <div key={p.key} className="flex gap-2 items-start p-3 rounded-xl" style={{ background: "#FFF0F3" }}>
-                    <AlertCircle size={15} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
-                    <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-                      {p.aviso}
+              };
+
+              // Buscando, no hay grupos: hay resultados. Plegarlos por
+              // aparato obligaría a abrir cajas para ver lo que acabas de
+              // buscar, que es lo contrario de buscar.
+              if (busquedaPatologia.trim()) {
+                const encontradas = PATOLOGIAS.filter((p) => contiene(p.label, busquedaPatologia));
+                if (encontradas.length === 0) {
+                  return (
+                    <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
+                      Ninguna cuadra con «{busquedaPatologia}». Si no está en la lista, usa
+                      «Otra patología».
                     </p>
-                  </div>
-                ))}
-              </div>
-            )}
+                  );
+                }
+                return <div className="flex flex-col gap-1.5">{encontradas.map(casilla)}</div>;
+              }
+
+              return (
+                <div className="flex flex-col gap-1.5">
+                  {PATOLOGIAS_POR_APARATO.map((grupo) => {
+                    // Un aparato con algo marcado se abre solo: lo que el
+                    // paciente TIENE no puede quedarse escondido detrás de
+                    // un clic. Y por eso mismo se cuenta en la cabecera.
+                    const marcadas = grupo.patologias.filter(
+                      (p) => perfil.patologias.includes(p.key)
+                          || familiaPatologiaActiva(p.key, perfil.patologias));
+                    const abierto = aparatosAbiertos.includes(grupo.titulo) || marcadas.length > 0;
+                    return (
+                      <div key={grupo.titulo}>
+                        <button
+                          onClick={() => setAparatosAbiertos((abiertos) =>
+                            abiertos.includes(grupo.titulo)
+                              ? abiertos.filter((t) => t !== grupo.titulo)
+                              : [...abiertos, grupo.titulo])}
+                          aria-expanded={abierto}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left"
+                          style={{ background: PAPEL,
+                                   border: `1.5px solid ${marcadas.length ? VIOLETA : "#E3DAF0"}`,
+                                   cursor: "pointer" }}>
+                          <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>
+                            {grupo.titulo}
+                            {marcadas.length > 0 && (
+                              <span style={{ color: ROSA, fontWeight: 700 }}> · {marcadas.length}</span>
+                            )}
+                          </span>
+                          <ChevronDown size={15}
+                            style={{ color: MALVA, transform: abierto ? "rotate(180deg)" : "none" }} />
+                        </button>
+                        {abierto && (
+                          <div className="flex flex-col gap-1.5 mt-1.5 pl-3">
+                            {grupo.patologias.map(casilla)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+            {/* ⚠️ EL AVISO DEL TUTOR NO SE LE PINTA (8 septiembre, segunda
+                pasada). Decía cosas como «no generamos menú automático:
+                necesitas una dieta pautada por tu veterinario» -- al
+                veterinario. Lo que va en su lugar es el bloque de abajo:
+                los topes reales, con su fuente, qué es inamovible y qué
+                decide él. */}
             {/* ⚠️ AÑADIDO (7 septiembre) — PEDIDO EXPRESO: al marcar una
                 patología, un veterinario tiene que ver QUÉ cambia, qué puede
                 tocar y qué no, y con cuánto margen. Antes marcaba la casilla
@@ -8231,13 +8421,23 @@ function RawkuOnboardingInterna({
           <BotonContinuar activo={puedeGuardar}
             texto={perfil._id ? "Guardar y formular la ración →" : "Dar de alta y formular →"}
             onClick={() => {
-              if (bloqueantes.length > 0) {
-                setMenuError(bloqueantes.map((pat) => pat.aviso).join(" "));
-                setNecesitaVeterinario(true);
-                setFase("generador");
-                setPantalla("veterinario_requerido");
-                return;
-              }
+              // ⚠️ AQUÍ NO SE BLOQUEA A NADIE (8 septiembre, segunda pasada).
+              //
+              // CASO REAL: «obviamente a un veterinario no le tiene que
+              // saltar ningún tipo de aviso de "necesitas una dieta pautada
+              // por tu veterinario". Eso es absurdo».
+              //
+              // Lo es. Guardar la ficha con una hepatopatía o un shunt le
+              // mandaba a la pantalla del tutor -- «Esto lo tiene que pautar
+              // tu veterinario» -- al veterinario que la está pautando. Y no
+              // era una incoherencia de tono: el motor YA le formula esas
+              // patologías desde el 29 de agosto
+              // (`formulable_por_profesional`, BLOQUE 39 de la batería), así
+              // que la pantalla era más restrictiva que el propio motor.
+              //
+              // Lo que sí ve, en su lugar, es qué le impone cada patología y
+              // qué puede tocar -- que es lo que un profesional necesita
+              // antes de firmar. Ver `topespatologia.jsx`.
               // `paso` se deja terminado igualmente: si el veterinario apaga
               // su modo estando aquí, el asistente del tutor no puede
               // arrancarle desde el paso 1 una ficha que ya está hecha.

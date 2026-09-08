@@ -93,6 +93,24 @@ export async function getUsuarioActual() {
   return data?.user ?? null
 }
 
+// ⚠️ EL TOKEN DE LA SESIÓN, PARA QUE EL MOTOR SEPA QUIÉN PIDE (8 septiembre).
+//
+// La API tiene desde el 29 de agosto `_es_profesional_acreditado(token)`, y
+// de eso cuelga que se le formulen al veterinario las patologías que al
+// tutor se le bloquean (`formulable_por_profesional`) y que reciba los
+// avisos profesionales en vez de los del dueño. Pero la app NO MANDABA EL
+// TOKEN NUNCA, así que la API veía siempre a un tutor: todo ese camino
+// existía, parecía hecho y no lo usaba nadie -- la familia de fallos que
+// persigue este proyecto entero.
+//
+// No se manda un `modo_profesional: true` a propósito, y por eso hace falta
+// el token: un booleano lo manda cualquiera desde la consola del navegador.
+// Quién está acreditado lo decide Supabase, y la API lo comprueba.
+export async function getTokenDeSesion() {
+  const { data } = await supabase.auth.getSession()
+  return data?.session?.access_token ?? null
+}
+
 // ─── PERFIL ───────────────────────────────────────────────────────────────────
 
 export async function getPerfil(userId) {

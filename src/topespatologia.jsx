@@ -31,6 +31,7 @@ const VIOLETA = '#5A4088'
 const ROSA = '#FF6F91'
 const TINTA = '#231539'
 const MALVA = '#9A8CB8'
+const VERDE = '#2F6B4F'
 
 const fontDisplay = '"Georgia", serif'
 const fontBody = '"DM Sans", sans-serif'
@@ -173,32 +174,85 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
           {p.topes.map((l) => <Limite key={`t-${l.nutriente}`} l={l} esTope />)}
           {p.suelos.map((l) => <Limite key={`s-${l.nutriente}`} l={l} esTope={false} />)}
 
-          {/* Lo que NO se puede tocar, dicho con todas las letras: es la otra
-              mitad de la pregunta. Un tope de patología es una restricción
-              DURA dentro del solver y se vuelve a comprobar en
-              `_garantizar_verificado` sobre las kcal reales del menú (regla 2
-              de CLAUDE.md) -- no es un aviso que se pueda ignorar editando. */}
-          <p className="text-[11px] leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-            {p.topes.length > 0 || p.suelos.length > 0
-              ? <>Estos límites no se pueden levantar desde la app: el motor los aplica como
-                  restricción y los vuelve a comprobar sobre las kcal reales del menú. Lo que sí
-                  decides tú son los alimentos, las categorías y las exclusiones.</>
-              : <>Los alimentos, las categorías y las exclusiones los decides tú.</>}
-            {p.solo_en_adulto && ' Solo se aplica en adulto.'}
-            {p.en_crecimiento === 'bloquear' && ' En crecimiento o gestación no se formula.'}
-            {p.en_crecimiento === 'soltar' && ' En crecimiento se suelta, y el menú lo dice.'}
+          {/* ─── QUÉ ES INAMOVIBLE Y QUÉ DECIDE ÉL ────────────────────────
+              ⚠️ PEDIDO EXPRESO (8 septiembre): «que le diga las
+              recomendaciones, lo que puede tocar y lo que no; o sea, lo
+              inamovible y lo que puede tocar, y él tiene que tener
+              visibilidad de todo eso».
+              Estaba en una sola frase corrida al final del bloque, que es
+              como no estar: lo que hay que poder leer de un vistazo antes
+              de firmar son DOS listas, y por eso se pintan como dos. */}
+          <div className="grid grid-cols-2 gap-2 mt-2">
+            <div className="rounded-xl px-3 py-2.5" style={{ background: '#FFF4F6' }}>
+              <p className="text-[10px] tracking-[0.1em] uppercase mb-1"
+                 style={{ color: ROSA, fontFamily: fontMono }}>No se toca</p>
+              <ul className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                {(p.topes.length > 0 || p.suelos.length > 0) && (
+                  <li className="mb-1">
+                    {[...p.topes.map((l) => `${nombreDe(l.nutriente)} ≤ ${cifra(l.valor)}`),
+                      ...p.suelos.map((l) => `${nombreDe(l.nutriente)} ≥ ${cifra(l.valor)}`)].join(' · ')}
+                  </li>
+                )}
+                <li className="mb-1">Los 43 requisitos de FEDIAF y el ratio Ca:P</li>
+                <li>Los topes de seguridad crónica (vit. D, yodo, selenio, mercurio, tiaminasa)</li>
+              </ul>
+            </div>
+            <div className="rounded-xl px-3 py-2.5" style={{ background: '#F0F7F3' }}>
+              <p className="text-[10px] tracking-[0.1em] uppercase mb-1"
+                 style={{ color: VERDE, fontFamily: fontMono }}>Lo decides tú</p>
+              <ul className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                <li className="mb-1">Qué alimentos entran y cuántos gramos de cada uno</li>
+                <li className="mb-1">Las categorías y las exclusiones</li>
+                <li>Las proporciones BARF (el peldaño, al formular)</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-[11px] leading-snug mt-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
+            {(p.topes.length > 0 || p.suelos.length > 0) &&
+              <>El tope se aplica como restricción dentro del cálculo y se vuelve a comprobar
+                sobre las kcal reales del menú, no sobre las pedidas. </>}
+            {p.solo_en_adulto && 'Solo se aplica en adulto. '}
+            {p.en_crecimiento === 'bloquear' && 'En crecimiento o gestación no se formula. '}
+            {p.en_crecimiento === 'soltar' && 'En crecimiento se suelta, y el menú lo dice. '}
+            {p.excluye_fruta && 'Deja la fruta fuera de la ración. '}
           </p>
 
-          {p.necesita_bajo_fediaf && (
-            <p className="text-[11px] leading-snug mt-1.5" style={{ color: ROSA, fontFamily: fontBody }}>
-              La dieta terapéutica de referencia para esta condición va POR DEBAJO de algún
-              mínimo de FEDIAF. Esto no llega ahí: es un apoyo, y el resto lo pautas tú.
-            </p>
-          )}
-          {p.aviso_profesional && (
-            <p className="text-[11px] leading-snug mt-1.5" style={{ color: TINTA, fontFamily: fontBody }}>
-              {p.aviso_profesional}
-            </p>
+          {/* ─── LO QUE HAY QUE SABER, Y NO ES UN LÍMITE ───────────────────
+              El objetivo terapéutico de la literatura (que suele estar POR
+              DEBAJO de lo que el motor puede hacer), lo que la fuente dice
+              y las notas. Es la parte de «recomendaciones»: no la aplica
+              nadie automáticamente, la pauta él. */}
+          {(p.necesita_bajo_fediaf || p.objetivo_terapeutico_por_1000kcal || p.aviso_profesional || p.nota) && (
+            <div className="rounded-xl px-3 py-2.5 mt-2" style={{ background: '#FFFFFF', border: '1px solid #E3DAF0' }}>
+              <p className="text-[10px] tracking-[0.1em] uppercase mb-1"
+                 style={{ color: VIOLETA, fontFamily: fontMono }}>Recomendación clínica</p>
+              {p.objetivo_terapeutico_por_1000kcal && p.nutriente_frontera && (
+                <p className="text-[11px] leading-snug mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+                  Objetivo terapéutico de la literatura para {nombreDe(p.nutriente_frontera)}:{' '}
+                  <b>{cifra(p.objetivo_terapeutico_por_1000kcal)}</b> por 1000 kcal
+                  {p.topes.find((l) => l.nutriente === p.nutriente_frontera)
+                    ? <> — el motor llega a {cifra(p.topes.find((l) => l.nutriente === p.nutriente_frontera).valor)}, que es
+                        lo más estricto que puede sin romper el mínimo de FEDIAF.</>
+                    : '.'}
+                </p>
+              )}
+              {p.necesita_bajo_fediaf && (
+                <p className="text-[11px] leading-snug mb-1" style={{ color: ROSA, fontFamily: fontBody }}>
+                  La dieta terapéutica de referencia va POR DEBAJO de algún mínimo de FEDIAF.
+                  Esto no llega ahí: es un apoyo, y ese tramo lo pautas tú.
+                </p>
+              )}
+              {p.aviso_profesional && (
+                <p className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                  {p.aviso_profesional}
+                </p>
+              )}
+              {p.nota && (
+                <p className="text-[11px] leading-snug mt-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                  {p.nota}
+                </p>
+              )}
+            </div>
           )}
         </div>
       ))}
