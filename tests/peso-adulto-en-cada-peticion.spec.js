@@ -27,6 +27,7 @@
 // el campo llegue, para que no haya que rechazar nada.
 
 import { test, expect } from "@playwright/test";
+import { fuenteDeLaApp } from "./fuente.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -127,7 +128,7 @@ test.describe("ningún camino se queda sin mandarlo", () => {
                  "/menu/anadir", "/menu/quitar", "/menu/cambiar", "/menu/revalidar"];
 
   test("los siete cuerpos de petición llevan peso_adulto_esperado_kg", () => {
-    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const app = fuenteDeLaApp();   // todo src/, no solo App.jsx
 
     // Los tres de edición comparten `llamarRecalculo`, y los de varios
     // perros comparten `cuerpoApiDeUnPerro`. Así que lo que hay que
@@ -143,7 +144,7 @@ test.describe("ningún camino se queda sin mandarlo", () => {
 
     for (const [quien, marca] of CUERPOS) {
       const i = app.indexOf(marca);
-      expect(i, `no se encuentra en App.jsx el bloque de ${quien} ` +
+      expect(i, `no se encuentra en src/ el bloque de ${quien} ` +
                 `(buscando ${JSON.stringify(marca)}). Si se ha renombrado, hay que ` +
                 `actualizar esta prueba -- no borrarla`).toBeGreaterThan(-1);
       // ⚠️ CORREGIDO (28 agosto) — LA VENTANA FIJA DABA UN FALSO NEGATIVO.

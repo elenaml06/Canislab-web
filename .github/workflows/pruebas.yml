@@ -1,0 +1,132 @@
+# ─────────────────────────────────────────────────────────────────────────
+# LAS PRUEBAS, EJECUTADAS SOLAS
+#
+# POR QUÉ EXISTE (8 de septiembre)
+#
+# Había 45 ficheros de prueba y 9.865 líneas de Playwright, y NADA los
+# ejecutaba: no existía ningún workflow en este repo. Corrían solo si
+# alguien se acordaba de escribir `npm test`. Vercel despliega sin
+# mirarlas.
+#
+# DOS TRABAJOS, porque prueban cosas distintas:
+#
+#   · `con-servidor-falso` — las 45. Rápido y determinista. El servidor
+#     falso puede fingir el fallo que quieras.
+#
+#   · `contra-la-api-de-verdad` — solo `de-punta-a-punta.spec.js`, con
+#     FastAPI y el motor MILP levantados de verdad. Existe porque una
+#     prueba contra un servidor falso NO PUEDE cazar jamás un desacuerdo
+#     entre la app y el servidor: en esa prueba el servidor lo escribe el
+#     mismo lado que la app. Los dos fallos más caros del proyecto (el DER
+#     calculado dos veces, el peso sacado de donde no debía) salieron
+#     verdes en los dos lados porque cada lado era coherente consigo mismo.
+#
+# LOS DOS REPOS COMO HERMANOS, y no es un capricho del `checkout`:
+# `tests/catalogo-app-y-motor.spec.js` compara la lista de alimentos de la
+# app con `alimentos_v3_final.json` del motor, y `playwright.real.config.js`
+# levanta la API desde `../Canislab-api`. Hasta hoy la primera se SALTABA
+# sola cuando no encontraba el repo — o sea, salía en verde sin comprobar
+# nada. Ahora falla, así que aquí tiene que estar de verdad.
+# ─────────────────────────────────────────────────────────────────────────
+name: Las pruebas
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: pruebas-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  con-servidor-falso:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: canislab-web
+
+      # El repo hermano, para `catalogo-app-y-motor.spec.js`. Sin esto esa
+      # prueba falla — que es justo lo que queremos que haga en vez de
+      # saltarse en silencio.
+      - uses: actions/checkout@v4
+        with:
+          repository: elenaml06/Canislab-api
+          path: Canislab-api
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: canislab-web/package-lock.json
+
+      - run: npm ci
+        working-directory: canislab-web
+
+      - run: npm run lint
+        working-directory: canislab-web
+
+      # Solo Chromium: es el único navegador que configuran los dos
+      # playwright.config. Bajarse los tres tarda el triple para nada.
+      - run: npx playwright install --with-deps chromium
+        working-directory: canislab-web
+
+      - run: npx playwright test
+        working-directory: canislab-web
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: informe-playwright
+          path: canislab-web/playwright-report/
+          retention-days: 7
+
+  contra-la-api-de-verdad:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: canislab-web
+
+      - uses: actions/checkout@v4
+        with:
+          repository: elenaml06/Canislab-api
+          path: Canislab-api
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: canislab-web/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: Canislab-api/requirements.txt
+
+      # El motor de verdad: scipy, numpy y FastAPI. Lo levanta el propio
+      # playwright.real.config.js con uvicorn.
+      - run: pip install -r Canislab-api/requirements.txt
+
+      - run: npm ci
+        working-directory: canislab-web
+
+      - run: npx playwright install --with-deps chromium
+        working-directory: canislab-web
+
+      - run: npx playwright test --config playwright.real.config.js
+        working-directory: canislab-web
+        env:
+          RUTA_API: ${{ github.workspace }}/Canislab-api
+
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: informe-de-verdad
+          path: canislab-web/playwright-report/
+          retention-days: 7

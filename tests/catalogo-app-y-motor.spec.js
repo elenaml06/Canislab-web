@@ -17,6 +17,7 @@
 // menú. Por eso hace falta una prueba y no basta con mirar.
 
 import { test, expect } from "@playwright/test";
+import { fuenteDeLaApp } from "./fuente.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,9 +25,33 @@ import { fileURLToPath } from "node:url";
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const CATALOGO = path.resolve(AQUI, "../../Canislab-api/alimentos_v3_final.json");
 
+// ⚠️ ESTA PRUEBA SE SALTABA SOLA, Y SALTARSE ES SALIR EN VERDE.
+//
+// Hasta el 8 de septiembre aquí ponía:
+//
+//     test.skip(!fs.existsSync(CATALOGO), "El catálogo del backend no está
+//     a mano (los dos repos tienen que estar juntos)");
+//
+// Que es exactamente la enfermedad contra la que existe esta prueba. En
+// cualquier sitio donde `Canislab-api` no esté al lado — un portátil
+// recién clonado, un runner de CI, Vercel — se saltaba, salía en verde, y
+// el hígado de pato podía volver a aparecer como "Extra" con la
+// instrucción de los aceites sin que nadie viera nada.
+//
+// Ahora FALLA y dice qué hacer. Si te falta el repo hermano, el arreglo es
+// clonarlo, no saltarse la comprobación.
+if (!fs.existsSync(CATALOGO)) {
+  throw new Error(
+    `No encuentro el catálogo del motor en ${CATALOGO}.\n` +
+    "Esta prueba compara la lista de alimentos de la app con la del backend, " +
+    "así que necesita los dos repos como hermanos:\n\n" +
+    "    <carpeta>/canislab-web      (este)\n" +
+    "    <carpeta>/Canislab-api\n\n" +
+    "    git clone https://github.com/elenaml06/Canislab-api ../Canislab-api\n"
+  );
+}
+
 test.describe("la app conoce todos los alimentos del motor", () => {
-  test.skip(!fs.existsSync(CATALOGO),
-    "El catálogo del backend no está a mano (los dos repos tienen que estar juntos)");
 
 // Los alimentos que ofrece la app: SOLO lo que hay dentro de las listas.
 //
@@ -36,9 +61,9 @@ test.describe("la app conoce todos los alimentos del motor", () => {
 // alimento; sus productos son "GRAU Levadura de cerveza" y otro). Daba
 // cinco falsos positivos y ni uno real.
 function alimentosQueOfreceLaApp() {
-  const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-  const ini = app.indexOf("const CATEGORIAS_ALIMENTO");
-  if (ini < 0) throw new Error("no se encuentra CATEGORIAS_ALIMENTO en App.jsx");
+  const app = fuenteDeLaApp();
+  const ini = app.indexOf("export const CATEGORIAS_ALIMENTO");
+  if (ini < 0) throw new Error("no se encuentra CATEGORIAS_ALIMENTO en src/ (vivía en App.jsx; desde el 8 de septiembre, en catalogoapp.jsx)");
   const bloque = app.slice(ini, app.indexOf("\n};", ini))
     .split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");   // fuera comentarios
   const nombres = new Set();
@@ -91,8 +116,8 @@ function alimentosDelMotor() {
   // son las categorías reales del motor, así que comparar el nombre del
   // paraguas contra el catálogo daría un falso positivo por cada suplemento.
   test("la app no ofrece ningún alimento en una categoría que no es la suya", () => {
-    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-    const ini = app.indexOf("const CATEGORIAS_ALIMENTO");
+    const app = fuenteDeLaApp();
+    const ini = app.indexOf("export const CATEGORIAS_ALIMENTO");
     const bloque = app.slice(ini, app.indexOf("\n};", ini))
       .split("\n").map((l) => l.replace(/\/\/.*$/, "")).join("\n");
 

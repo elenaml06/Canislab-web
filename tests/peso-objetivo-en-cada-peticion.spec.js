@@ -31,6 +31,7 @@
 // fallo no se notaría nunca mirando un perro normal.
 
 import { test, expect } from "@playwright/test";
+import { fuenteDeLaApp } from "./fuente.js";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,7 +112,7 @@ test.describe("el peso objetivo llega al servidor", () => {
 // llamadas de cuatro lo pasaban y una no, y ninguna prueba lo vio.
 test.describe("ningún camino se queda sin mandarlo", () => {
   test("los cinco cuerpos de petición llevan peso_objetivo_kg", () => {
-    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const app = fuenteDeLaApp();   // todo src/, no solo App.jsx
 
     const CUERPOS = [
       ["llamarRecalculo (/menu/anadir, /menu/quitar, /menu/cambiar)", "const llamarRecalculo"],
@@ -123,7 +124,7 @@ test.describe("ningún camino se queda sin mandarlo", () => {
 
     for (const [quien, marca] of CUERPOS) {
       const i = app.indexOf(marca);
-      expect(i, `no se encuentra en App.jsx el bloque de ${quien} ` +
+      expect(i, `no se encuentra en src/ el bloque de ${quien} ` +
                 `(buscando ${JSON.stringify(marca)}). Si se ha renombrado, hay que actualizar ` +
                 `esta prueba -- no borrarla`).toBeGreaterThan(-1);
       // La ventana llega hasta el CIERRE del objeto que se serializa, no un

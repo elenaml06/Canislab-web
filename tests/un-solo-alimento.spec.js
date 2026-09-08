@@ -20,6 +20,7 @@
 
 import { readFileSync } from "node:fs";
 import { test, expect } from "@playwright/test";
+import { lineasDeLaApp } from "./fuente.js";
 import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
 import { esperarLaFicha, irAlGenerador } from "./ayudas.js";
 
@@ -111,15 +112,12 @@ test("nadie pinta la lista de especies por su cuenta", () => {
   // Las cuatro copias que hubo empezaban todas igual: un .map sobre el mapa
   // de especies. Si alguien vuelve a escribir uno, esto se cae y le dice
   // qué usar en su lugar.
-  const fuente = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
-  const aMano = fuente
-    .split("\n")
-    .map((linea, i) => ({ n: i + 1, linea }))
+  const aMano = lineasDeLaApp()
     // La propia <ListaDeEspecies> sí puede: es LA lista.
     .filter(({ linea }) => /\.map\(\(?\[?(especie|tipo)[,)]/.test(linea)
                            && !linea.includes("porEspecie"));
 
-  expect(aMano.map((x) => `${x.n}: ${x.linea.trim().slice(0, 90)}`),
+  expect(aMano.map((x) => `${x.fichero}:${x.n}: ${x.linea.trim().slice(0, 90)}`),
     "Alguien vuelve a pintar la lista de especies a mano. Usa <ListaDeEspecies>: " +
     "es lo que hace que una especie con un solo alimento se elija de un toque, " +
     "y copiar la lista es exactamente como el analizador se quedó veinte días " +

@@ -14,6 +14,47 @@ npm test         # tests automáticos (Playwright + Chromium)
 
 ---
 
+## El mapa: qué es cada archivo
+
+Escrito el 8 de septiembre, cuando `App.jsx` se partió. Antes no hacía
+falta porque casi todo estaba en un solo fichero de 11.799 líneas — que es
+otra forma de decir que hacía muchísima falta.
+
+| Archivo | Qué hace |
+|---|---|
+| `App.jsx` | El corazón de la app: `RawkuOnboardingInterna` (las siete pantallas del dueño y del veterinario) y `AuthGate`. Sigue siendo el fichero grande |
+| `vistamenus.jsx` | **La pantalla de los menús.** El menú, sus alimentos, editarlo, la ficha de nutrientes, la compra |
+| `piezas.jsx` | Botones, cabeceras, la rueda de elegir, el selector de alimentos, la silueta del perro. Componentes pequeños que usan App y VistaMenus |
+| `catalogoapp.jsx` | ⚠️ **La copia del catálogo que tiene la app.** Qué categoría es cada alimento, para darle la instrucción de preparación correcta. La lista de verdad es `alimentos_v3_final.json`, en el repo del motor: que las dos coincidan lo vigila `tests/catalogo-app-y-motor.spec.js` |
+| `patologiasapp.jsx` | Cómo se agrupan y se llaman las patologías en pantalla. **Ni un tope ni una cifra clínica**: los números salen de `GET /patologias` |
+| `perro.js` | Todo lo que se deduce de la ficha: etapa, edad, tamaño, peso adulto por curva, peso objetivo por condición corporal |
+| `der.js` | Las kcal del día. ⚠️ **Está duplicado a propósito** con `der.py` de la API, y manda este. Contrato compartido en `der_casos.json`, el mismo archivo en los dos repos |
+| `formato.js` | Cómo se escriben los gramos, los comprimidos y las razas. Funciones puras |
+| `estilo.js` | Los siete colores y las tres tipografías |
+| `paywall.js` | En qué modo está el muro de pago (`VITE_PAYWALL`) |
+| `almacen.js` | ⚠️ La frontera: manda los datos a Supabase o al navegador según haya cuenta o no. Aquí está decidido cuándo se da de alta el usuario |
+| `supabase.js` | Cuentas, sesión, perfil, pautas firmadas |
+| `api.js` | `API_BASE` y `fetchConTimeout` |
+| `formulador.jsx`, `fichaclinica.jsx`, `pacientes.js`, `pautaimprimible.jsx`, `topespatologia.jsx`, `rol.js`, `modo.js` | La parte de veterinario |
+| `suscripcion.jsx`, `premiumgate.jsx` | Stripe y el muro de pago en pantalla |
+| `bcs.js` | Condición corporal (1-9) y el peso ideal que sale de ella |
+| `cesta.js`, `instrucciones.js`, `nutrientes.js`, `texto.js` | La compra, cómo se prepara cada cosa, los nutrientes y el texto |
+| `auth.jsx`, `sentry.js`, `main.jsx` | Entrar, capturar errores, arrancar |
+
+**Y una carpeta que no es código de la app:** `herramientas/` — cuatro
+programas que se ejecutan a mano contra la API de producción (un barrido,
+el determinismo del motor, los tiempos, y capturas del flujo del
+veterinario). Ver su `LEEME.md`.
+
+### Cuatro pruebas leen el CÓDIGO, no la pantalla
+
+`peso-adulto-en-cada-peticion`, `peso-objetivo-en-cada-peticion`,
+`catalogo-app-y-motor` y `un-solo-alimento` no miran lo que hace la app:
+miran cómo está escrita. Todas pasan por `tests/fuente.js`, que lee **todo
+`src/`** en vez de un fichero concreto — si leyeran solo `App.jsx`, partirlo
+las dejaría buscando en el sitio equivocado, y una prueba que no encuentra
+lo que busca o se cae por el motivo equivocado o pasa sin comprobar nada.
+
 ## Sentry — errores de producción
 
 Con Sentry configurado, **cualquier fallo que le ocurra a una usuaria real
