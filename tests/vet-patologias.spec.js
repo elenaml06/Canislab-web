@@ -219,7 +219,12 @@ test("con dos patologías se ven los topes de las dos", async ({ page, request }
   await expect(page.getByText("Insuficiencia renal crónica")).toHaveCount(2);
   await expect(page.getByText("Pancreatitis", { exact: true })).toHaveCount(2);
   await expect(page.getByText(/Fósforo ≤ 1200 mg\/1000 kcal/).first()).toBeVisible();
-  await expect(page.getByText(/Grasa ≤ 20 g\/1000 kcal/).first()).toBeVisible();
+  // 8 sep: 20 -> 37,5. La grasa de la pancreatitis se cambió en el motor por
+  // la regla de fuentes (SACN5 Tabla 67-3 manda sobre Merck) y el servidor de
+  // mentira se actualizó, pero esta línea se quedó con el número viejo y la
+  // prueba se puso roja. Es la prueba haciendo su trabajo: el número que pinta
+  // la pantalla del veterinario no puede ir por libre.
+  await expect(page.getByText(/Grasa ≤ 37,5 g\/1000 kcal/).first()).toBeVisible();
 });
 
 

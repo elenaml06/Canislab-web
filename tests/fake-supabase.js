@@ -806,7 +806,12 @@ export function crearFakeSupabase(opciones = {}) {
             nombre: "Artrosis / osteoartritis",
             formulable: true, formulable_por_profesional: true,
             necesita_bajo_fediaf: false, motivo_no_formulable: null,
-            solo_en_adulto: false, en_crecimiento: null,
+            // 8 sep (tarde): el motor la pasó a `solo_en_adulto` al aplicar la
+            // Tabla 34-2 entera -- su techo de fósforo (1750) cae por debajo del
+            // mínimo de un cachorro (2250), así que en crecimiento se suelta con
+            // aviso. El mock decía todavía false/null y `patologias-app-y-motor`
+            // lo cazó: es exactamente para lo que existe esa prueba.
+            solo_en_adulto: true, en_crecimiento: "sin_tope",
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [],

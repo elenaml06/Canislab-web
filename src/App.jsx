@@ -961,6 +961,19 @@ const PATOLOGIAS = [
   { key: "disfuncion_cognitiva", label: "Disfunción cognitiva canina", segura: true },
   { key: "dermatosis_zinc", label: "Dermatosis zinc-sensible (razas nórdicas)", segura: true },
   { key: "dermatitis_atopica", label: "Dermatitis atópica", segura: true },
+  // ⚠️ AÑADIDA (8 septiembre, cuarta pasada) — la Tabla 31-3 de SACN5
+  // («Adverse Reactions to Food») es una de las TRES tablas de patología
+  // canina que se habían perdido al cortar la salida del barrido de tablas.
+  // Tiene cifras propias (omega-3, fósforo, sodio) y una exclusión de
+  // alimentos (atún y caballa, por aminas vasoactivas) que el motor no hacía.
+  //
+  // NO sustituye a las alergias: lo que cura una reacción adversa al alimento
+  // es quitar el ingrediente, y eso se hace en Alergias y en Personalizar.
+  // Esto es lo que la literatura pide ADEMÁS, para una dieta de eliminación
+  // que se come durante meses. El label empieza por «Alergia» a propósito:
+  // es la palabra que busca quien la busca, no «reacción adversa».
+  { key: "reaccion_adversa_alimento",
+    label: "Alergia o intolerancia alimentaria diagnosticada", segura: true },
   { key: "epilepsia_idiopatica", label: "Epilepsia idiopática", segura: true },
   { key: "mielopatia_degenerativa", label: "Mielopatía degenerativa", segura: true },
   { key: "cushing", label: "Hiperadrenocorticismo (Cushing)", segura: true },
@@ -1008,7 +1021,7 @@ const APARATOS = [
              "estruvita", "urato", "cistina"] },
   { titulo: "Digestivo y páncreas",
     claves: ["pancreatitis", "enteropatia_cronica", "ple_linfangiectasia",
-             "insuficiencia_pancreatica_exocrina"] },
+             "insuficiencia_pancreatica_exocrina", "reaccion_adversa_alimento"] },
   // ⚠️ "Hepático" y no "Hígado": en esta misma ficha hay una categoría de
   // ALIMENTO que se llama «Hígado» (la que se puede excluir), y dos botones
   // con el mismo nombre en la misma pantalla se confunden -- lo vio primero
