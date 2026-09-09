@@ -4339,6 +4339,11 @@ function datosDeUnPerro(perfil) {
         pesoIdealKg: objetivo.kg,
         raza: perfil.raza?.nombre,
         machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
+        // ⚠️ AÑADIDO (9 septiembre): sin esto, el ajuste de «adulto joven» de la
+        // Tabla VII-6 de FEDIAF (130 kcal/kg^0,75 en el perro de 1-2 años contra
+        // 110 en el de 3-7) no puede aplicarse, porque `calcularDER` no sabía la
+        // edad. La entrada existía en `AJUSTE_EDAD` y era código muerto.
+        mesesEdad: edad?.totalMeses,
       });
 
   return {

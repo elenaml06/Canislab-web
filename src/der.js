@@ -85,7 +85,23 @@ function determinarEtapa(edad, pesoAdultoKg) {
 const ACTIVIDAD_KEY = ["sedentario", "normal", "activo", "muy_activo", "trabajo"];
 
 const BASE_ACTIVIDAD = { sedentario: 95, normal: 110, activo: 125, muy_activo: 150, trabajo: 175 };
-const AJUSTE_EDAD = { joven: 15, adulto: 0, senior: -7 };
+// ⚠️ EL ESCALÓN DE EDAD ES EL DE FEDIAF, TABLA VII-6 (9 septiembre 2026).
+//
+//     1-2 años ........ 130 (125-140) kcal ME/kg BW^0,75
+//     3-7 años ........ 110  (95-130)
+//     > 7 años ........  95  (80-120)
+//
+// O sea +20 el joven y −15 el senior. Aquí ponía +15 y −7, de Thes 2014. La tabla
+// de FEDIAF se había leído el 6 de septiembre y se apartó por ser «la de edad, no
+// la de actividad», sin cruzar su escalón contra el nuestro: el −7 era un −6,4 %
+// cuando FEDIAF dice −13,6 % y SACN5 cap.5 dice, aparte, que un perro de más de
+// siete años necesita «10 to 20% less energy». Detalle en `der.py` del repo del
+// motor y en `fediaf_tablas.json`.
+//
+// ⚠️ TIENE QUE SEGUIR SIENDO IDÉNTICO A `AJUSTE_EDAD` de `der.py`.
+const AJUSTE_EDAD = { joven: 20, adulto: 0, senior: -15 };
+// La banda de 1-2 años de la Tabla VII-6.
+const ADULTO_JOVEN_HASTA_MESES = 24;
 const RAZAS_MAS_GASTO = new Set(["Jack Russell Terrier","Parson Russell Terrier",
   "Dálmata","Braco Húngaro (Vizsla)","Bearded Collie","Galgo Afgano",
   "Galgo Español","Boxer","Rhodesian Ridgeback","Flat Coated Retriever"]);
@@ -193,7 +209,16 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
     const propia = RAZAS_CIFRA_FEDIAF[raza];
     const base = BASE_ACTIVIDAD[ACTIVIDAD_KEY[actividadIdx]] ?? BASE_ACTIVIDAD.normal;
     let coef = propia ? propia[0] + (base - BASE_ACTIVIDAD.normal) : base;
-    coef += AJUSTE_EDAD[etapa === "senior" ? "senior" : "adulto"];
+    // ⚠️ EL GRUPO «joven» EXISTÍA Y NO SE USABA NUNCA (9 septiembre 2026).
+    // `AJUSTE_EDAD` tenía una entrada `joven` y aquí solo se pasaba senior o
+    // adulto: código muerto que PARECÍA aplicado. FEDIAF VII-6 da 130 kcal/kg^0,75
+    // al perro de 1-2 años contra 110 al de 3-7, y la app sabe la fecha de
+    // nacimiento. `mesesEdad` viene de `calcularEdad`; si no llega, se trata como
+    // adulto, que es el lado prudente (menos kcal).
+    const grupoEdad = etapa === "senior"
+      ? "senior"
+      : (Number.isFinite(mesesEdad) && mesesEdad < ADULTO_JOVEN_HASTA_MESES ? "joven" : "adulto");
+    coef += AJUSTE_EDAD[grupoEdad];
     if (conOtrosPerros) coef += 10;
     if (machoEntero) coef += 10;
     if (propia) {

@@ -55,6 +55,10 @@ contrato.casos.forEach((caso, i) => {
         conOtrosPerros: !!o.conOtrosPerros,
         nCachorros: o.nCachorros,
         semanaLactancia: o.semanaLactancia === undefined ? 3 : o.semanaLactancia,
+        // ⚠️ AÑADIDO (9 sep): sin la edad, el contrato no podía cubrir el ajuste
+        // de «adulto joven» de la Tabla VII-6 de FEDIAF, que hasta ese día era
+        // código muerto en los dos repos.
+        mesesEdad: o.mesesEdad,
       });
     // 1 kcal de margen: las dos implementaciones redondean al final y un
     // decimal distinto en coma flotante no es una divergencia real.
