@@ -1351,7 +1351,13 @@ function calcularEdad(dia, mesIdx, anio) {
     const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
     dias += mesAnterior.getDate();
   }
-  return { anios: Math.floor(meses / 12), meses: meses % 12, dias, totalMeses: Math.floor(meses / 12) * 12 + (meses % 12) };
+  // ⚠️ `totalDias` AÑADIDO (9 septiembre) para poder cortar Early Growth en
+  // las 14 SEMANAS que dice FEDIAF, y no en «4 meses». Con meses enteros no
+  // se puede: 14 semanas caen a mitad del cuarto mes. Se calcula sobre el
+  // calendario, no multiplicando meses por 30.
+  const totalDias = Math.floor((hoy - nacimiento) / 86400000);
+  return { anios: Math.floor(meses / 12), meses: meses % 12, dias, totalDias,
+           totalMeses: Math.floor(meses / 12) * 12 + (meses % 12) };
 }
 
 const PESO_ADULTO_POR_TAMANO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, Grande: 32, Gigante: 55 };

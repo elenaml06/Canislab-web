@@ -16,7 +16,7 @@
 // cada una por separado es coherente consigo misma.
 //
 // Contra eso está `der_casos.json`, el mismo archivo en los dos repos:
-// 85 casos con sus kcal esperadas. `tests/der-contrato.spec.js` comprueba
+// 100 casos con sus kcal esperadas. `tests/der-contrato.spec.js` comprueba
 // esta implementación contra ellos, y el BLOQUE 23 de las pruebas de la
 // API comprueba la suya. Si tocas la fórmula aquí, esa prueba se cae y te
 // obliga a mirar el otro lado. Si el cambio es a propósito, se regeneran
@@ -49,9 +49,31 @@ function pesoEsperado(mes, pesoAdultoKg) {
   return Math.round(pesoAdultoKg * (1 - Math.exp(-k * mes)) * 10) / 10;
 }
 
+// ⚠️ EL CORTE DE EARLY GROWTH ES EL DE FEDIAF: 14 SEMANAS (9 septiembre).
+//
+// Aquí ponía `edad.totalMeses < 4`, unas 17 semanas, y estaba escrito como
+// «diferencia declarada con FEDIAF, y va al lado estricto»: tres semanas de
+// más con los requisitos de cachorro joven, que son los más altos. Eso es
+// inventarse un umbral pudiendo usar el de la fuente. FEDIAF 2025 titula las
+// dos columnas de sus tablas de requisitos «Early Growth (< 14 weeks)» y
+// «Late Growth (≥ 14 weeks)», así que el corte son 14 semanas y punto.
+//
+// Va en DÍAS y no en meses porque 14 semanas (98 días) caen a mitad del
+// cuarto mes: con meses enteros no se puede expresar. `totalDias` lo pone
+// `calcularEdad` en App.jsx.
+const EARLY_GROWTH_DIAS = 98;   // 14 semanas x 7
+
 function determinarEtapa(edad, pesoAdultoKg) {
   if (!edad) return "adulto";
-  if (edad.totalMeses < 4) return "cachorro_joven";
+  // Si falta `totalDias` (una ficha guardada antes de que existiera, o un
+  // objeto construido a mano), se cae al corte viejo de 4 meses en vez de
+  // comparar contra `undefined` -- que daría siempre false y mandaría a un
+  // cachorro de dos meses a Late Growth, que pide MENOS. El respaldo es el
+  // lado estricto a propósito: un fallo de datos no puede bajar requisitos.
+  const dias = Number.isFinite(edad.totalDias)
+    ? edad.totalDias
+    : (edad.totalMeses < 4 ? 0 : EARLY_GROWTH_DIAS);
+  if (dias < EARLY_GROWTH_DIAS) return "cachorro_joven";
   const finCrecimiento = finCrecimientoMeses(pesoAdultoKg);
   if (edad.totalMeses < finCrecimiento) return "cachorro_crecimiento";
   const inicioSenior = inicioSeniorAnios(pesoAdultoKg);
@@ -82,10 +104,31 @@ const RAZAS_MENOS_GASTO = new Set(["Dachshund Estándar","Dachshund Miniatura",
 // Gran Danés de 67,5 kg marcado como «normal» recibía 2590 kcal/día donde
 // FEDIAF dice 4710 — el 55 %.
 //
-// El valor central sustituye a la base de «normal», el nivel de actividad
-// sigue moviendo su diferencia contra «normal», y el resultado se recorta al
-// rango que publica FEDIAF. Esa forma de aplicarlo es interpretación nuestra:
-// ver `PREGUNTAS_ABIERTAS.md` P-11 en el repo del motor.
+// ⚠️ LA CIFRA DE RAZA VA EN VEZ DEL NIVEL DE ACTIVIDAD. No es un suelo sobre
+// el que se aplique la actividad, ni un ajuste que se sume. Lo dice la propia
+// guía dos veces (leído entero el 9 de septiembre, al cerrar P-11):
+//
+//   · La frase que presenta la tabla: «Table VII-7 provides examples of daily
+//     energy requirements of dogs at different activity levels, FOR SPECIFIC
+//     BREEDS and for obese prone adults». Tres clases de fila en paralelo, la
+//     misma columna y el mismo coeficiente: la fila de raza es ALTERNATIVA a
+//     la de actividad, igual que «obese prone adults ≤90» lo es y no un
+//     descuento sobre el 95 del sedentario.
+//   · Y la sección 7.2.3.4 «Breed & type»: «Breed-specific needs probably
+//     reflect differences in temperament, RESULTING IN HIGHER OR LOWER
+//     ACTIVITY, as well as variation in stature or insulation capacity of
+//     skin and hair coat». La diferencia de raza YA CONTIENE la de actividad;
+//     sumar un nivel encima sería contarla dos veces.
+//
+// Lo único que sigue siendo interpretación nuestra es dónde caer DENTRO del
+// rango publicado, porque FEDIAF da 200 (200-250) y 105 (80-132) y ninguna
+// regla para colocarse. El valor central sustituye a la base de «normal», el
+// nivel de actividad coloca dentro del rango moviendo su diferencia contra
+// «normal», y el resultado se recorta al rango. Para el Gran Danés «en vez
+// de» y «suelo» coinciden (200 es a la vez centro y extremo bajo); para el
+// Terranova no, porque su rango abre a los dos lados: 90 sedentario, 132
+// trabajo. Ese es el caso que separa las tres lecturas, y lo fija el contrato
+// de `der_casos.json` y el BLOQUE 54 apartado 2-bis del repo del motor.
 //
 // ⚠️ TIENE QUE SEGUIR SIENDO IDÉNTICO A `RAZAS_CIFRA_FEDIAF` de `der.py`.
 const RAZAS_CIFRA_FEDIAF = {
@@ -167,4 +210,4 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
 
 export { interpolar, finCrecimientoMeses, inicioSeniorAnios, pesoEsperado,
          determinarEtapa, calcularDER, ACTIVIDAD_KEY, RAZAS_MAS_GASTO,
-         RAZAS_MENOS_GASTO, RAZAS_CIFRA_FEDIAF };
+         RAZAS_MENOS_GASTO, RAZAS_CIFRA_FEDIAF, EARLY_GROWTH_DIAS };

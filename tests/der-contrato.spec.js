@@ -116,3 +116,41 @@ test.describe("el respaldo de crecimiento, cuando no se sabe el peso adulto", ()
     ).toBeLessThanOrEqual(1);
   });
 });
+
+// ─── EL CORTE DE EARLY GROWTH SON LAS 14 SEMANAS DE FEDIAF ──────────────────
+//
+// ⚠️ CAMBIADO (9 septiembre). Aquí el corte estaba en «4 meses» —unas 17
+// semanas— y se defendía como diferencia deliberada «al lado estricto». Pero
+// FEDIAF titula las dos columnas de sus tablas de requisitos «Early Growth
+// (< 14 weeks)» y «Late Growth (≥ 14 weeks)», así que el umbral lo pone la
+// fuente y no nosotras: tres semanas de más con los requisitos de cachorro
+// joven (calcio 2500 contra 2000, fósforo 2250 contra 1750, proteína 62,5
+// contra 50) es inventarse un número existiendo el bueno.
+//
+// De la etapa salen los 43 requisitos, así que este corte decide contra qué
+// se verifica el menú. Por eso se prueba por los dos lados del día 98, y no
+// solo «un cachorro pequeño sale cachorro joven».
+import { determinarEtapa, EARLY_GROWTH_DIAS } from "../src/der.js";
+
+test.describe("el corte de Early Growth", () => {
+  test("son las 14 semanas de FEDIAF, no los 4 meses", () => {
+    expect(EARLY_GROWTH_DIAS).toBe(98);
+  });
+
+  test("el día 97 todavía es cachorro joven y el 98 ya no", () => {
+    const edad = (d) => ({ totalDias: d, totalMeses: Math.floor(d / 30.44), anios: 0 });
+    expect(determinarEtapa(edad(97), 22)).toBe("cachorro_joven");
+    expect(determinarEtapa(edad(98), 22)).toBe("cachorro_crecimiento");
+    // Y con el corte viejo de 4 meses, el día 98 seguía siendo cachorro joven:
+    // si alguien lo devuelve, esta línea se cae.
+    expect(determinarEtapa(edad(120), 22)).toBe("cachorro_crecimiento");
+  });
+
+  test("sin `totalDias` se cae al lado estricto, no a Late Growth", () => {
+    // Una ficha guardada antes de que existiera el campo. Comparar contra
+    // `undefined` daría siempre false y mandaría a un cachorro de dos meses a
+    // Late Growth, que pide MENOS: un fallo de datos no puede bajar requisitos.
+    expect(determinarEtapa({ totalMeses: 2, anios: 0 }, 22)).toBe("cachorro_joven");
+    expect(determinarEtapa({ totalMeses: 5, anios: 0 }, 22)).toBe("cachorro_crecimiento");
+  });
+});
