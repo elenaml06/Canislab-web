@@ -65,6 +65,56 @@ export const BCS_ESCALA_SATURADA = 9;
 // objetivo de las fichas que ya están guardadas.
 export const TOPE_SUBIDA = 1.20;
 
+// ⚠️ EL OTRO EXTREMO DE LA ESCALA, Y ES DE FEDIAF (9 de septiembre de 2026,
+//     leyendo entera la §7.1.3, que estaba sin leer).
+//
+// El BCS 9 ya llevaba su salvedad: la escala se satura y el número es una cota
+// inferior. La salvedad del extremo BAJO no estaba en ningún sitio, y FEDIAF la
+// escribe con todas las letras en §7.1.3:
+//
+//   «scores at the lower end of the BCS are CONFOUNDED BY MUSCLE ATROPHY
+//    (Baez J et al. 2007, Michel KE et al. 2011). Recently a 4-scale MUSCLE MASS
+//    SCORING SYSTEM has been developed for evaluating muscle mass in critically
+//    ill patients (Table VII-3).»
+//
+// Y añade el motivo de por qué esa parte de la escala está peor validada:
+// «scores at the lower end of the scale being either absent or underrepresented»
+// en los estudios que la construyeron, porque casi todos se hicieron para medir
+// OBESIDAD.
+//
+// LO QUE ESTO CAMBIA AQUÍ, y por qué no es un cambio de fórmula: el peso objetivo
+// sale del BCS suponiendo que lo que falta o sobra es GRASA. En un perro delgado
+// puede no serlo -- puede ser músculo perdido --, y entonces el objetivo que
+// calculamos apunta a un peso que no se recupera comiendo más. La fórmula no se
+// toca porque FEDIAF no da otra: lo que da es una segunda escala (la Tabla VII-3,
+// de 0 a 3, palpando espina, escápulas, cráneo y alas del ilion) que se mide
+// PALPANDO y que esta app no pregunta. Así que lo honesto es decirlo, no
+// corregirlo por nuestra cuenta.
+export const BCS_CONFUNDIDO_POR_ATROFIA_HASTA = 3;
+export const AVISO_ATROFIA_MUSCULAR =
+  "en la parte baja de la escala el BCS se confunde con la pérdida de músculo, " +
+  "así que este objetivo puede quedarse corto: si está delgado por haber perdido " +
+  "masa muscular y no grasa, comer más no lo recupera solo (FEDIAF, Tabla VII-3)";
+
+// Devuelve la salvedad que toca para un BCS, o null si no hay ninguna. Existe
+// como función y no como texto suelto para que los dos sitios que pintan el peso
+// objetivo digan LO MISMO: cuando esto era una cadena escrita a mano en cada
+// pantalla, la de la ficha y la del alta acabaron distintas.
+export function salvedadDelBcs(bcs) {
+  // ⚠️ `bcs == null` ANTES de convertir, y por la MISMA razón que en
+  // `pesoIdealDesdeBcs`: `Number(null)` es 0, que es finito y además está por
+  // debajo del umbral de atrofia, así que "no hay BCS" salía como "BCS 0" y un
+  // perro sin condición apuntada recibía el aviso de pérdida de músculo. Lo cazó
+  // la prueba nada más escribirla -- que es la segunda vez que esta trampa
+  // muerde en este mismo fichero.
+  if (bcs === null || bcs === undefined || bcs === "") return null;
+  const b = Number(bcs);
+  if (!Number.isFinite(b)) return null;
+  if (b >= BCS_ESCALA_SATURADA) return "cota inferior: la escala se satura en 9";
+  if (b <= BCS_CONFUNDIDO_POR_ATROFIA_HASTA) return AVISO_ATROFIA_MUSCULAR;
+  return null;
+}
+
 // Los descriptores son los de la escala de 9 puntos (WSAVA/Laflamme), en
 // palabras de consulta: lo que se palpa, lo que se ve desde arriba y lo que
 // se ve de perfil. Sin adjetivos cariñosos: esta pantalla la lee un
@@ -90,10 +140,27 @@ export const ESCALA_BCS = [
     detalle: "Depósitos masivos en tórax, columna y base de la cola. Sin cintura. Distensión abdominal evidente." },
 ];
 
-// Los cinco escalones del dueño, en BCS. No es una tabla nueva: es la que
-// ya vivía en App.jsx, traída aquí para que la conversión exista una sola
-// vez en los dos sentidos.
-export const BCS_DESDE_CONDICION = { 0: 2, 1: 4, 2: 5, 3: 7, 4: 9 };
+// Los cinco escalones del dueño, en BCS.
+//
+// ⚠️ CORREGIDO (9 de septiembre de 2026) — LA CORRESPONDENCIA LA PUBLICA FEDIAF
+// Y NO ERA LA NUESTRA.
+//
+// Aquí ponía `{0:2, 1:4, 2:5, 3:7, 4:9}`, que era criterio nuestro. Al leer
+// entera la sección 7.1 de FEDIAF resulta que las Tablas VII-1 y VII-2 traen
+// una **columna 2 de 5 puntos** al lado de la de 9, y su correspondencia es:
+//
+//     5 puntos    1     2     3     4     5
+//     9 puntos    1     3     5     7     9
+//
+// En los tres escalones de arriba coincidíamos. En los dos de perro delgado
+// éramos MENOS severas: nuestro escalón 0 iba a BCS 2 (−30 %) donde FEDIAF pone
+// BCS 1 (−≥40 %), y el 1 iba a BCS 4 (−10 %) donde pone BCS 3 (−20 %). O sea que
+// a un perro delgado le calculábamos un peso objetivo más bajo del que le toca,
+// y de ahí salen menos kcal.
+//
+// Y no es una interpretación: es la columna que la propia guía imprime al lado
+// de sus descriptores, adaptada de Laflamme 1995/1997. Lo vigila el BLOQUE 63.
+export const BCS_DESDE_CONDICION = { 0: 1, 1: 3, 2: 5, 3: 7, 4: 9 };
 
 // Y de vuelta: al BCS que ponga el veterinario le corresponde un escalón,
 // para que la ficha siga entendiéndose desde el lado del dueño (una ficha
@@ -103,6 +170,11 @@ export const BCS_DESDE_CONDICION = { 0: 2, 1: 4, 2: 5, 3: 7, 4: 9 };
 export function condicionDesdeBcs(bcs) {
   const b = Number(bcs);
   if (!Number.isFinite(b)) return null;
+  // Los cortes van con la correspondencia de FEDIAF (1-3-5-7-9): cada BCS cae
+  // en el escalón cuyo valor tiene más cerca, y los empates (2, 4, 6, 8) van
+  // al escalón MÁS SEVERO, que es el lado prudente en las dos direcciones --
+  // un perro en 2 se trata como el 1 (más delgado de lo que dice), y uno en 6
+  // como el 7 (más gordo).
   if (b <= 2) return 0;
   if (b <= 4) return 1;
   if (b === 5) return 2;

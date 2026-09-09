@@ -33,6 +33,7 @@ import PautaImprimible from "./pautaimprimible.jsx";
 import { perrosDelModo } from "./pacientes";
 import { contiene } from "./texto.js";
 import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicion,
+         salvedadDelBcs,
          condicionDesdeBcs, bcsVigente } from "./bcs";
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
@@ -8271,7 +8272,7 @@ function RawkuOnboardingInterna({
               <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
                 Peso objetivo estimado:{" "}
                 <span style={{ color: VIOLETA, fontWeight: 700 }}>{objetivoBcs} kg</span>
-                {bcsPuesto === 9 && " (cota inferior: la escala se satura en 9)"}
+                {salvedadDelBcs(bcsPuesto) && ` (${salvedadDelBcs(bcsPuesto)})`}
               </p>
             )}
           </BloqueFicha>
@@ -8847,7 +8848,7 @@ function RawkuOnboardingInterna({
               <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
                 Peso objetivo estimado:{" "}
                 <span style={{ color: VIOLETA, fontWeight: 700 }}>{objetivoBcs} kg</span>
-                {puesto === 9 && " (cota inferior: la escala se satura en 9)"}
+                {salvedadDelBcs(puesto) && ` (${salvedadDelBcs(puesto)})`}
               </p>
             )}
             <div className="flex-1" />
