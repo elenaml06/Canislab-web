@@ -29,6 +29,37 @@ export const BCS_MAXIMO = 9;
 // más. Es el mismo número que usa el motor en `verificar.peso_objetivo_
 // desde_bcs`, y el mismo que ya usaba la app para los cinco escalones.
 export const PCT_POR_PUNTO_BCS = 0.10;
+// ⚠️ Y EL 9 VA APARTE, PORQUE LA RECTA SE QUEDA CORTA JUSTO AHÍ (9 de
+// septiembre de 2026, y es la tercera copia de esta regla: las otras dos son
+// `verificar.peso_objetivo_desde_bcs` y `der.peso_ideal_desde_condicion`, en la
+// API).
+//
+// El Anexo 7.1 de FEDIAF trae la Tabla VII-2 entera, con la columna «% BW below
+// or above BCS 5» para el perro. Puesta al lado del 10 % por punto:
+//
+//     BCS 1  -≥40 %      la recta: -40      ✓ (extremo bajo del rango)
+//     BCS 2  -30 a 40 %             -30      ✓
+//     BCS 3  -20 a 30 %             -20      ✓
+//     BCS 4  -10 a 15 %             -10      ✓
+//     BCS 5    0 %                    0      ✓
+//     BCS 6  +10 a 15 %             +10      ✓
+//     BCS 7  +20 a 30 %             +20      ✓
+//     BCS 8  +30 a 45 %             +30      ✓
+//     BCS 9  >45 %                  +40      ✗  ← el único que no cuadra
+//
+// O sea que la recta ES el extremo bajo de cada rango de FEDIAF -- el más
+// conservador, el que menos exceso estima -- en ocho puntos de nueve. En el
+// noveno la escala deja de ser lineal: FEDIAF dice MÁS del 45 % y la recta da
+// 40. Se pasa a 45, que es la frontera de «>45 %» y sigue siendo el extremo
+// bajo de lo que dice la fuente.
+//
+// ⚠️ ESTO CAMBIA EL PESO OBJETIVO DE FICHAS YA GUARDADAS, y a propósito: el
+// escalón «Obeso» del dueño ES un BCS 9, así que un perro de 30 kg pasa de
+// 21,43 a 20,69 kg de objetivo. Se acepta porque el número de antes no tenía
+// fuente y este la tiene, y porque va al lado seguro (menos kcal para un perro
+// obeso). Lo mismo se hizo el mismo día en las dos copias de la API.
+export const EXCESO_BCS_9 = 0.45;   // FEDIAF 2025, Anexo 7.1, Tabla VII-2, «9. Grossly Obese»
+export const BCS_ESCALA_SATURADA = 9;
 // Un perro por debajo del ideal no se "sube" sin freno: el tope existe
 // desde antes del BCS y se conserva tal cual para no cambiar en silencio el
 // objetivo de las fichas que ya están guardadas.
@@ -99,7 +130,12 @@ export function pesoIdealDesdeBcs(pesoActualKg, bcs) {
   if (bcs === null || bcs === undefined || bcs === "") return null;
   const b = Number(bcs);
   if (!peso || peso <= 0 || !Number.isFinite(b)) return null;
-  const desvio = (b - BCS_NEUTRO) * PCT_POR_PUNTO_BCS;
+  // El 9 va aparte: FEDIAF dice «>45 %» y la recta se queda en 40. Y sigue
+  // siendo una COTA INFERIOR -- Broome et al. (2023) ven perros que «exceed the
+  // description for score 9» --, no un número exacto.
+  const desvio = b >= BCS_ESCALA_SATURADA
+    ? EXCESO_BCS_9
+    : (b - BCS_NEUTRO) * PCT_POR_PUNTO_BCS;
   let ideal = peso / (1 + desvio);
   if (ideal > peso * TOPE_SUBIDA) ideal = peso * TOPE_SUBIDA;
   return Math.round(ideal * 100) / 100;

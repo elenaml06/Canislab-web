@@ -31,7 +31,49 @@ test("el peso objetivo se DIVIDE, no se resta", () => {
   // 4 % se arrastra hasta las kcal de todos los días.
   expect(pesoIdealDesdeBcs(30, 7)).toBe(25);
   expect(pesoIdealDesdeBcs(30, 5)).toBe(30);
-  expect(pesoIdealDesdeBcs(30, 9)).toBe(21.43);
+  // El 9 no sale de la recta: FEDIAF dice «>45 %» (Tabla VII-2) y el 10 % por
+  // punto daría 40, o sea 21,43. Ver el test de la tabla, más abajo.
+  expect(pesoIdealDesdeBcs(30, 9)).toBe(20.69);
+});
+
+test("la tabla VII-2 de FEDIAF, fila a fila", () => {
+  // ⚠️ ESTO ES LO QUE CONVIERTE EL 10 % POR PUNTO EN UN NÚMERO CON FUENTE.
+  // La columna «% BW below or above BCS 5» del Anexo 7.1 de FEDIAF da un RANGO
+  // por punto, y el 10 % lineal es exactamente el extremo BAJO de cada uno --
+  // el más conservador, el que menos corrige-- en ocho puntos de nueve. El 9 es
+  // el único que no cuadra: FEDIAF dice «>45 %» y la recta da 40.
+  //
+  // Es el mismo test que el BLOQUE 63 de la batería de la API, y está aquí
+  // porque esta es la copia que MANDA: el DER que se envía en `der_objetivo`
+  // sale de aquí, no de `der.py`.
+  const TABLA = [
+    [1, -0.40, "-≥40 %",     "1. Emaciated -- se aplica el 40, donde empieza el «≥»"],
+    [2, -0.30, "-30 a 40 %", "2. Very Thin -- extremo bajo del rango"],
+    [3, -0.20, "-20 a 30 %", "3. Thin -- extremo bajo"],
+    [4, -0.10, "-10 a 15 %", "4. Slightly underweight -- extremo bajo"],
+    [5,  0.00, "0 %",        "5. Ideal"],
+    [6, +0.10, "+10 a 15 %", "6. Slightly overweight -- extremo bajo"],
+    [7, +0.20, "+20 a 30 %", "7. Overweight -- extremo bajo"],
+    [8, +0.30, "+30 a 45 %", "8. Obese -- extremo bajo"],
+    [9, +0.45, ">45 %",      "9. Grossly Obese -- LA RECTA SE QUEDA CORTA: daría 40"],
+  ];
+  const PESO = 20;
+  for (const [bcs, desvio, rango, cita] of TABLA) {
+    // Hacia arriba la corrección va topada al 20 %, que es criterio nuestro y
+    // no de FEDIAF: un perro muy delgado suele estarlo por una enfermedad.
+    let esperado = PESO / (1 + desvio);
+    if (esperado > PESO * 1.20) esperado = PESO * 1.20;
+    expect(pesoIdealDesdeBcs(PESO, bcs),
+           `BCS ${bcs} (FEDIAF Tabla VII-2: «${rango}», ${cita})`)
+      .toBeCloseTo(esperado, 2);
+  }
+});
+
+test("y si el BCS 9 volviera a la recta, se vería", () => {
+  // Con el fallo puesto: 20/1,40 = 14,29 contra 20/1,45 = 13,79. Medio kilo
+  // más de peso objetivo, o sea más kcal justo para el perro que peor lo lleva.
+  expect(pesoIdealDesdeBcs(20, 9)).not.toBeCloseTo(20 / 1.40, 2);
+  expect(pesoIdealDesdeBcs(20, 9)).toBeCloseTo(20 / 1.45, 2);
 });
 
 test("y es EXACTAMENTE el mismo número que daban los cinco escalones", () => {
@@ -46,11 +88,21 @@ test("y es EXACTAMENTE el mismo número que daban los cinco escalones", () => {
     if (ideal > peso * 1.20) ideal = peso * 1.20;
     return Math.round(ideal * 100) / 100;
   };
+  // ⚠️ CUATRO DE LOS CINCO. El quinto -- «Obeso», que es un BCS 9 -- SÍ cambió
+  // el 9 de septiembre de 2026, y con motivo: el 40 % de la recta no estaba en
+  // ninguna fuente y el 45 % es la fila «9. Grossly Obese» de la Tabla VII-2 de
+  // FEDIAF. Se cambió en las tres copias el mismo día. El aviso de arriba sigue
+  // valiendo para todo lo demás: no se toca esta escala sin una fuente.
   for (const peso of [1.5, 6, 17.4, 25, 40, 62.3]) {
-    for (const idx of [0, 1, 2, 3, 4]) {
+    for (const idx of [0, 1, 2, 3]) {
       expect(pesoIdealDesdeBcs(peso, bcsDesdeCondicion(idx)),
              `peso ${peso}, escalón ${idx}`).toBe(VIEJA(peso, idx));
     }
+    // Y el quinto, con el número nuevo y explicado.
+    const conFuente = Math.round((peso / 1.45) * 100) / 100;
+    expect(pesoIdealDesdeBcs(peso, bcsDesdeCondicion(4)),
+           `peso ${peso}, escalón «Obeso»`).toBe(conFuente);
+    expect(pesoIdealDesdeBcs(peso, 9)).toBeLessThan(VIEJA(peso, 4) + 1e-9);
   }
 });
 
