@@ -70,6 +70,38 @@ test.describe("el resultado se lee en dos pestañas", () => {
     await expect(page.getByText(/Congelación/)).toHaveCount(0);
   });
 
+  // ─── «ESTO ES TODO LO QUE COME», Y VA EL PRIMERO ──────────────────────────
+  //
+  // ⚠️ AÑADIDO (9 septiembre) al leer entero el cap.3 de SACN5, que cita el
+  // AAHA Compliance Study: «55% of pet owners who fed a therapeutic food also
+  // supplemented the recommended food with other foods or treats. The primary
+  // reason cited by clients was that THEY DIDN'T KNOW NOT TO.»
+  //
+  // Más de la mitad rompe la dieta calculada sin saberlo, y el motivo número
+  // uno es que nadie se lo dijo. El motor cubre 43 requisitos gramo a gramo y
+  // no modela premios: si este aviso desaparece o se hunde debajo de los demás,
+  // la app vuelve a callarse la causa documentada de que una ración calculada
+  // no haga lo que dice.
+  //
+  // Se comprueba que ESTÁ y que va ANTES que el de congelación, porque el mismo
+  // capítulo mide que el dueño recuerda «as little as half» de lo que se le
+  // cuenta: lo que va al final no se lee.
+  test("«Cómo darlo» avisa de que no se añade nada, y lo dice lo primero", async ({ page }) => {
+    await generarMenu(page);
+    await page.getByRole("button", { name: "Cómo darlo" }).click();
+
+    const aviso = page.getByText("Esto es todo lo que come");
+    await expect(aviso).toBeVisible();
+    await expect(page.getByText(/con esto y\s+nada más/)).toBeVisible();
+
+    const congelacion = page.getByText("Congelación").first();
+    await expect(congelacion).toBeVisible();
+
+    const yAviso = (await aviso.boundingBox()).y;
+    const yCongelacion = (await congelacion.boundingBox()).y;
+    expect(yAviso, "el aviso de no añadir nada va por encima del de congelación").toBeLessThan(yCongelacion);
+  });
+
   test("«Cómo darlo» tiene la transición, la congelación y cómo se prepara cada cosa", async ({ page }) => {
     await generarMenu(page);
     await page.getByRole("button", { name: "Cómo darlo" }).click();
@@ -234,3 +266,4 @@ test.describe("el resultado se lee en dos pestañas", () => {
     return i;
   }
 });
+

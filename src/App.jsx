@@ -2364,6 +2364,40 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               </p>
             </div>
           )}
+            {/* ⚠️ ESTO VA EL PRIMERO, Y NO ES UNA OPINIÓN DE DISEÑO (9 septiembre).
+                SACN5 5ª ed., cap.3, citando el AAHA Compliance Study, literal:
+
+                  «55% of pet owners who fed a therapeutic food also supplemented
+                   the recommended food with other foods or treats. The primary
+                   reason cited by clients was that THEY DIDN'T KNOW NOT TO.»
+
+                Más de la mitad rompe la dieta calculada sin saber que la está
+                rompiendo, y el motivo número uno es que nadie se lo dijo. El
+                motor calcula gramo a gramo para cubrir 43 requisitos y no modela
+                premios ni lo que cae de la mesa — eso está declarado como
+                limitación en el repo del motor —, así que este aviso no es letra
+                pequeña: es la causa documentada de que una ración calculada no
+                haga lo que dice.
+
+                El mismo capítulo mide que el dueño recuerda «as little as half»
+                de lo que se le cuenta, así que va corto, arriba y en su propio
+                recuadro, no dentro de otro párrafo. */}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF0F4", border: "1.5px solid #FFC9D8" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle size={14} style={{ color: ROSA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: ROSA, fontFamily: "monospace" }}>
+                  Esto es todo lo que come
+                </p>
+              </div>
+              <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Las cantidades están calculadas para que {nombrePerro} cubra todo lo que necesita <b>con esto y
+                nada más</b>. Un premio, un trozo de queso o las sobras de la cena cambian el resultado, aunque
+                parezcan poca cosa.
+                <br /><br />
+                Si le das premios, dínoslo y los contamos: <b>más de la mitad de la gente que sigue una dieta
+                calculada le añade cosas por encima</b>, y casi siempre porque nadie le dijo que no lo hiciera.
+              </p>
+            </div>
             <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
               <div className="flex items-center gap-1.5 mb-1">
                 <AlertCircle size={14} style={{ color: VIOLETA }} />
