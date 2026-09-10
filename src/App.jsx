@@ -1320,6 +1320,17 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // taurina. Dos de ellos describen algo que pasa POR CULPA del cambio
       // de dieta que hace esta app.
       avisosPatologia: data.avisos_patologia || [],
+      // ⚠️ AÑADIDO (10 septiembre) — LAS NOTAS QUE SOLO VE EL VETERINARIO.
+      // El motor calculaba estas tres y NO salían de la API: `revisar_seguridad`
+      // devuelve dos listas y `main.py` pedía solo la primera, así que la
+      // segunda se construía y se tiraba (desde agosto, con el aviso de la
+      // vitamina A dentro). Ahora salen por `avisos_profesional`, que es una
+      // clave APARTE de `problemas_seguridad` a propósito: Elena, el 10 de
+      // septiembre, «esos avisos nunca tiene que verlos un usuario, solo un
+      // veterinario». No son incumplimientos y ninguna se arregla cambiando el
+      // menú: son lecturas que dicen qué mirar (el calcio al 99 % de su techo,
+      // el cordero y la taurina, la vitamina A viniendo de tres sitios).
+      avisosProfesional: data.avisos_profesional || [],
       // ⚠️ AÑADIDO — mismo caso que problemasSeguridad: el servidor ya
       // mandaba esto y no se leía en ningún sitio. Explica por qué a
       // este menú le falta una categoría entera (típicamente vísceras o
@@ -1955,6 +1966,8 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // exceso, límites por patología...) en cada respuesta, y nunca se
   // mostraban en ningún sitio -- se perdían en silencio.
   const problemasSeguridad = problemasSeguridadPorMenu[tabActiva] || menu.problemasSeguridad || [];
+  // Las notas de lectura del profesional viajan con el menú, igual que la ficha.
+  const avisosProfesional = menu.avisosProfesional || [];
   // El aviso de composición va por menú igual que los de seguridad: en
   // una rotación, un menú puede llevar vísceras y otro no.
   // Se usa `??` y no `||` a propósito: tras editar, el servidor manda
@@ -2338,6 +2351,31 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               Los límites duros —vitamina D, yodo, selenio, mercurio y tiaminasa— ya están
               dentro del cálculo. Esto es criterio por encima de ellos: si no te encaja,
               cambia el alimento o los gramos.
+            </p>
+          </div>
+        )}
+
+        {/* ⚠️ LAS NOTAS DE LECTURA, Y SOLO PARA EL PROFESIONAL (10 septiembre).
+            Van aparte de las «notas de manejo» de arriba porque son otra cosa:
+            aquéllas se hacen (comprar el pescado frío, no dar uva) y éstas se
+            interpretan. Ninguna es un incumplimiento -- el menú está verde -- y
+            ninguna se arregla cambiando el menú: dicen qué mirar. Al dueño no
+            se le enseñan, por petición expresa: le sobran y algunas asustan. */}
+        {vistaActiva === "comoDarlo" && enModoProfesional && avisosProfesional.length > 0 && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: "#FFFFFF", border: "1px solid #E3DAF0" }}>
+            <p className="text-[11px] tracking-[0.1em] uppercase mb-1.5"
+               style={{ color: MALVA, fontFamily: "monospace" }}>
+              {avisosProfesional.length === 1 ? "Nota de lectura" : `${avisosProfesional.length} notas de lectura`}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {avisosProfesional.map((p, i) => (
+                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{p}</p>
+              ))}
+            </div>
+            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Ninguna de éstas es un incumplimiento: el menú cumple los 43 requisitos.
+              Son lecturas de la ración que la fuente enuncia sin darles cifra, así que
+              el motor no puede aplicarlas solo.
             </p>
           </div>
         )}
