@@ -3907,7 +3907,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                     className="w-full px-3 py-2 rounded-lg text-sm"
                     style={{ border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }}
                   >
-                    <option value="cachorro_joven">Cachorro (hasta 2 meses)</option>
+                    <option value="cachorro_joven">Cachorro (menos de 14 semanas)</option>
                     <option value="cachorro_crecimiento">Cachorro (en crecimiento)</option>
                     <option value="adulto">Adulto</option>
                     <option value="senior">Senior</option>
