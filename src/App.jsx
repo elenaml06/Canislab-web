@@ -1306,6 +1306,20 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // sola, hígado en exceso, patologías...) en cada respuesta, pero
       // nunca se leían aquí -- se perdían sin que nadie los viera.
       problemasSeguridad: data.problemas_seguridad || [],
+      // ⚠️ AÑADIDO (10 septiembre) — EXACTAMENTE EL MISMO CASO QUE EL DE
+      // ARRIBA, y por eso duele: el servidor manda `avisos_patologia` con
+      // CADA menú desde el 29 de agosto (lo monta `avisos_de_patologias`
+      // en el motor, y desde el 8 de septiembre incluye los `avisos_extra`)
+      // y esta función no lo recogía, así que se perdían aquí mismo, dos
+      // líneas por debajo del comentario que cuenta que ya había pasado.
+      // Son 20 avisos en 12 patologías, y dicen justo lo que el motor NO
+      // puede hacer solo: que al perro con bromuro potásico hay que medirle
+      // el bromo en sangre DESPUÉS de cambiarle la dieta, que el mitotano
+      // se absorbe treinta veces mejor con comida, que el zinc oral no se
+      // da con la comida, contra qué número se lee una analítica de
+      // taurina. Dos de ellos describen algo que pasa POR CULPA del cambio
+      // de dieta que hace esta app.
+      avisosPatologia: data.avisos_patologia || [],
       // ⚠️ AÑADIDO — mismo caso que problemasSeguridad: el servidor ya
       // mandaba esto y no se leía en ningún sitio. Explica por qué a
       // este menú le falta una categoría entera (típicamente vísceras o
@@ -2907,6 +2921,27 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   return `El menú de ${nombrePerro} está ajustado teniendo en cuenta ${condicion}. Son ajustes orientativos en la buena dirección, pero su veterinario es quien mejor puede valorar si encaja con su caso concreto — enséñale este menú antes de empezar.`;
                 })()}
               </p>
+              {/* ⚠️ AÑADIDO (10 septiembre) — LO QUE EL MOTOR NO PUEDE HACER SOLO.
+                  El texto de arriba dice «está ajustado teniendo en cuenta X» y se
+                  queda ahí. Lo que faltaba es lo concreto: que si el perro toma
+                  bromuro potásico hay que medirle el bromo en sangre después de
+                  este cambio de dieta, que el mitotano va con comida, que el zinc
+                  oral NO va con comida, contra qué número se lee una analítica de
+                  taurina. El servidor los manda con cada menú y no los leía nadie.
+                  Van AQUÍ y no en un panel propio a propósito: este panel ya sale
+                  exactamente cuando hay patología, y un aviso más entre los avisos
+                  se lee; un panel más se cierra. */}
+              {(menu?.avisosPatologia || []).length > 0 && (
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {menu.avisosPatologia.map((texto, i) => (
+                    <li key={i} className="text-xs flex gap-1.5 items-start"
+                        style={{ color: TINTA, fontFamily: fontBody }}>
+                      <span aria-hidden="true" style={{ color: ROSA, flexShrink: 0 }}>·</span>
+                      <span>{String(texto).split("||").map((t) => t.trim()).filter(Boolean).join(" ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         )}

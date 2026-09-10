@@ -187,6 +187,11 @@ export function crearFakeSupabase(opciones = {}) {
     // exceso de hueso, hígado...). Vacío por defecto: las pruebas que no van
     // de esto siguen viendo el menú limpio de siempre.
     problemasSeguridad: [],
+    // ⚠️ AÑADIDO (10 septiembre) — los avisos de patología que la API manda
+    // con CADA menú (`avisos_patologia`). Se pueden pedir desde la prueba para
+    // comprobar que llegan a la pantalla: el servidor de verdad los mandaba
+    // desde el 29 de agosto y la app los tiraba en `respuestaApiAMenu`.
+    avisosPatologia: [],
     // El caso de la pancreatitis: solo sale en el último peldaño.
     soloSaleEnElUltimoPeldano: false,
     // Lo que la cuenta tenga guardado de su clínica (y de su nº de
@@ -350,6 +355,8 @@ export function crearFakeSupabase(opciones = {}) {
       estado.menusDistintos = cfg.menusDistintos === true;
       estado.problemasSeguridad = Array.isArray(cfg.problemasSeguridad)
         ? cfg.problemasSeguridad.slice() : [];
+      estado.avisosPatologia = Array.isArray(cfg.avisosPatologia)
+        ? cfg.avisosPatologia.slice() : [];
       estado.soloSaleEnElUltimoPeldano = cfg.soloSaleEnElUltimoPeldano === true;
       estado.sinColumnasDeClinica = cfg.sinColumnasDeClinica === true;
       // ⚠️ LEER NO PUEDE BORRAR (8 septiembre). `leer()` hace un POST con el
@@ -504,6 +511,7 @@ export function crearFakeSupabase(opciones = {}) {
             datos_incompletos: {}, datos_dudosos: {},
           },
       problemas_seguridad: estado.problemasSeguridad,
+      avisos_patologia: estado.avisosPatologia,
     };
 
     if (estado.colgarGenerador && (ruta === "/menu/v2" || ruta === "/menu/semana")) {
