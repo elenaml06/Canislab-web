@@ -77,6 +77,70 @@ test.describe("la app y el motor dicen lo mismo de cada patología", () => {
     ).toEqual([]);
   });
 
+  // ─── Y LA DIRECCIÓN CONTRARIA, QUE ES LA QUE FALTABA ─────────────────────
+  //
+  // ⚠️ AÑADIDO EL 10 DE SEPTIEMBRE. La prueba de arriba mira «app → motor»: que
+  // la app no ofrezca patologías inventadas. Nadie miraba «motor → app», y ahí
+  // había DIEZ: patologías que el motor conoce y para las que **no hay casilla
+  // en ninguna pantalla**, ni la del dueño ni la del veterinario. Siete de ellas
+  // con `formulable: true`, o sea que el motor les daría menú hoy mismo.
+  //
+  // Es el mismo hueco que los `avisos_patologia`, que llevaban desde el 29 de
+  // agosto llegando con cada menú y se tiraban: trabajo hecho en el motor que
+  // no llega a nadie, y nada que lo diga.
+  //
+  // Y una de las once cambia menús de verdad: la app manda la clave genérica
+  // `cardiopatia` (sodio ≤739, que es la cifra del estadio B2) para CUALQUIER
+  // cardiópata, mientras el motor tiene los cinco estadios de la escala ACVIM
+  // con 739 / 625 / 480 y dos sin restricción. Un perro en estadio C recibe hoy
+  // el tope del B2.
+  //
+  // LA LISTA DE ABAJO SOLO PUEDE ENCOGER. Cada entrada lleva su motivo, y la
+  // prueba falla también si una CADUCA -- si la app empieza a ofrecer algo que
+  // sigue declarado aquí --, porque una excepción caducada es una alarma
+  // apagada. Ver `FRONTEND_VS_MOTOR.md` en el repo del motor.
+  const NO_LAS_OFRECE_LA_APP_TODAVIA = {
+    cardiopatia_a: "Estadio ACVIM A. Falta decidir si se pregunta el estadio al marcar «Cardiopatía» y a quién (Elena, 10-sep).",
+    cardiopatia_b1: "Estadio ACVIM B1. Misma decisión que el A.",
+    cardiopatia_b2: "Estadio ACVIM B2. Es la cifra que la app aplica hoy a todos con la clave genérica.",
+    cardiopatia_c: "Estadio ACVIM C (sodio 625). Hoy un perro en C recibe 739.",
+    cardiopatia_d: "Estadio ACVIM D (sodio 480). Hoy un perro en D recibe 739.",
+    raza_predispuesta_cobre: "Igual: solo avisos. Se creó el 7-sep para separarla de la hepatopatía diagnosticada.",
+    urolitos_fosfato_calcico: "Aplica cinco topes y el ratio Ca:P. Falta decidir si va en la lista del dueño como el oxalato, o solo en la del veterinario.",
+  };
+
+  test("toda patología formulable del motor se puede marcar en la app", () => {
+    const motor = tablaDelMotor();
+    const enLaApp = patologiasQueOfreceLaApp();
+
+    const sinCasilla = Object.keys(motor)
+      .filter((k) => motor[k]?.formulable && !enLaApp.has(k))
+      .filter((k) => !(k in NO_LAS_OFRECE_LA_APP_TODAVIA))
+      .sort();
+
+    expect(sinCasilla,
+      "el motor formula estas patologías y la app no tiene casilla para " +
+      "ninguna, así que nadie puede pedirlas: ni el dueño ni el veterinario. " +
+      "Es trabajo del motor que no llega a nadie, que es exactamente lo que " +
+      "pasó con los avisos de patología. O se ofrecen, o se declaran en " +
+      "NO_LAS_OFRECE_LA_APP_TODAVIA con el motivo"
+    ).toEqual([]);
+  });
+
+  test("no queda ninguna excepción caducada en la lista de las que no se ofrecen", () => {
+    const motor = tablaDelMotor();
+    const enLaApp = patologiasQueOfreceLaApp();
+    const caducadas = Object.keys(NO_LAS_OFRECE_LA_APP_TODAVIA)
+      .filter((k) => enLaApp.has(k) || !(k in motor))
+      .sort();
+
+    expect(caducadas,
+      "estas están declaradas como «la app todavía no las ofrece» y o bien ya " +
+      "las ofrece, o bien ya no existen en el motor. Quítalas de la lista: una " +
+      "excepción caducada deja de vigilar y no avisa a nadie"
+    ).toEqual([]);
+  });
+
   test("`segura` de la app es `formulable` del motor, patología por patología", () => {
     const motor = tablaDelMotor();
     const desacuerdos = [];
