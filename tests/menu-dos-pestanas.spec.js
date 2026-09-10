@@ -265,5 +265,24 @@ test.describe("el resultado se lee en dos pestañas", () => {
     while (i < a.length && a[i] === b[i]) i += 1;
     return i;
   }
-});
 
+  // ⚠️ AÑADIDO (10 septiembre) — LA HIGIENE DE LA CASA.
+  // El panel de congelación protege AL PERRO: congelar mata los parásitos. Este
+  // protege a quien vive con él, y la app no lo decía en ninguna parte. SACN5
+  // cap.56: «Dogs consuming such foods shed bacterial pathogens at a much higher
+  // rate than those consuming conventionally cooked commercial foods».
+  // Se vigila igual que el resto de esta pantalla: que esté en SU pestaña y no
+  // en la otra, porque un bloque que se queda dentro de un condicional que ya no
+  // se cumple desaparece sin dar ningún error.
+  test("«Cómo darlo» dice también la higiene de la casa, y no solo la del alimento", async ({ page }) => {
+    await generarMenu(page);
+    await page.getByRole("button", { name: /Cómo darlo/ }).click();
+    await expect(page.getByText("Higiene en casa")).toBeVisible();
+    await expect(page.getByText(/excreta más bacterias/)).toBeVisible();
+    // Y lo que de verdad hay que hacer, que es lo que se olvida.
+    await expect(page.getByText(/Lávate las manos/)).toBeVisible();
+    // En la pestaña del menú no pinta nada.
+    await page.getByRole("button", { name: /^El menú/ }).click();
+    await expect(page.getByText("Higiene en casa")).toHaveCount(0);
+  });
+});

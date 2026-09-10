@@ -2436,6 +2436,38 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 no hayan pasado los tres días.
               </p>
             </div>
+            {/* ⚠️ AÑADIDO (10 septiembre) — LA HIGIENE DE LA CASA, QUE NO ES LO
+                MISMO QUE LA DEL ALIMENTO.
+                El panel de arriba protege AL PERRO: congelar mata los parásitos.
+                Esto protege a quien vive con él, y es otra cosa que la app no
+                decía en ninguna parte. SACN5 cap.56, literal: «Dogs consuming
+                such foods SHED BACTERIAL PATHOGENS AT A MUCH HIGHER RATE than
+                those consuming conventionally cooked commercial foods» (Weese y
+                Armstrong, 2006), con Salmonella, Campylobacter, Escherichia y
+                Yersinia cultivadas en comida cruda casera y comercial.
+                No es un argumento contra el crudo ni cambia ningún menú: es
+                información que la fuente da y que quien elige alimentar así
+                tiene derecho a tener. Va aquí, pegado a la congelación, porque
+                es donde ya se habla de manipular la comida. */}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle size={14} style={{ color: VIOLETA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  Higiene en casa
+                </p>
+              </div>
+              <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Un perro que come crudo <b>excreta más bacterias</b> que uno que come pienso — salmonela,
+                campilobacter y similares —, aunque él esté perfectamente sano y no le pase nada. Congelar
+                bien lo protege a él de los parásitos; esto es lo otro, y es para las personas de la casa.
+                <br /><br />
+                Lávate las manos después de darle de comer y de recoger las heces, limpia el cuenco y la
+                superficie donde preparas, y no dejes que te lama la cara justo después de comer. Si en casa
+                hay <b>bebés, embarazadas, personas mayores o alguien con las defensas bajas</b> (quimioterapia,
+                trasplante, tratamiento inmunosupresor), esto importa bastante más y merece hablarlo con
+                vuestro médico.
+              </p>
+            </div>
           {/* ⚠️ AÑADIDO — CÓMO PREPARAR CADA ALIMENTO, TODO JUNTO.
               Esto mismo sigue estando detrás del icono de cubiertos de
               cada fila, y no es un descuido: ahí sirve para mirar UN
