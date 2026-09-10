@@ -87,6 +87,76 @@ function cifra(v) {
   return String(Math.round(n * 100) / 100).replace('.', ',')
 }
 
+// De dónde sale cada extremo de la ventana, en cristiano. La clave viene del
+// backend (`minimo_fediaf:Fósforo`, `legal_ue:24_cardiaca:sodio`...) y aquí solo
+// se traduce: los NÚMEROS no se tocan, que es la regla de este archivo entero.
+function deDonde(clave) {
+  if (!clave) return null
+  if (clave.startsWith('minimo_fediaf:')) return { texto: 'mínimo de FEDIAF', ley: false }
+  if (clave.startsWith('maximo_fediaf:')) return { texto: 'máximo de FEDIAF', ley: false }
+  if (clave.startsWith('legal_ue:')) return { texto: 'techo LEGAL, Reglamento (UE) 2020/354', ley: true }
+  if (clave.startsWith('seguridad:')) return { texto: 'tope de seguridad crónica', ley: true }
+  if (clave === 'sin_techo') return { texto: 'nadie pone techo por arriba', ley: false }
+  if (clave === 'sin_suelo') return { texto: 'FEDIAF no pone mínimo a este nutriente', ley: false }
+  return { texto: clave, ley: false }
+}
+
+// ─── LA VENTANA: HASTA DÓNDE SE PUEDE MOVER ESTA CIFRA ──────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (10 septiembre): «tenemos que estipular qué porcentajes
+// puede variar el veterinario y cuáles NO, y hasta qué punto o qué techo,
+// dentro de cada patología, de cada caso concreto».
+//
+// El bloque `margen_profesional` que llega del backend lo trae ya resuelto, con
+// la PROCEDENCIA de cada extremo, y por eso este componente no calcula nada:
+// pintar aquí un suelo o un techo sería la tercera copia de la misma tabla, que
+// es como se desincronizó la del `POST /menu`.
+//
+// Y hay que decir las dos cosas distintas que son los dos extremos, porque no
+// se parecen: bajar del suelo es **posible** y necesita firma (es la frontera de
+// VETERINARIOS.md); pasar de un techo legal **no lo puede hacer nadie**.
+function Ventana({ m, unidad }) {
+  if (!m) return null
+  const suelo = deDonde(m.suelo_de_donde)
+  const techo = deDonde(m.techo_de_donde)
+  return (
+    <div className="rounded-lg px-2.5 py-2 mt-1.5" style={{ background: '#F7F4FC' }}>
+      <p className="text-[10px] tracking-[0.1em] uppercase mb-1"
+         style={{ color: VIOLETA, fontFamily: fontMono }}>Hasta dónde se puede mover</p>
+      <p className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+        {m.suelo === null || m.suelo === undefined
+          ? <>Por abajo, {suelo && suelo.texto}. </>
+          : <>Por abajo, <b>{cifra(m.suelo)} {unidad}</b> ({suelo && suelo.texto}). </>}
+        {m.techo === null || m.techo === undefined
+          ? <>Por arriba, {techo && techo.texto}.</>
+          : <>Por arriba, <b>{cifra(m.techo)} {unidad}</b> ({techo && techo.texto}).</>}
+      </p>
+      {m.bajo_el_suelo_necesita_firma && (
+        <p className="text-[11px] leading-snug mt-1" style={{ color: ROSA, fontFamily: fontBody }}>
+          Por debajo de {cifra(m.suelo)} deja de ser una dieta completa: es una
+          prescripción, y esa la firmas tú.
+        </p>
+      )}
+      {techo && techo.ley && m.techo !== null && m.techo !== undefined && (
+        <p className="text-[11px] leading-snug mt-1" style={{ color: ROSA, fontFamily: fontBody }}>
+          Ese techo no lo pasa nadie, ni tú ni el motor.
+        </p>
+      )}
+      {/* ⚠️ LO QUE NO SE PUEDE AFIRMAR, y por eso se dice. El Reglamento (UE)
+          2020/354 NO da un rango de maniobra por nutriente: da un techo o un
+          suelo por objetivo. Lo único que pone como rango es el TIEMPO, y su
+          ±15 % es tolerancia analítica de etiquetado, no margen clínico.
+          Enseñar la ventana como «puedes moverte libremente aquí dentro» sería
+          afirmar algo que ninguna fuente dice -- ver P-03 de
+          PREGUNTAS_ABIERTAS.md, que sigue abierta. */}
+      <p className="text-[10px] leading-snug mt-1" style={{ color: MALVA, fontFamily: fontBody }}>
+        Son los bordes, no una recomendación de moverse dentro de ellos: ninguna
+        fuente publica un rango de maniobra por nutriente.
+      </p>
+    </div>
+  )
+}
+
 function Limite({ l, esTope }) {
   const referencia = esTope ? l.minimo_fediaf_adulto : l.maximo_fediaf_adulto
   // ⚠️ EL MARGEN ES LA PREGUNTA DE VERDAD («de qué margen puede salir»).
@@ -109,6 +179,7 @@ function Limite({ l, esTope }) {
           )}
         </p>
       )}
+      <Ventana m={l.margen_profesional} unidad={l.unidad} />
       {l.fuente && (
         <p className="text-[10px] mt-1 leading-snug" style={{ color: MALVA, fontFamily: fontMono }}>
           {l.fuente}
@@ -173,6 +244,20 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
           )}
           {p.topes.map((l) => <Limite key={`t-${l.nutriente}`} l={l} esTope />)}
           {p.suelos.map((l) => <Limite key={`s-${l.nutriente}`} l={l} esTope={false} />)}
+          {/* ─── EL SEGUNDO ESCALÓN, QUE NO SE VEÍA ────────────────────────
+              ⚠️ AÑADIDO (10 septiembre). Existen desde el 8 y no salían por
+              ninguna puerta: la grasa de la pancreatitis baja de 37,5 a 25 si
+              además hay obesidad o hipertrigliceridemia, y quien leía la ficha
+              veía 37,5 y creía que era el único número. Mismo hueco que los
+              ocho avisos_extra. */}
+          {(p.topes_si_ademas || []).map((l) => (
+            <div key={`c-${l.nutriente}`}>
+              <p className="text-[11px] leading-snug mb-1" style={{ color: VIOLETA, fontFamily: fontBody }}>
+                Y si además marcas {(l.requiere || []).join(' o ')}:
+              </p>
+              <Limite l={l} esTope />
+            </div>
+          ))}
 
           {/* ─── QUÉ ES INAMOVIBLE Y QUÉ DECIDE ÉL ────────────────────────
               ⚠️ PEDIDO EXPRESO (8 septiembre): «que le diga las

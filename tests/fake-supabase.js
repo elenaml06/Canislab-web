@@ -712,6 +712,7 @@ export function crearFakeSupabase(opciones = {}) {
               nutriente: "fosforo", unidad: "mg", valor: 1200,
               minimo_fediaf_adulto: 1160, maximo_fediaf_adulto: null,
               margen_pct: 3.4,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 1160.0, suelo_de_donde: "minimo_fediaf:Fósforo", techo: 1420.45, techo_de_donde: "legal_ue:10_renal:fosforo", bajo_el_suelo_necesita_firma: true },
               fuente: "Freeman LM, dvm360 2009; WSAVA; IRIS",
               por_que: "Las dietas renales comerciales aportan 480-1000 mg/1000 kcal.",
             }],
@@ -745,6 +746,7 @@ export function crearFakeSupabase(opciones = {}) {
             topes: [{
               nutriente: "fosforo", unidad: "mg", valor: 1200,
               minimo_fediaf_adulto: 1160, maximo_fediaf_adulto: null, margen_pct: 3.4,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 1160.0, suelo_de_donde: "minimo_fediaf:Fósforo", techo: 1420.45, techo_de_donde: "legal_ue:10_renal:fosforo", bajo_el_suelo_necesita_firma: true },
               fuente: "IRIS 3-4", por_que: "Lo más estricto sin romper FEDIAF.",
             }],
             suelos: [],
@@ -759,8 +761,11 @@ export function crearFakeSupabase(opciones = {}) {
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
-              nutriente: "sodio", unidad: "mg", valor: 739,   // 8 sep: 900 -> 739, el techo legal del Reg. (UE) 2020/354 entrada 24
-              minimo_fediaf_adulto: 300, maximo_fediaf_adulto: null, margen_pct: 200,
+              // 8 sep: 900 -> 739 (el techo legal del Reg. (UE) 2020/354 entrada 24).
+              // 10 sep: 739 -> 738,6, porque 739 redondeaba ese techo legal HACIA ARRIBA.
+              nutriente: "sodio", unidad: "mg", valor: 738.6,
+              minimo_fediaf_adulto: 290, maximo_fediaf_adulto: null, margen_pct: 154.7,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 290.0, suelo_de_donde: "minimo_fediaf:Sodio", techo: 738.64, techo_de_donde: "legal_ue:24_cardiaca:sodio", bajo_el_suelo_necesita_firma: true },
               fuente: "ACVIM 2019", por_que: "Restricción moderada en B2.",
             }],
             suelos: [],
@@ -777,14 +782,29 @@ export function crearFakeSupabase(opciones = {}) {
               nutriente: "grasa", unidad: "g", valor: 37.5,   // 8 sep: 20 (Merck) -> 37,5 (SACN5 Tabla 67-3), por la regla de fuentes del motor
               minimo_fediaf_adulto: 13.75, maximo_fediaf_adulto: null,
               margen_pct: 45.5,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 13.75, suelo_de_donde: "minimo_fediaf:Grasa_total", techo: null, techo_de_donde: "sin_techo", bajo_el_suelo_necesita_firma: true },
               fuente: "Merck Veterinary Manual",
               por_que: "Literal de la fuente: «feeding a low-fat diet».",
             }, {
               nutriente: "proteina", unidad: "g", valor: 75,
               minimo_fediaf_adulto: 52.1, maximo_fediaf_adulto: null,
               margen_pct: 44.0,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 52.1, suelo_de_donde: "minimo_fediaf:Proteína_total", techo: null, techo_de_donde: "sin_techo", bajo_el_suelo_necesita_firma: true },
               fuente: "SACN5 5ª ed., cap. 67, Tabla 67-3",
               por_que: "«15 to 30 %» de materia seca.",
+            }],
+            // El segundo escalón: SACN5 Tabla 67-3 baja la grasa a 25 si el
+            // perro además es obeso o hipertrigliceridémico. Lo sirve la API
+            // desde el 10 de septiembre y aquí no estaba, así que la pantalla
+            // se comprobaba contra una ficha con un solo número.
+            topes_si_ademas: [{
+              nutriente: "grasa", unidad: "g", valor: 25,
+              minimo_fediaf_adulto: 13.75, maximo_fediaf_adulto: null,
+              margen_pct: 81.8,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 13.75, suelo_de_donde: "minimo_fediaf:Grasa_total", techo: null, techo_de_donde: "sin_techo", bajo_el_suelo_necesita_firma: true },
+              requiere: ["obesidad", "hiperlipidemia"],
+              fuente: "SACN5 5ª ed., cap. 67, Tabla 67-3",
+              por_que: "«<=10% for obese and/or hypertriglyceridemic dogs».",
             }],
             suelos: [],
             aviso_profesional: null, aviso_profesional_crecimiento: null,

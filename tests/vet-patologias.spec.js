@@ -164,6 +164,64 @@ test("al marcar una patología ve el tope, qué no se toca y qué decide él", a
   await expect(page.getByText(/POR DEBAJO de algún mínimo de FEDIAF/)).toBeVisible();
 });
 
+// ─── HASTA DÓNDE PUEDE MOVER CADA CIFRA ─────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (10 septiembre): «tenemos que estipular qué porcentajes
+// puede variar el veterinario y cuáles NO, y hasta qué punto o qué techo,
+// dentro de cada patología, de cada caso concreto».
+//
+// La ventana la calcula el backend y la sirve `GET /patologias` en el bloque
+// `margen_profesional`, con la PROCEDENCIA de cada extremo. Aquí se comprueba
+// que llega a la pantalla, porque un margen que solo vive en un JSON del
+// servidor no le sirve a quien firma la pauta -- es el hueco de los ocho
+// `avisos_extra`, escritos con su fuente y sin llegar a nadie.
+test("al marcar una patología ve hasta dónde se puede mover el tope, y de dónde sale cada extremo", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+
+  await page.getByLabel("Buscar patología").fill("renal");
+  await page.getByText("Insuficiencia renal crónica", { exact: true }).click();
+
+  await expect(page.getByText("Hasta dónde se puede mover")).toBeVisible();
+  // Los dos extremos, cada uno con de dónde sale. El de abajo es el mínimo de
+  // FEDIAF; el de arriba, en el renal, es LEY.
+  await expect(page.getByText(/1160 mg.*mínimo de FEDIAF/)).toBeVisible();
+  await expect(page.getByText(/1420,45 mg.*Reglamento \(UE\) 2020\/354/)).toBeVisible();
+  // Y las dos frases que NO dicen lo mismo: bajar del suelo se puede y se
+  // firma; pasar del techo legal no lo puede hacer nadie.
+  await expect(page.getByText(/Por debajo de 1160 deja de ser una dieta completa/)).toBeVisible();
+  await expect(page.getByText(/Ese techo no lo pasa nadie, ni tú ni el motor/)).toBeVisible();
+});
+
+// ⚠️ Y LO QUE LA PANTALLA NO PUEDE AFIRMAR. El Reglamento (UE) 2020/354 NO da
+// un rango de maniobra por nutriente: da un techo o un suelo por objetivo, y su
+// ±15 % es tolerancia analítica de etiquetado, no margen clínico. Enseñar la
+// ventana como «muévete libremente aquí dentro» sería inventarse una fuente.
+// Ver P-03 de PREGUNTAS_ABIERTAS.md, que sigue abierta.
+test("la ventana se enseña como los bordes, no como permiso para moverse dentro", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+  await page.getByLabel("Buscar patología").fill("renal");
+  await page.getByText("Insuficiencia renal crónica", { exact: true }).click();
+
+  await expect(page.getByText(
+    /Son los bordes, no una recomendación de moverse dentro de ellos/)).toBeVisible();
+});
+
+// ─── EL SEGUNDO ESCALÓN DE LA GRASA, QUE NO SE VEÍA ─────────────────────────
+//
+// El tope condicional existe en el motor desde el 8 de septiembre (SACN5 Tabla
+// 67-3 baja la grasa de 37,5 a 25 si el perro además es obeso o
+// hipertrigliceridémico) y no salía por ninguna puerta: quien leía la ficha
+// veía 37,5 y creía que era el único número.
+test("la pancreatitis enseña su segundo tope de grasa y con qué se activa", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+  await page.getByLabel("Buscar patología").fill("pancrea");
+  await page.getByText("Pancreatitis", { exact: true }).click();
+
+  await expect(page.getByText(/Grasa ≤ 37,5 g\/1000 kcal/)).toBeVisible();
+  await expect(page.getByText(/Y si además marcas obesidad o hiperlipidemia/)).toBeVisible();
+  await expect(page.getByText(/Grasa ≤ 25 g\/1000 kcal/)).toBeVisible();
+});
+
 // ⚠️ CORREGIDO (8 septiembre) — ESTE TEST USABA `artrosis` COMO EJEMPLO DE
 // «PATOLOGÍA SIN TOPES», Y ARTROSIS SÍ TIENE UNO.
 //
