@@ -26,6 +26,7 @@
 // paciente.
 import { useEffect, useState } from 'react'
 import { API_BASE, fetchConTimeout } from './api.js'
+import { useVocabulario } from './vocabulario.js'
 
 const VIOLETA = '#5A4088'
 const ROSA = '#FF6F91'
@@ -199,6 +200,69 @@ function Limite({ l, esTope }) {
   )
 }
 
+// ─── LO QUE EL MOTOR NO PUEDE SABER SOLO ────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (11 septiembre): «esto tiene que ser para TODO, razas,
+// tamaño, etapa, actividad, PREGUNTAS PARA LAS PATOLOGIAS DE VETERINARIOS,
+// todo....»
+//
+// De las 47 patologías, 24 son `solo_veterinario` y en ocho de ellas la cifra
+// que aplica el motor DEPENDE de un dato clínico que la app no pregunta: el
+// estadio IRIS decide el techo de fósforo, los triglicéridos bajan la grasa de
+// 37,5 a 25, el estadio ACVIM separa el B1 del B2. Mientras nadie pregunte eso,
+// la cifra se elige a ciegas — y quien firma la pauta es quien tiene el dato.
+//
+// ⚠️ Y ESTO NO ES UNA OPINIÓN DE PRODUCTO. Cada línea sale de la CITA de la
+// fuente de esa patología, en `quien_formula_cada_patologia.json`, que audita
+// el BLOQUE 79 del motor. Aquí no se escribe ni una: llegan por
+// `GET /vocabulario`, que es el mismo fichero. Copiarlas sería la segunda copia
+// de una tabla que ya tiene su auditor.
+//
+// ⚠️ LO QUE SE DICE ES QUE LA APP NO LO PREGUNTA, no que lo pregunte. Recoger
+// la respuesta sin que llegue al motor sería pedir un dato inútil, que es
+// exactamente lo contrario de la otra regla de Elena («TODOS LOS DATOS QUE
+// RECOJA LA APP TIENEN QUE LLEGAR DE ALGUNA MANERA AL MOTOR»). El motor aplica
+// hoy UNA cifra por patología, no una por estadio. Que llegue a aplicar varias
+// es una decisión clínica y está apuntada como pendiente.
+function LoQueFaltaPreguntar({ claves = [] }) {
+  const vocab = useVocabulario()
+  const porPatologia = vocab?.preguntas_por_patologia?.por_patologia
+  if (!porPatologia) return null
+
+  const conPregunta = (claves || [])
+    .map((k) => [k, porPatologia[k]])
+    .filter(([, d]) => d && (d.pregunta_que_falta || d.quien_puede_marcarla === 'solo_veterinario'))
+  if (conPregunta.length === 0) return null
+
+  return (
+    <div className="rounded-2xl px-4 py-4 mt-3"
+         style={{ background: '#FFF7E8', border: '1px solid #F5DFA8' }}>
+      <p className="text-[11px] tracking-[0.14em] uppercase mb-2"
+         style={{ color: '#B37A00', fontFamily: fontMono }}>Lo que el motor no puede saber solo</p>
+      {conPregunta.map(([clave, d]) => (
+        <div key={clave} className="mb-3 last:mb-0">
+          <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{d.nombre || clave}</p>
+          {d.quien_puede_marcarla === 'solo_veterinario' && (
+            <p className="text-[11px] leading-snug mt-0.5" style={{ color: '#7A5C00', fontFamily: fontBody }}>
+              Esta casilla la marca un veterinario: su cifra depende de un dato clínico
+              {d.que_dato ? ` (${d.que_dato})` : ''}.
+            </p>
+          )}
+          {d.pregunta_que_falta && (
+            <p className="text-[11px] leading-snug mt-1" style={{ color: TINTA, fontFamily: fontBody }}>
+              {d.pregunta_que_falta}
+            </p>
+          )}
+        </div>
+      ))}
+      <p className="text-[10px] leading-snug mt-1" style={{ color: '#7A5C00', fontFamily: fontBody }}>
+        La app todavía no hace estas preguntas, así que el motor aplica una sola cifra por
+        patología. Léelas antes de firmar: el dato lo tienes tú, no él.
+      </p>
+    </div>
+  )
+}
+
 /**
  * `claves` son las patologías tal como viajan al backend (ya resueltas a su
  * subtipo: `renal_avanzada`, `cardiopatia_b2`...), no las cabeceras de
@@ -341,6 +405,12 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
           )}
         </div>
       ))}
+
+      {/* Y al final, lo que el motor NO puede saber solo: las preguntas que la
+          app todavia no hace y de las que depende la cifra. Va aqui abajo a
+          proposito -- primero lo que el motor SI aplica, luego lo que le falta
+          --, y con su propio color, porque no es un tope: es un hueco. */}
+      <LoQueFaltaPreguntar claves={claves} />
     </div>
   )
 }

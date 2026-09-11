@@ -38,6 +38,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout } from "./api.js";
+import { useVocabulario, alLlegarVocabulario } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
@@ -701,10 +702,12 @@ const NIVELES_RESPALDO = [
 // Si falla, se devuelve null y quien lo use cae al respaldo. No se reintenta:
 // una lista de cinco etiquetas no justifica insistirle a un servidor dormido, y
 // el respaldo esta comprobado contra el motor por `tests/vocabulario.spec.js`.
-let _vocabularioPedido = null;
-
-// Lo que llega del motor SUSTITUYE a los respaldos de arriba, en su sitio.
+// ⚠️ LA PETICION VIVE EN `src/vocabulario.js` (11 septiembre), no aqui: la
+// necesitan los dos, esta pantalla para las listas de la ficha y
+// `topespatologia.jsx` para las preguntas de cada patologia, e importarla de
+// aqui seria un ciclo.
 //
+// Lo que queda en este archivo es SOLO instalar lo que llega en sus sitios.
 // Son variables de modulo y no estado de React a proposito: `razaDesdeNombre`,
 // `perfilDesdeSupabase` y el calculo del peso adulto se llaman FUERA de todo
 // componente, y un hook alli no sirve de nada. El re-render lo dispara
@@ -745,25 +748,7 @@ function instalarVocabulario(vocab) {
   return vocab;
 }
 
-function pedirVocabulario() {
-  if (!_vocabularioPedido) {
-    _vocabularioPedido = fetchConTimeout(`${API_BASE}/vocabulario`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then(instalarVocabulario)
-      .catch(() => null);
-  }
-  return _vocabularioPedido;
-}
-
-function useVocabulario() {
-  const [vocab, setVocab] = useState(null);
-  useEffect(() => {
-    let vivo = true;
-    pedirVocabulario().then((v) => { if (vivo) setVocab(v); });
-    return () => { vivo = false; };
-  }, []);
-  return vocab;
-}
+alLlegarVocabulario(instalarVocabulario);
 
 // Los niveles que hay que pintar, en el registro que toque. `modo` es "dueno" o
 // "veterinario", que son las dos claves que sirve el motor.

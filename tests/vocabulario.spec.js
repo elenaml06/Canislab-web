@@ -75,7 +75,23 @@ const COND_DUENO = {
 const TAMANOS_CLAVES = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
 const RANGO_INVENTADO = { peso_min: 111, peso_max: 222 };
 
+// Y la pregunta que el motor dice que la app NO hace. Inventada, por lo mismo.
+const PREGUNTA_RENAL =
+  "PREGUNTA-DEL-MOTOR: ¿en que estadio IRIS esta, o cual fue la ultima creatinina?";
+
 const VOCABULARIO_INVENTADO = {
+  preguntas_por_patologia: {
+    cuantas_sin_preguntar: 1,
+    por_patologia: {
+      renal: {
+        nombre: "Insuficiencia renal crónica",
+        quien_puede_marcarla: "solo_veterinario",
+        necesita_dato_clinico: true,
+        que_dato: "DATO-DEL-MOTOR: estadio IRIS",
+        pregunta_que_falta: PREGUNTA_RENAL,
+      },
+    },
+  },
   razas: {
     cuantas: 2,
     // Dos razas y ninguna de verdad: si la app las pinta, las ha leido de aqui.
@@ -238,6 +254,40 @@ test.describe("las palabras que se ven salen del motor", () => {
       "«14-34kg», esta usando RANGO_PESO_POR_TAMANO_RESPALDO, que ya tenia cuatro de seis " +
       "rangos caducados el dia que se escribio esto")
       .toBeVisible();
+  });
+
+  // ⚠️ LAS PREGUNTAS QUE LA APP NO HACE (11 septiembre), que es la tercera cosa
+  // que pidio Elena en la misma frase: «preguntas para las patologias de
+  // veterinarios».
+  //
+  // De las 47 patologias, 24 son `solo_veterinario` y en ocho la cifra que
+  // aplica el motor DEPENDE de un dato clinico que la app no pregunta: el
+  // estadio IRIS decide el techo de fosforo, los trigliceridos bajan la grasa
+  // de 37,5 a 25. Mientras nadie pregunte eso, la cifra se elige a ciegas -- y
+  // quien firma la pauta es quien tiene el dato.
+  test("la ficha del veterinario dice que pregunta le falta a cada patologia",
+       async ({ page, request }) => {
+    const PACIENTE_RENAL = { ...PERRO_DE_PRUEBA, patologias: ["renal"], patologia_si: true };
+    await configurar(request, {
+      rolProfesional: true, rolVerificado: true,
+      perros: [PACIENTE_RENAL],
+      accesos: [{ perro_id: PACIENTE_RENAL.id, estado: "activo" }],
+      menus: [], vocabulario: VOCABULARIO_INVENTADO,
+    });
+    await entrar(page);
+    await esperarElPaciente(page);
+
+    await expect(page.getByText(PREGUNTA_RENAL),
+      "la ficha clinica no pinta la pregunta que el motor dice que falta. Sin ella el " +
+      "veterinario firma una pauta cuyo numero se ha elegido a ciegas, y ni siquiera sabe que " +
+      "hubo que elegirlo")
+      .toBeVisible();
+    await expect(page.getByText(/DATO-DEL-MOTOR: estadio IRIS/),
+      "no dice de que dato clinico depende la cifra")
+      .toBeVisible();
+    // Y tiene que decir que la app NO lo pregunta: recoger la respuesta sin que
+    // llegue al motor seria pedir un dato inutil.
+    await expect(page.getByText(/La app todavía no hace estas preguntas/)).toBeVisible();
   });
 
   // ⚠️ Y SI EL MOTOR NO CONTESTA, LA APP NO SE QUEDA EN BLANCO. La API de
