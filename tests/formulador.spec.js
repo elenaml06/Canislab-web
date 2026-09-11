@@ -140,7 +140,7 @@ test("un tope de patología roto se ve aunque FEDIAF diga verde", async ({ page,
   // enseñara solo el semáforo, el veterinario formularía en verde algo que
   // el motor va a rechazar al final.
   await comoVeterinario(page, request, {
-    perros: [{ ...PERRO_DE_PRUEBA, patologia_si: true, patologias: ["renal"] }],
+    perros: [{ ...PERRO_DE_PRUEBA, patologia_si: "si", patologias: ["renal"] }],
   });
   await page.getByRole("button", { name: /Añadir alimento/ }).click();
   await page.getByLabel("Buscar alimento").fill("pollo");

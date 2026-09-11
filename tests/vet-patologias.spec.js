@@ -125,9 +125,52 @@ test("a un TUTOR se le sigue parando en seco: eso no se ha tocado", async ({ pag
   for (let i = 0; i < 3; i += 1) await noes.nth(i).click();
   await page.getByRole("button", { name: "Sí", exact: true }).last().click();
 
-  const hepatopatia = page.getByText("Hepatopatía / predisposición al cobre", { exact: true });
-  await expect(hepatopatia).toBeVisible();
-  await hepatopatia.click();
+  // ⚠️ REESCRITA EL 11 DE SEPTIEMBRE, y hay que decir por qué para que nadie
+  // la devuelva a como estaba.
+  //
+  // Aquí el tutor MARCABA «Hepatopatía» y chocaba con el muro. Ya no puede:
+  // Elena, ese día, «Un dueño, obviamente, no puede marcar casillas de
+  // veterinario, ni siquiera le deberían salir», y la hepatopatía es una de
+  // las 15 que `quien_formula_cada_patologia.json` marca `solo_veterinario`.
+  //
+  // Y no es que el muro sobre: es que ahora se llega a él por el único camino
+  // que queda, que es **el perro que ya la trae puesta** porque se la puso su
+  // veterinario. Medido ese día: después del filtro, NINGUNA patología que el
+  // dueño pueda marcar es `segura: false`. Así que la mitad peligrosa que esta
+  // prueba vigila -- que quitarle el muro al veterinario no se lo quite al
+  // dueño -- se comprueba justo por ahí.
+  await expect(page.getByText("Hepatopatía / predisposición al cobre", { exact: true }),
+    "al dueño le sigue saliendo la casilla de hepatopatía, que es de veterinario")
+    .toHaveCount(0);
+});
+
+test("y si su veterinario se la puso, el muro le sigue parando", async ({ page, request }) => {
+  // El único camino que queda hasta el muro, y es el que importa: el perro
+  // trae la hepatopatía puesta desde su ficha clínica. El dueño la VE (si se
+  // escondiera, creería que su perro no tiene nada y al guardar se perdería),
+  // no la puede quitar, y al terminar el paso choca igual que antes.
+  await configurar(request, {
+    rolProfesional: false, rolVerificado: false,
+    perros: [{ ...PACIENTE, patologias: ["hepatopatia"], patologia_si: "si" }],
+    accesos: [], menus: [],
+  });
+  await page.goto("/");
+  await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+  await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByText("Nombre y sexo").waitFor();
+  await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
+
+  const hepatopatia = page.getByRole("button",
+    { name: "Hepatopatía / predisposición al cobre", exact: true });
+  await expect(hepatopatia,
+    "el perro la trae puesta y no se ve: el dueño creería que no tiene nada")
+    .toHaveCount(1);
+  await expect(hepatopatia, "puede quitarla, y eso es de su veterinario").toBeDisabled();
+
+  // Las otras tres preguntas, para poder terminar el paso.
+  const noes = page.getByRole("button", { name: "No", exact: true });
+  for (let i = 0; i < 3; i += 1) await noes.nth(i).click();
 
   // Y al terminar, el muro. Se comprueba AQUÍ y no al marcarla porque el
   // asistente del dueño no enseña el aviso en la casilla: le para al
@@ -323,7 +366,7 @@ test("un aparato con algo marcado se abre solo, y lo cuenta", async ({ page, req
   // Lo que el paciente TIENE no puede quedarse escondido detrás de un clic:
   // al volver a abrir su ficha dentro de tres meses tiene que verse.
   await entrarComoVeterinario(page, request, {
-    perros: [{ ...PACIENTE, patologias: ["renal", "oxalato"], patologia_si: true }],
+    perros: [{ ...PACIENTE, patologias: ["renal", "oxalato"], patologia_si: "si" }],
   });
 
   await expect(page.getByRole("button", { name: /^Renal y urinario · 2/ })).toBeVisible();

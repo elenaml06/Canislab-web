@@ -1040,11 +1040,34 @@ const CATEGORIAS_ALIMENTO = {
 // siguen un patrón de FAMILIA (ver `FAMILIAS_PATOLOGIA` más abajo) --
 // una sola casilla con una pregunta de subtipo debajo, no una casilla
 // por cada variante, que sería ilegible.
+// ⚠️ `soloVeterinario` — LAS QUE AL DUEÑO NI LE SALEN (11 de septiembre de 2026).
+//
+// Elena: «Un dueño, obviamente, no puede marcar casillas de veterinario, ni
+// siquiera le deberían salir».
+//
+// Son las 15 que `quien_formula_cada_patologia.json` del motor marca
+// `solo_veterinario`, y ese fichero no opina: cada linea sale de la CITA de la
+// fuente de esa patologia. Si su tabla condiciona la cifra a un dato clinico
+// -- el estadio IRIS que decide el techo de fosforo, los trigliceridos que
+// bajan la grasa de 37,5 a 25 --, entonces no la puede marcar quien no tiene
+// ese dato. Hasta hoy la app le ofrecia las 15 al dueño.
+//
+// ⚠️ ESTO ES UN RESPALDO, como las demas listas: la verdad la sirve
+// `GET /vocabulario` y `laPuedeMarcarElDueno` la prefiere. Aqui esta escrito
+// para que una API dormida no acabe enseñandole al dueño las 15.
+// `tests/vocabulario.spec.js` compara las dos, clave a clave.
+//
+// ⚠️ Y LO QUE YA ESTA MARCADO NO SE ESCONDE. Si el perro trae «renal» puesto
+// -- lo marco su veterinario, o se marco antes de este cambio --, la casilla
+// se sigue viendo: esconderla dejaria al dueño leyendo «Nada que destacar» de
+// un perro renal, y a la primera que guardara la ficha la patologia se
+// perderia EN SILENCIO y le cambiaria el menu. Eso es exactamente la familia
+// de fallos del `guardarPerro` de agosto.
 const PATOLOGIAS = [
-  { key: "renal", label: "Insuficiencia renal crónica", segura: true },
-  { key: "renal_proteinuria", label: "Proteinuria renal (UPC > 0,5)", segura: true },
-  { key: "pancreatitis", label: "Pancreatitis", segura: true },
-  { key: "oxalato", label: "Cálculos de oxalato cálcico", segura: true },
+  { key: "renal", soloVeterinario: true, label: "Insuficiencia renal crónica", segura: true },
+  { key: "renal_proteinuria", soloVeterinario: true, label: "Proteinuria renal (UPC > 0,5)", segura: true },
+  { key: "pancreatitis", soloVeterinario: true, label: "Pancreatitis", segura: true },
+  { key: "oxalato", soloVeterinario: true, label: "Cálculos de oxalato cálcico", segura: true },
   // ⚠️ CORREGIDO (7 septiembre) — CONFLACIÓN ENCONTRADA: esta única casilla
   // mandaba SIEMPRE la clave "estruvita" al backend, aunque el perro
   // tuviera cistina o urato -- las tres bloquean igual para el tutor, así
@@ -1060,11 +1083,11 @@ const PATOLOGIAS = [
   // por encima del mínimo de FEDIAF. Lo que sigue necesitando prescripción
   // es DISOLVER un cálculo ya formado. El subtipo urato/cistina de esta
   // familia sí sigue cerrado, y por eso la casilla lleva subtipo.
-  { key: "estruvita", label: "Cálculos urinarios (estruvita / oxalato de calcio ya cubierto arriba / urato / cistina)", segura: true,
+  { key: "estruvita", soloVeterinario: true, label: "Cálculos urinarios (estruvita / oxalato de calcio ya cubierto arriba / urato / cistina)", segura: true,
     aviso: "Estos cálculos dependen del pH de la orina y de analíticas que la app no puede ver. Una dieta mal ajustada aquí puede empeorarlos, así que no generamos menú automático: necesitas una dieta pautada por tu veterinario." },
-  { key: "urato", label: "Urolitos de urato", segura: false,
+  { key: "urato", soloVeterinario: true, label: "Urolitos de urato", segura: false,
     aviso: "La carga de purinas de una ración cruda está muy por encima de cualquier objetivo seguro para esta condición, y no solo por las vísceras. No generamos menú automático: necesitas una dieta pautada por tu veterinario, a menudo con pienso terapéutico específico." },
-  { key: "cistina", label: "Urolitos de cistina", segura: false,
+  { key: "cistina", soloVeterinario: true, label: "Urolitos de cistina", segura: false,
     aviso: "Depende del pH de la orina y de analíticas que la app no puede ver, igual que estruvita -- y el objetivo terapéutico de metionina+cistina está además por debajo del mínimo nutricional de cualquier perro sano. No generamos menú automático: necesitas una dieta pautada por tu veterinario." },
   // ⚠️ CAMBIADO A `segura: false` (25 agosto), con la revisión clínica.
   // La restricción de cobre que hace falta en una hepatopatía por acúmulo
@@ -1077,16 +1100,16 @@ const PATOLOGIAS = [
   // Va aquí y no solo en el servidor porque el aviso tiene que saltar al
   // ELEGIR la patología, no después de recorrer todo el generador para
   // que al final no salga menú. Mismo patrón que estruvita.
-  { key: "hepatopatia", label: "Hepatopatía / predisposición al cobre", segura: false,
+  { key: "hepatopatia", soloVeterinario: true, label: "Hepatopatía / predisposición al cobre", segura: false,
     aviso: "La restricción de cobre que hace falta en una hepatopatía por acúmulo está POR DEBAJO del mínimo de cobre que necesita cualquier perro para estar sano. No es algo que se pueda resolver eligiendo mejor los alimentos: hace falta supervisión veterinaria con suplementación dirigida, así que no generamos menú automático." },
-  { key: "shunt_sin_encefalopatia", label: "Shunt portosistémico hepático", segura: false,
+  { key: "shunt_sin_encefalopatia", soloVeterinario: true, label: "Shunt portosistémico hepático", segura: false,
     aviso: "El shunt hace que la sangre porta-hepática se salte el hígado, así que el amoniaco de catabolizar proteína no se depura: la proteína hay que bajarla por debajo del mínimo saludable de FEDIAF, y eso necesita una dieta pautada por tu veterinario." },
-  { key: "cardiopatia", label: "Cardiopatía", segura: true },
-  { key: "dcm_taurina_respondedora", label: "Miocardiopatía dilatada respondedora a taurina", segura: true },
+  { key: "cardiopatia", soloVeterinario: true, label: "Cardiopatía", segura: true },
+  { key: "dcm_taurina_respondedora", soloVeterinario: true, label: "Miocardiopatía dilatada respondedora a taurina", segura: true },
   { key: "dcm_asociada_a_dieta", label: "Miocardiopatía dilatada asociada a dieta (\"grain-free\")", segura: true },
-  { key: "diabetes", label: "Diabetes mellitus", segura: true },
+  { key: "diabetes", soloVeterinario: true, label: "Diabetes mellitus", segura: true },
   { key: "hipotiroidismo", label: "Hipotiroidismo", segura: true },
-  { key: "hiperlipidemia", label: "Hiperlipidemia (triglicéridos o colesterol altos)", segura: true },
+  { key: "hiperlipidemia", soloVeterinario: true, label: "Hiperlipidemia (triglicéridos o colesterol altos)", segura: true },
   { key: "obesidad", label: "Obesidad / adelgazamiento dirigido", segura: true },
   { key: "ple_linfangiectasia", label: "Enteropatía pierde-proteínas / linfangiectasia intestinal", segura: true },
   { key: "insuficiencia_pancreatica_exocrina", label: "Insuficiencia pancreática exocrina (EPI)", segura: true },
@@ -1122,9 +1145,9 @@ const PATOLOGIAS = [
   // Esto es lo que la literatura pide ADEMÁS, para una dieta de eliminación
   // que se come durante meses. El label empieza por «Alergia» a propósito:
   // es la palabra que busca quien la busca, no «reacción adversa».
-  { key: "reaccion_adversa_alimento",
+  { key: "reaccion_adversa_alimento", soloVeterinario: true,
     label: "Alergia o intolerancia alimentaria diagnosticada", segura: true },
-  { key: "epilepsia_idiopatica", label: "Epilepsia idiopática", segura: true },
+  { key: "epilepsia_idiopatica", soloVeterinario: true, label: "Epilepsia idiopática", segura: true },
   { key: "mielopatia_degenerativa", label: "Mielopatía degenerativa", segura: true },
   { key: "cushing", label: "Hiperadrenocorticismo (Cushing)", segura: true },
   { key: "addison", label: "Hipoadrenocorticismo (Addison)", segura: true },
@@ -1300,6 +1323,39 @@ const OPCIONES_DE_FAMILIA_POR_CLAVE = Object.fromEntries(
 // `PATOLOGIAS.find` no las encontraba).
 function datosPatologia(key) {
   return PATOLOGIAS.find((p) => p.key === key) || OPCIONES_DE_FAMILIA_POR_CLAVE[key] || null;
+}
+
+// ─── QUIEN PUEDE MARCAR CADA CASILLA ────────────────────────────────────────
+//
+// ⚠️ Elena, 11 de septiembre de 2026: «Un dueño, obviamente, no puede marcar
+// casillas de veterinario, ni siquiera le deberían salir».
+//
+// La verdad la sirve el motor en `GET /vocabulario`, que la lee de
+// `quien_formula_cada_patologia.json`. Los tres valores son `dueno`,
+// `dueno_con_diagnostico` y `solo_veterinario`, y solo el tercero se esconde:
+// «con diagnóstico» sigue siendo algo que el dueño sabe de su propio perro.
+//
+// Si el vocabulario no ha llegado, manda el respaldo (`soloVeterinario` en
+// PATOLOGIAS). Una API dormida no puede acabar enseñándole al dueño las 15.
+function laPuedeMarcarElDueno(clave, vocab) {
+  const servido = vocab?.preguntas_por_patologia?.por_patologia?.[clave]?.quien_puede_marcarla;
+  if (servido) return servido !== "solo_veterinario";
+  return !(datosPatologia(clave)?.soloVeterinario);
+}
+
+// Las casillas que se le ofrecen al dueño: las suyas, MÁS las que el perro ya
+// trae puestas aunque sean de veterinario.
+//
+// ⚠️ LO SEGUNDO NO ES UN MATIZ. Si el perro trae «renal» puesto y se esconde,
+// el dueño lee «Nada que destacar» de un perro renal, y a la primera que
+// guarde la ficha la patología se pierde EN SILENCIO y le cambia el menú. Es
+// la familia de fallos de `guardarPerro` de agosto: no da error, no se ve en
+// pantalla, y aparece días después en la comida.
+function patologiasQueVeElDueno(vocab, puestas = []) {
+  return PATOLOGIAS.filter((p) =>
+    laPuedeMarcarElDueno(p.key, vocab)
+    || puestas.includes(p.key)
+    || puestas.some((k) => FAMILIA_DE_CLAVE[k] === p.key));
 }
 
 // ¿Está esta familia activa? -- no basta con mirar si `patologias` incluye
@@ -4531,6 +4587,17 @@ const ETAPA_LABEL = {
 // los OTROS perros de la casa, no solo para el que se está mirando: al
 // hacer sus menús a la vez hay que sacar de cada fila sus kcal y su
 // etapa, y eso empieza por convertirla.
+// Los cuatro «¿tiene alergias / patologías / …?» viven en el perfil como las
+// cadenas "si" y "no" -- es lo que pinta `SiNoToggle` y es lo unico que la app
+// escribe. Al leer se acepta tambien el booleano: una fila que lo traiga asi
+// no puede dejar la pregunta en blanco. `null` sigue siendo «sin contestar», y
+// eso no se toca: es lo que impide continuar sin responder.
+function _siNo(v) {
+  if (v === true || v === "si") return "si";
+  if (v === false || v === "no") return "no";
+  return null;
+}
+
 function perfilDesdeSupabase(p) {
   if (!p) return null;
   const fechaNac = p.fecha_nacimiento ? new Date(p.fecha_nacimiento) : null;
@@ -4560,13 +4627,29 @@ function perfilDesdeSupabase(p) {
       : 1,
     actividadTocado: true,
     esterilizado: p.castrado ? "si" : "no",
-    alergiaSi: p.alergia_si,
+    // ⚠️ LOS CUATRO «SI/NO» SE LEEN NORMALIZADOS (11 de septiembre de 2026).
+    //
+    // CASO REAL ENCONTRADO escribiendo la prueba de las casillas de
+    // veterinario: un perro sembrado con `patologia_si: true` abria la
+    // pantalla de patologias con la pregunta SIN CONTESTAR y la lista
+    // ESCONDIDA, porque toda la pantalla compara contra las cadenas "si" y
+    // "no" (`perfil.patologiaSi === "si"`) y aqui entraba un booleano.
+    //
+    // Y lo que hace ese caso peligroso no es que no se vea: es que la
+    // pregunta parece sin contestar, asi que lo natural es pulsar «No» -- y
+    // «No» hace `set("patologias", [])`. Las patologias de un perro renal se
+    // borran de un toque, sin un aviso, y el menu siguiente ya es otro.
+    //
+    // La app solo ESCRIBE "si"/"no"/null, asi que una fila con booleano viene
+    // de otro sitio (o de una fila vieja). Normalizar al leer cuesta una
+    // linea y cierra las dos puertas.
+    alergiaSi: _siNo(p.alergia_si),
     alergias: p.alergias || [],
-    otrosEvitarSi: p.otros_evitar_si,
+    otrosEvitarSi: _siNo(p.otros_evitar_si),
     otrosEvitar: p.otros_evitar || [],
-    patologiaSi: p.patologia_si,
+    patologiaSi: _siNo(p.patologia_si),
     patologias: p.patologias || [],
-    categoriasExcluidasSi: p.categorias_excluidas_si,
+    categoriasExcluidasSi: _siNo(p.categorias_excluidas_si),
     categoriasExcluidas: p.categorias_excluidas || [],
     dia: fechaNac ? fechaNac.getDate() : 15,
     mesIdx: fechaNac ? fechaNac.getMonth() : 1,
@@ -9379,13 +9462,28 @@ function RawkuOnboardingInterna({
             <SiNoToggle valor={perfil.patologiaSi} onChange={(v) => { set("patologiaSi", v); if (v === "no") set("patologias", []); }} />
             {perfil.patologiaSi === "si" && (
               <div className="flex flex-col gap-2 mt-3">
-                {PATOLOGIAS.map((p) => {
+                {/* ⚠️ AQUI SE FILTRA (11 septiembre). Elena: «Un dueño,
+                    obviamente, no puede marcar casillas de veterinario, ni
+                    siquiera le deberían salir». Eran QUINCE de las 37 que se
+                    le ofrecían: renal, pancreatitis, cardiopatía, diabetes,
+                    los cuatro tipos de cálculo, la hepatopatía... todas ellas
+                    con la cifra que aplica el motor colgando de un dato
+                    clínico que el dueño no tiene. La lista de quién puede
+                    marcar cada una NO se opina aquí: sale de la cita de la
+                    fuente de cada patología y llega por `GET /vocabulario`. */}
+                {patologiasQueVeElDueno(vocab, perfil.patologias).map((p) => {
                   const activo = perfil.patologias.includes(p.key)
                     || familiaPatologiaActiva(p.key, perfil.patologias);
+                  // Puesta por un veterinario y de las que el dueño no puede
+                  // marcar: se VE, para que sepa lo que lleva su perro, y no
+                  // se puede quitar desde aquí.
+                  const deVeterinario = activo && !laPuedeMarcarElDueno(p.key, vocab);
                   return (
                     <div key={p.key}>
                       <button
+                        disabled={deVeterinario}
                         onClick={() => {
+                          if (deVeterinario) return;
                           if (activo) {
                             set("patologias", perfil.patologias.filter(
                               (k) => k !== p.key && FAMILIA_DE_CLAVE[k] !== p.key));
@@ -9399,8 +9497,16 @@ function RawkuOnboardingInterna({
                         <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{p.label}</span>
                         {activo && <Check size={16} style={{ color: ROSA }} />}
                       </button>
-                      <SelectorSubtipoPatologia cabecera={p.key} patologias={perfil.patologias}
-                        onCambiar={(nuevas) => set("patologias", nuevas)} />
+                      {deVeterinario ? (
+                        <p className="text-[11px] leading-snug mt-1 px-1"
+                           style={{ color: MALVA, fontFamily: fontBody }}>
+                          Esto lo lleva puesto desde su ficha clínica. Ajusta el menú, y
+                          quitarlo o cambiarlo es cosa de tu veterinario.
+                        </p>
+                      ) : (
+                        <SelectorSubtipoPatologia cabecera={p.key} patologias={perfil.patologias}
+                          onCambiar={(nuevas) => set("patologias", nuevas)} />
+                      )}
                     </div>
                   );
                 })}

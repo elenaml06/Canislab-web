@@ -57,13 +57,13 @@ const PERRO_LOCAL = {
   raza: null,
   fecha_nacimiento: "2015-03-10",
   dieta_actual: "pienso",
-  alergia_si: true,
+  alergia_si: "si",
   alergias: ["pollo"],
-  otros_evitar_si: true,
+  otros_evitar_si: "si",
   otros_evitar: ["cerdo"],
-  categorias_excluidas_si: true,
+  categorias_excluidas_si: "si",
   categorias_excluidas: ["Hueso carnoso"],
-  patologia_si: false,
+  patologia_si: "no",
   patologias: [],
 };
 

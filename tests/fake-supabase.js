@@ -70,13 +70,25 @@ export const PERRO_DE_PRUEBA = {
   raza: "Pastor Alemán",
   fecha_nacimiento: "2021-05-14",
   dieta_actual: null,
-  alergia_si: false,
+  // ⚠️ LOS CUATRO «SI/NO» VAN EN CADENA, NO EN BOOLEANO (11 septiembre).
+  //
+  // Aquí ponía `false`, y la app solo ESCRIBE "si"/"no"/null: es lo que pinta
+  // `SiNoToggle` y lo que manda `guardarPerro`. O sea que esta fila tenía una
+  // forma que la app de verdad no produce, y con ella la pantalla de alergias
+  // y patologías se abría con las cuatro preguntas SIN CONTESTAR y las listas
+  // escondidas -- sin que ninguna prueba lo viera, porque ninguna las miraba.
+  // Es el mismo fallo que las razas con la tilde cambiada: una prueba que pasa
+  // contra una ficción.
+  //
+  // El booleano sigue probado a propósito, en `bugs-produccion.spec.js`: una
+  // fila vieja puede traerlo y `perfilDesdeSupabase` lo normaliza.
+  alergia_si: "no",
   alergias: [],
-  otros_evitar_si: false,
+  otros_evitar_si: "no",
   otros_evitar: [],
-  categorias_excluidas_si: false,
+  categorias_excluidas_si: "no",
   categorias_excluidas: [],
-  patologia_si: false,
+  patologia_si: "no",
   patologias: [],
   created_at: "2024-01-01T00:00:00.000Z",
   updated_at: "2024-01-01T00:00:00.000Z",

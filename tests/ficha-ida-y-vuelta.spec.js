@@ -72,13 +72,13 @@ const FICHA_COMPLETA = {
   // contradicción, y guardaba -- con razón -- la de la raza.
   tamano: "Mediano",                   // el de «Border Collie» en razas.json
   dieta_actual: "pienso",              // de aquí sale si necesita transición
-  alergia_si: true,
+  alergia_si: "si",
   alergias: ["pollo"],
-  otros_evitar_si: true,
+  otros_evitar_si: "si",
   otros_evitar: ["cerdo"],
-  categorias_excluidas_si: true,
+  categorias_excluidas_si: "si",
   categorias_excluidas: ["Hueso carnoso"],
-  patologia_si: false,
+  patologia_si: "no",
   patologias: [],
 };
 

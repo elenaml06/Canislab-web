@@ -267,7 +267,7 @@ test.describe("las palabras que se ven salen del motor", () => {
   // quien firma la pauta es quien tiene el dato.
   test("la ficha del veterinario dice que pregunta le falta a cada patologia",
        async ({ page, request }) => {
-    const PACIENTE_RENAL = { ...PERRO_DE_PRUEBA, patologias: ["renal"], patologia_si: true };
+    const PACIENTE_RENAL = { ...PERRO_DE_PRUEBA, patologias: ["renal"], patologia_si: "si" };
     await configurar(request, {
       rolProfesional: true, rolVerificado: true,
       perros: [PACIENTE_RENAL],
@@ -288,6 +288,79 @@ test.describe("las palabras que se ven salen del motor", () => {
     // Y tiene que decir que la app NO lo pregunta: recoger la respuesta sin que
     // llegue al motor seria pedir un dato inutil.
     await expect(page.getByText(/La app todavía no hace estas preguntas/)).toBeVisible();
+  });
+
+  // ⚠️ LAS CASILLAS DE VETERINARIO NO SE LE ENSEÑAN AL DUEÑO (11 septiembre).
+  //
+  // Elena: «Un dueño, obviamente, no puede marcar casillas de veterinario, ni
+  // siquiera le deberían salir».
+  //
+  // Eran QUINCE de las 37 que se le ofrecían -- renal, pancreatitis,
+  // cardiopatia, diabetes, los cuatro tipos de calculo, la hepatopatia... --,
+  // todas con la cifra que aplica el motor colgando de un dato clinico que el
+  // dueño no tiene. La lista no se opina en la app: sale de la cita de la
+  // fuente de cada patologia, en `quien_formula_cada_patologia.json`.
+  test("al dueño no le salen las casillas que solo marca un veterinario",
+       async ({ page, request }) => {
+    await configurar(request, { perros: [PERRO_DE_PRUEBA], menus: [], premium: true });
+    await entrar(page);
+    await esperarLaFicha(page);
+    await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
+    await page.getByRole("button", { name: "Sí", exact: true }).last().click();
+
+    for (const label of ["Insuficiencia renal crónica", "Pancreatitis", "Cardiopatía",
+                         "Diabetes mellitus", "Cálculos de oxalato cálcico"]) {
+      await expect(page.getByRole("button", { name: label, exact: true }),
+        `al dueño le sale «${label}», que es de veterinario: su cifra depende de un dato ` +
+        `clinico que el no tiene`)
+        .toHaveCount(0);
+    }
+    // Y las suyas siguen estando: esconder de mas seria dejarle sin poder
+    // decir lo que su perro SI tiene.
+    for (const label of ["Obesidad / adelgazamiento dirigido", "Artrosis / osteoartritis",
+                         "Hipotiroidismo"]) {
+      await expect(page.getByRole("button", { name: label, exact: true }),
+        `ha desaparecido «${label}», que el dueño SI puede marcar`)
+        .toHaveCount(1);
+    }
+  });
+
+  // ⚠️ Y LO QUE YA ESTA PUESTO NO SE ESCONDE. Si el perro trae «renal» y se
+  // esconde, el dueño lee «Nada que destacar» de un perro renal -- y a la
+  // primera que guarde la ficha la patologia se pierde EN SILENCIO y le cambia
+  // el menu. Es la familia de fallos de `guardarPerro` de agosto.
+  test("lo que ya lleva puesto se sigue viendo, y no lo puede quitar",
+       async ({ page, request }) => {
+    await configurar(request, {
+      perro: { patologias: ["renal"], patologia_si: "si" }, menus: [], premium: true });
+    await entrar(page);
+    await esperarLaFicha(page);
+    await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
+    await expect(page.getByText(/¿Tiene alguna patología diagnosticada\?/)).toBeVisible();
+
+    const casilla = page.getByRole("button", { name: "Insuficiencia renal crónica", exact: true });
+    await expect(casilla,
+      "el perro lleva «renal» puesto y su casilla no se ve. Escondida, el dueño cree que su " +
+      "perro no tiene nada y al guardar la ficha la patologia se pierde sin decir nada")
+      .toHaveCount(1);
+    await expect(casilla, "puede quitarla, y eso es de su veterinario").toBeDisabled();
+    await expect(page.getByText(/quitarlo o cambiarlo es cosa de tu veterinario/)).toBeVisible();
+  });
+
+  // El veterinario las ve todas: es el que tiene el dato.
+  test("el veterinario sigue viendo las suyas en la ficha clínica",
+       async ({ page, request }) => {
+    await configurar(request, {
+      rolProfesional: true, rolVerificado: true,
+      perros: [PERRO_DE_PRUEBA],
+      accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
+      menus: [] });
+    await entrar(page);
+    await esperarElPaciente(page);
+    await page.getByLabel("Buscar patología").fill("renal");
+    await expect(page.getByText("Insuficiencia renal crónica", { exact: true }).first(),
+      "al veterinario tambien se le ha escondido: el filtro se ha pasado de sitio")
+      .toBeVisible();
   });
 
   // ⚠️ Y SI EL MOTOR NO CONTESTA, LA APP NO SE QUEDA EN BLANCO. La API de
@@ -485,6 +558,35 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
             .toBe(true);
         }
       }
+    }
+  });
+
+  // Y el respaldo `soloVeterinario` tiene que decir lo mismo que el motor: si
+  // se separan, el dia que la API no conteste el dueño ve casillas que no son
+  // suyas -- o deja de ver las que si.
+  test("el respaldo de quién puede marcar cada patología es el del motor", () => {
+    const FICHA = path.resolve(AQUI, "../../Canislab-api/quien_formula_cada_patologia.json");
+    if (!fs.existsSync(FICHA)) {
+      throw new Error("No se encuentra quien_formula_cada_patologia.json del motor en " + FICHA);
+    }
+    const delMotor = JSON.parse(fs.readFileSync(FICHA, "utf-8")).patologias;
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const i = app.indexOf("const PATOLOGIAS = [");
+    expect(i, "App.jsx ya no tiene PATOLOGIAS").toBeGreaterThan(-1);
+    const bloque = app.slice(i, app.indexOf("\n];", i));
+
+    for (const m of bloque.matchAll(/\{ key: "([a-z0-9_]+)",( soloVeterinario: true,)?/g)) {
+      const clave = m[1];
+      const marcada = Boolean(m[2]);
+      const ficha = delMotor[clave];
+      expect(ficha, `«${clave}» está en la app y no en quien_formula_cada_patologia.json`)
+        .toBeTruthy();
+      const esDelVeterinario = ficha.quien_puede_marcarla === "solo_veterinario";
+      expect(marcada,
+        `«${clave}»: la app dice soloVeterinario=${marcada} y el motor dice ` +
+        `quien_puede_marcarla=«${ficha.quien_puede_marcarla}». Ese campo decide si al dueño le ` +
+        `sale la casilla cuando la API no contesta`)
+        .toBe(esDelVeterinario);
     }
   });
 

@@ -320,7 +320,7 @@ test("dentro del menú de un paciente no le dicen que se lo enseñe a un veterin
   // Mal, sí, y no por el tono: es la persona que va a firmar esa pauta con
   // su número de colegiado. Decirle «enséñaselo a tu veterinario» es decirle
   // que lo que tiene delante no cuenta.
-  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: true };
+  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: "si" };
   await configurar(request, comoVeterinario({
     perros: [PACIENTE_RENAL],
     accesos: [activo(PACIENTE_RENAL)],
@@ -380,7 +380,7 @@ test("y el aviso de seguridad baja al final, sin alarma pero sin perderse", asyn
   // El aviso está bien calculado y no se quita: lo que está mal es DÓNDE. A
   // un tutor hay que pararle antes de que dé de comer algo; un veterinario
   // formula primero y revisa las notas después.
-  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: true };
+  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: "si" };
   const AVISO = "Las costillas de cordero aportan mucho hueso: revisa el total de calcio de la semana.";
   await configurar(request, comoVeterinario({
     perros: [PACIENTE_RENAL], accesos: [activo(PACIENTE_RENAL)],

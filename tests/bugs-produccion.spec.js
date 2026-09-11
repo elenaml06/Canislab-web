@@ -30,6 +30,55 @@ test.describe("bugs de producción", () => {
     });
   });
 
+  // ⚠️ 4. UNA FILA CON `true` DEJABA LA PREGUNTA EN BLANCO Y LA LISTA
+  //       ESCONDIDA — Y «NO» BORRA LAS PATOLOGÍAS (11 septiembre).
+  //
+  // Salió escribiendo otra prueba. La pantalla de alergias y patologías
+  // compara contra las CADENAS "si" y "no" (`perfil.patologiaSi === "si"`), y
+  // `perfilDesdeSupabase` metía la columna tal cual. Con un booleano en la
+  // fila, `SiNoToggle` no marcaba ninguno de los dos botones y la lista no se
+  // pintaba: un perro con «renal» puesto se veía como un perro sin nada.
+  //
+  // Y lo que lo hace peligroso no es que no se vea. Es que la pregunta parece
+  // SIN CONTESTAR, así que lo natural es pulsar «No» — y «No» hace
+  // `set("patologias", [])`. Las patologías de un perro renal se borran de un
+  // toque, sin un aviso, y el menú siguiente ya es otro. Misma familia que el
+  // `guardarPerro` de agosto: no da error, no se ve, y sale en la comida.
+  //
+  // Los cuatro campos son iguales (alergias, exclusiones, categorías y
+  // patologías), así que se comprueban los cuatro.
+  test("una fila con true/false abre la pantalla contestada, no en blanco", async ({ page, request }) => {
+    await configurarBackend(request, {
+      perro: {
+        // Las tres primeras a `false` y la de patologías a `true`: lo que se
+        // mira es que un BOOLEANO se lea como contestado, en los dos sentidos.
+        alergia_si: false, alergias: [],
+        otros_evitar_si: false, otros_evitar: [],
+        categorias_excluidas_si: false, categorias_excluidas: [],
+        patologia_si: true, patologias: ["renal"],
+      },
+    });
+    await page.goto("/");
+    await iniciarSesion(page);
+    await laFichaHaCargado(page).waitFor();
+    await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
+
+    // Si la pregunta se lee como contestada, la lista está pintada y la
+    // patología del perro se ve. Si vuelve el fallo, aquí no hay nada.
+    await expect(page.getByRole("button", { name: "Insuficiencia renal crónica", exact: true }),
+      "con `patologia_si: true` la pantalla se abre con la pregunta sin contestar y la lista " +
+      "escondida. El dueño ve un perro renal como un perro sin nada, y si pulsa «No» -- que es " +
+      "lo natural con una pregunta en blanco -- sus patologías se borran sin avisar")
+      .toHaveCount(1);
+    // Y las otras tres, leídas como «no» y no como «sin contestar»: con la
+    // pregunta en blanco el botón de seguir no se enciende, así que la ficha
+    // de un perro guardado se vuelve imposible de cerrar.
+    await expect(page.getByRole("button", { name: /^(Continuar|Terminar|Guardar)/ }),
+      "con los cuatro «sí/no» leídos como booleanos, ninguno cuenta como contestado y no se " +
+      "puede pasar de esta pantalla")
+      .toBeEnabled();
+  });
+
   test("si la API no responde, la app avisa en vez de quedarse colgada", async ({ page, request }) => {
     // El bug: ningún fetch tenía timeout. Con la API dormida (Render apaga
     // el plan gratuito), la pantalla se quedaba en "Calculando..." para
