@@ -24,7 +24,7 @@ const OTRO_PACIENTE = {
   ...PERRO_DE_PRUEBA,
   id: "33333333-3333-4333-8333-333333333333",
   nombre: "Ruffo",
-  raza: "Galgo español",
+  raza: "Galgo Español",
   peso_actual: 27,
   tutor_nombre: "Marta Ibáñez",
 };
@@ -32,7 +32,7 @@ const TERCER_PACIENTE = {
   ...PERRO_DE_PRUEBA,
   id: "44444444-4444-4444-8444-444444444444",
   nombre: "Kira",
-  raza: "Border collie",
+  raza: "Border Collie",
   peso_actual: 18,
   tutor_nombre: "Luis Prado",
 };
@@ -40,7 +40,7 @@ const CUARTO_PACIENTE = {
   ...PERRO_DE_PRUEBA,
   id: "55555555-5555-4555-8555-555555555555",
   nombre: "Toby",
-  raza: "Teckel",
+  raza: "Dachshund Estándar",
   peso_actual: 9,
   tutor_nombre: "Ana Ruiz",
 };
@@ -362,7 +362,7 @@ test("dentro del menú de un paciente no le dicen que se lo enseñe a un veterin
 
   // 3. El paciente, sin salir a buscarlo: es lo que hacen los programas que
   //    ya usan (Nutrimenta, VetMenu) -- el caso acompaña a la formulación.
-  await expect(page.getByText(/Pastor alemán/)).toBeVisible();
+  await expect(page.getByText(/Pastor Alemán/)).toBeVisible();
   await expect(page.getByText(/1211 kcal\/día/)).toBeVisible();
 
   // 4. Y en vez del «que lo apruebe tu veterinario», el tope que la

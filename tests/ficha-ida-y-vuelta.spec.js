@@ -58,8 +58,19 @@ const FICHA_COMPLETA = {
   tutor_contacto: "600 000 000",                              // el defecto es null, y 6 no es ninguno
                                        // de los cinco escalones del dueño
   sexo: "macho",
-  raza: null,                          // mestizo: manda el tamaño manual
-  tamano: "Pequeño",                   // el defecto acaba siendo 25 kg de adulto
+  // ⚠️ UNA RAZA DE VERDAD, Y NO `null` (11 septiembre). Aquí ponía `raza: null`
+  // («mestizo»), que es el valor por defecto: con él este campo no se probaba,
+  // porque null vuelve como null aunque se pierda por el camino. Es la misma
+  // lección que la actividad tres líneas más arriba -- elegir un valor que no
+  // prueba nada. Y `raza` no estaba en CAMPOS, así que nadie vigilaba que
+  // sobreviviera: de la raza salen el peso adulto esperado (y de ahí las kcal
+  // y la etapa) y las dos cifras propias de FEDIAF, Gran Danés y Terranova.
+  raza: "Border Collie",               // el defecto es "Pastor Alemán"
+  // Y el tamaño TIENE que ser el de esa raza: cuando hay raza reconocida,
+  // `guardarPerro` escribe `perfil.raza.tamano` y el manual no se mira. Poner
+  // aquí «Pequeño» con un Border Collie era pedirle a la ficha que guardara una
+  // contradicción, y guardaba -- con razón -- la de la raza.
+  tamano: "Mediano",                   // el de «Border Collie» en razas.json
   dieta_actual: "pienso",              // de aquí sale si necesita transición
   alergia_si: true,
   alergias: ["pollo"],
@@ -84,6 +95,7 @@ const CAMPOS = [
   ["tutor_nombre",            "una pauta firmada tiene que saber a quién se le dio"],
   ["tutor_contacto",          "una pauta firmada tiene que saber a quién se le dio"],
   ["sexo",                    "un macho entero necesita más kcal"],
+  ["raza",                    "de aquí sale su peso adulto esperado, y las dos cifras de energía propias de FEDIAF"],
   ["tamano",                  "en un mestizo, de aquí sale su peso adulto esperado"],
   ["dieta_actual",            "de aquí sale si necesita transición desde el pienso"],
   ["alergia_si",              "una alergia puede ser médica"],

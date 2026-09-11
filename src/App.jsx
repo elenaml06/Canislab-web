@@ -309,7 +309,18 @@ function razaDesdeNombre(nombre) {
   return RAZAS.find((r) => r.nombre === nombre) || { nombre };
 }
 
-const RAZAS = [
+// ⚠️ LAS 255 RAZAS SON UN RESPALDO DESDE EL 11 DE SEPTIEMBRE DE 2026.
+//
+// Vivian SOLO aqui, 255 filas dentro de este archivo, y de cada una salen el
+// peso adulto esperado -- y de ahi las kcal, la etapa y el techo de calcio del
+// cachorro de raza grande -- y las dos cifras de energia propias de FEDIAF.
+// Ahora viven en `razas.json` del motor y llegan por `GET /vocabulario`.
+//
+// Elena: «esto tiene que ser para TODO, razas, tamaño, etapa, actividad,
+// preguntas para las patologias de veterinarios, todo».
+//
+// `tests/vocabulario.spec.js` compara las dos listas fila a fila.
+const RAZAS_RESPALDO = [
   {"nombre": "Affenpinscher", "tamano": "Toy", "pesoMin": 3, "pesoMax": 6, "pesoMedio": 4.5},
   {"nombre": "Airedale Terrier", "tamano": "Mediano", "pesoMin": 19, "pesoMax": 25, "pesoMedio": 22.0},
   {"nombre": "Akita Americano", "tamano": "Gigante", "pesoMin": 32, "pesoMax": 59, "pesoMedio": 45.5},
@@ -566,9 +577,23 @@ const RAZAS = [
   {"nombre": "Spaniel Tibetano", "tamano": "Mini", "pesoMin": 4, "pesoMax": 7, "pesoMedio": 5.5},
   {"nombre": "Kromfohrländer", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 16, "pesoMedio": 12.5},
 ];
-const TAMANOS = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
+// La lista que de verdad se usa. Empieza siendo el respaldo y se sustituye
+// entera cuando llega `GET /vocabulario`. Es una variable de modulo y no un
+// estado de React a proposito: `razaDesdeNombre` y `perfilDesdeSupabase` se
+// llaman FUERA de todo componente, y un hook ahi no sirve. El re-render lo
+// dispara `useVocabulario`, que si es estado.
+let RAZAS = RAZAS_RESPALDO;
+
+// Los seis tamaños y los cinco escalones de condicion, tambien de respaldo.
+// Los sirve `GET /vocabulario` con SUS DOS REGISTROS: los seis tamaños llevan
+// el rango de peso MEDIDO sobre las 255 razas (el que estaba escrito a mano en
+// `RANGO_PESO_POR_TAMANO` tenia cuatro de seis caducados, porque la lista de
+// razas crecio debajo y la tabla no), y los cinco escalones del dueño son los
+// BCS 1, 3, 5, 7 y 9 -- el MISMO numero que pone el veterinario, no otra escala.
+const TAMANOS_RESPALDO = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
+let TAMANOS = TAMANOS_RESPALDO;
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-const CONDICIONES = [
+const CONDICIONES_RESPALDO = [
   // ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso, tras varias
   // rondas descartando alternativas (rellenito de amor, entrado en
   // carnes): nombres cariñosos, simétricos con el patrón "muy X / X"
@@ -579,6 +604,8 @@ const CONDICIONES = [
   { label: "Rellenito", detalle: "Cuesta notar las costillas, poca cintura" },
   { label: "Muy gordete", detalle: "No se notan las costillas, sin cintura" },
 ];
+let CONDICIONES = CONDICIONES_RESPALDO;
+
 // Qué bandera de "sí/no" acompaña a cada lista. En la ficha de una sola
 // pantalla las listas SON la respuesta -- una lista vacía es "no tiene" --,
 // pero el resto de la app lee estas banderas, así que se escriben solas para
@@ -676,10 +703,53 @@ const NIVELES_RESPALDO = [
 // el respaldo esta comprobado contra el motor por `tests/vocabulario.spec.js`.
 let _vocabularioPedido = null;
 
+// Lo que llega del motor SUSTITUYE a los respaldos de arriba, en su sitio.
+//
+// Son variables de modulo y no estado de React a proposito: `razaDesdeNombre`,
+// `perfilDesdeSupabase` y el calculo del peso adulto se llaman FUERA de todo
+// componente, y un hook alli no sirve de nada. El re-render lo dispara
+// `useVocabulario`, que si es estado; esto solo cambia de donde leen.
+//
+// Cada lista se instala SOLO si viene completa y no vacia. Media lista es peor
+// que ninguna: si el motor devolviera tres razas por un fallo, el buscador
+// dejaria de encontrar 252 sin decir nada.
+function instalarVocabulario(vocab) {
+  if (!vocab) return null;
+  const razas = vocab?.razas?.razas;
+  if (Array.isArray(razas) && razas.length > 0) RAZAS = razas;
+
+  const tam = vocab?.tamanos?.tamanos;
+  if (Array.isArray(tam) && tam.length > 0) {
+    TAMANOS = tam.map((t) => t.clave);
+    const rangos = {};
+    for (const t of tam) {
+      const r = t.rango_observado_kg;
+      if (r && r.peso_min != null && r.peso_max != null) {
+        // Con coma decimal, que es como se escribe aqui.
+        const n = (x) => String(x).replace(".", ",");
+        rangos[t.clave] = `${n(r.peso_min)}-${n(r.peso_max)}kg`;
+      }
+    }
+    if (Object.keys(rangos).length === tam.length) RANGO_PESO_POR_TAMANO = rangos;
+  }
+
+  // Los cinco escalones del dueño, en el orden en que los ofrece la ficha
+  // (`condicionIdx` los indexa). Son los BCS marcados `ofrecido_al_dueno`.
+  const puntos = vocab?.condicion_corporal?.puntos;
+  if (Array.isArray(puntos)) {
+    const delDueno = puntos
+      .filter((p) => p.ofrecido_al_dueno && p.dueno?.titulo)
+      .map((p) => ({ label: p.dueno.titulo, detalle: p.dueno.detalle || "" }));
+    if (delDueno.length === CONDICIONES_RESPALDO.length) CONDICIONES = delDueno;
+  }
+  return vocab;
+}
+
 function pedirVocabulario() {
   if (!_vocabularioPedido) {
     _vocabularioPedido = fetchConTimeout(`${API_BASE}/vocabulario`)
       .then((r) => (r.ok ? r.json() : null))
+      .then(instalarVocabulario)
       .catch(() => null);
   }
   return _vocabularioPedido;
@@ -1490,10 +1560,18 @@ const PESO_ADULTO_POR_TAMANO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, G
 // entre tamaños vecinos (hay razas en el límite que podrían encajar en
 // cualquiera de los dos) -- no hace falta una frontera exacta, solo una
 // referencia para elegir el que mejor describa al perro.
-const RANGO_PESO_POR_TAMANO = {
+// ⚠️ CUATRO DE LOS SEIS ESTABAN CADUCADOS (11 septiembre). El comentario de
+// arriba dice bien de donde sale esto -- el minimo y el maximo reales entre las
+// razas de cada tamaño -- y esa cuenta se hizo UNA VEZ y se escribio a mano.
+// Despues la lista de razas crecio y la tabla no: medido hoy sobre las 255,
+// Mini llega a 10 y no a 9, Pequeño a 20 y no a 19, Mediano empieza en 11 y no
+// en 14, y Grande en 18 y no en 20. Ahora la cuenta la hace el motor y llega
+// por `GET /vocabulario`; esto es el respaldo.
+const RANGO_PESO_POR_TAMANO_RESPALDO = {
   Toy: "1,5-6kg", Mini: "4-9kg", "Pequeño": "5-19kg",
   Mediano: "14-34kg", Grande: "20-52kg", Gigante: "32-110kg",
 };
+let RANGO_PESO_POR_TAMANO = RANGO_PESO_POR_TAMANO_RESPALDO;
 
 // ⚠️ AÑADIDO (5 agosto, noche) — FALLO GRAVE ENCONTRADO: el peso adulto
 // esperado de un cachorro se calculaba SIEMPRE con la media fija de su

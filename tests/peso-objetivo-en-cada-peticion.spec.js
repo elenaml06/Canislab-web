@@ -55,8 +55,8 @@ function perroConSobrepeso() {
     peso_actual: 32.0,
     condicion_idx: 3,          // "rellenito": de aquí sale un objetivo por debajo
     etapa: "adulto",
-    tamano: "grande",
-    raza: "Pastor alemán",
+    tamano: "Grande",
+    raza: "Pastor Alemán",
     fecha_nacimiento: "2021-05-14",
     dieta_actual: "barf",
   };

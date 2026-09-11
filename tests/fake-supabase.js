@@ -54,11 +54,20 @@ export const PERRO_DE_PRUEBA = {
   peso_adulto_esperado: null,
   condicion_idx: 2,
   etapa: "adulto",
-  tamano: "grande",
+  tamano: "Grande",                    // uno de los SEIS del motor; en minúscula no es ninguno
   sexo: "hembra",
   castrado: true,
   actividad: "media",
-  raza: "Pastor alemán",
+  // ⚠️ «Pastor Alemán», CON MAYUSCULA (11 septiembre). Aquí ponía «Pastor
+  // alemán», que NO existe en la lista de razas -- ni en la del motor
+  // (`razas.json`) ni en la de la app. `razaDesdeNombre` devolvía
+  // `{nombre: "Pastor alemán"}` a secas, sin tamaño ni peso medio, así que
+  // durante meses TODAS las pruebas que usan este perro corrían contra un
+  // mestizo con nombre de raza. El Supabase de mentira decía algo que la app
+  // de verdad no puede guardar, que es la forma exacta del fallo que ya tiene
+  // escrito `patologias-app-y-motor.spec.js`: «las pruebas siguen pasando
+  // contra una ficción». Lo vigila ahora `vocabulario.spec.js`.
+  raza: "Pastor Alemán",
   fecha_nacimiento: "2021-05-14",
   dieta_actual: null,
   alergia_si: false,
@@ -81,9 +90,9 @@ export const SEGUNDO_PERRO_DE_PRUEBA = {
   id: "22222222-2222-4222-8222-222222222222",
   nombre: "Cairo",
   peso_actual: 8.2,
-  tamano: "pequeño",
+  tamano: "Pequeño",                   // el de «Bulldog Francés» en razas.json
   sexo: "macho",
-  raza: "Bulldog francés",
+  raza: "Bulldog Francés",   // con F mayúscula, que es como se llama en la lista
   created_at: "2024-06-01T00:00:00.000Z",
 };
 

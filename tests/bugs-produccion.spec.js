@@ -70,11 +70,11 @@ test.describe("bugs de producción", () => {
 
   test("la raza normal (sólo el nombre) también se lee bien", async ({ page, request }) => {
     // Contrapeso: al arreglar las filas viejas no podemos romper las nuevas.
-    await configurarBackend(request, { perro: { raza: "Pastor alemán" } });
+    await configurarBackend(request, { perro: { raza: "Pastor Alemán" } });
 
     await page.goto("/");
     await iniciarSesion(page);
-    await expect(page.getByText("Pastor alemán").first()).toBeVisible();
+    await expect(page.getByText("Pastor Alemán").first()).toBeVisible();
   });
 
   test("sin fecha de nacimiento guardada, el año por defecto es el actual", async ({ page, request }) => {

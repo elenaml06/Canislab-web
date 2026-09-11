@@ -316,10 +316,10 @@ test("los menús de TODOS sus pacientes, y se pueden buscar", async ({ page, req
   // La pantalla de un dueño enseña los menús DEL perro en el que está,
   // porque un dueño entra ya dentro de su perro. Un veterinario entra a
   // buscar, y lo que busca puede ser de cualquiera de sus pacientes.
-  const NALA = { ...PERRO_DE_PRUEBA, nombre: "Nala", raza: "Pastor alemán",
+  const NALA = { ...PERRO_DE_PRUEBA, nombre: "Nala", raza: "Pastor Alemán",
                  tutor_nombre: "María López" };
   const CAIRO = { ...PERRO_DE_PRUEBA, id: "22222222-2222-4222-8222-222222222222",
-                  nombre: "Cairo", raza: "Bulldog francés", tutor_nombre: "Juan Pérez" };
+                  nombre: "Cairo", raza: "Bulldog Francés", tutor_nombre: "Juan Pérez" };
   await configurar(request, {
     rolProfesional: true, rolVerificado: true,
     perros: [NALA, CAIRO],

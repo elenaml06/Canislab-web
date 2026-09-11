@@ -62,8 +62,8 @@ function perroDeTrabajo() {
     // fixture.
     actividad: "trabajo",      // el índice 4 de NIVELES, tal y como se guarda
     etapa: "adulto",
-    tamano: "grande",
-    raza: "Border collie",
+    tamano: "Grande",
+    raza: "Border Collie",
     fecha_nacimiento: "2021-03-02",
     dieta_actual: "barf",
   };

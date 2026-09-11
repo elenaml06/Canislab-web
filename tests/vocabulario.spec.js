@@ -61,7 +61,55 @@ const CLAVES = ["sedentario", "normal", "activo", "muy_activo", "trabajo"];
 // Con la forma exacta que sirve `GET /vocabulario` de la API, y solo el trozo
 // que esta prueba mira. Lo que NO va aquí es una copia de las palabras de
 // verdad: eso sería la cuarta copia de la lista.
+// La condicion corporal: los NUEVE puntos del BCS, con los cinco del dueño
+// marcados. Las palabras, inventadas, por lo mismo de siempre.
+const BCS_DEL_DUENO = [1, 3, 5, 7, 9];
+const COND_DUENO = {
+  1: "Esqueletico-del-motor", 3: "Delgadito-del-motor", 5: "Justo-del-motor",
+  7: "Gordito-del-motor", 9: "Bola-del-motor",
+};
+
+// Y los seis tamaños. Aqui las CLAVES no se pueden inventar -- son las que
+// indexan el catalogo del motor y la app las manda tal cual --, asi que lo que
+// se hace distintivo es el RANGO, que es texto suelto y solo se pinta.
+const TAMANOS_CLAVES = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
+const RANGO_INVENTADO = { peso_min: 111, peso_max: 222 };
+
 const VOCABULARIO_INVENTADO = {
+  razas: {
+    cuantas: 2,
+    // Dos razas y ninguna de verdad: si la app las pinta, las ha leido de aqui.
+    razas: [
+      { nombre: "Perro-del-motor", tamano: "Mediano", pesoMin: 10, pesoMax: 20, pesoMedio: 15 },
+      { nombre: "Chucho-del-motor", tamano: "Toy", pesoMin: 2, pesoMax: 4, pesoMedio: 3 },
+    ],
+  },
+  tamanos: {
+    tamanos: TAMANOS_CLAVES.map((clave) => ({
+      clave,
+      peso_kg_del_menu_de_muestra: 10,
+      rango_observado_kg: { ...RANGO_INVENTADO, peso_medio_min: 120, peso_medio_max: 200,
+                            cuantas_razas: 1 },
+      dueno: { titulo: clave, detalle: `detalle de ${clave}` },
+      veterinario: { titulo: clave, detalle: `clinico de ${clave}` },
+    })),
+  },
+  condicion_corporal: {
+    escala: "1 a 9",
+    ideal: 5,
+    pct_por_punto: 0.1,
+    escalones_del_dueno: { 0: 1, 1: 3, 2: 5, 3: 7, 4: 9 },
+    puntos: Array.from({ length: 9 }, (_, i) => {
+      const bcs = i + 1;
+      const delDueno = BCS_DEL_DUENO.includes(bcs);
+      return {
+        bcs,
+        ofrecido_al_dueno: delDueno,
+        dueno: delDueno ? { titulo: COND_DUENO[bcs], detalle: `detalle ${bcs}` } : null,
+        veterinario: { titulo: `BCS ${bcs}/9 del motor`, detalle: `clinico ${bcs}` },
+      };
+    }),
+  },
   niveles_de_actividad: {
     de_donde: "inventado por tests/vocabulario.spec.js",
     cuantos: CLAVES.length,
@@ -146,6 +194,50 @@ test.describe("las palabras que se ven salen del motor", () => {
         `«${llano}» es del registro del dueño y está saliendo en la ficha del veterinario`)
         .toHaveCount(0);
     }
+  });
+
+  // ⚠️ LA CONDICION CORPORAL, que es la otra cosa que la ficha ENUMERA y que
+  // decide un numero: de ella sale el peso objetivo, y del peso objetivo las
+  // kcal. Los cinco escalones del dueño NO son otra escala: son los BCS 1, 3,
+  // 5, 7 y 9, los MISMOS que pone el veterinario. Si cada pantalla tuviera la
+  // suya, el mismo perro tendria dos pesos objetivo segun quien abriera la
+  // ficha. El perro de prueba tiene `condicion_idx: 2`, o sea el BCS 5.
+  test("la condicion corporal se pinta con las palabras del motor", async ({ page, request }) => {
+    await configurar(request, {
+      perros: [PERRO_DE_PRUEBA], menus: [], premium: true,
+      vocabulario: VOCABULARIO_INVENTADO,
+    });
+    await entrar(page);
+    await esperarLaFicha(page);
+
+    const fila = page.getByText(/kg ·/).first();
+    await expect(fila).toBeVisible();
+    await expect(fila,
+      `la fila de peso y condicion no dice «${COND_DUENO[5]}». Si dice «Ideal», la app esta ` +
+      `pintando CONDICIONES_RESPALDO y lo servido no se usa -- y en pantalla se ve igual`)
+      .toContainText(COND_DUENO[5]);
+  });
+
+  // ⚠️ EL RANGO DE PESO DE CADA TAMAÑO. Aqui las claves no se inventan (son las
+  // que indexan el catalogo del motor), asi que lo distintivo es el rango. Y no
+  // es cosmetico: el que la app tenia escrito a mano llevaba CUATRO de los seis
+  // caducados, porque la lista de razas crecio debajo y la tabla no.
+  test("el rango de peso de cada tamaño lo calcula el motor", async ({ page, request }) => {
+    await configurar(request, {
+      perro: { raza: null, tamano: "Mediano" }, menus: [], premium: true,
+      vocabulario: VOCABULARIO_INVENTADO,
+    });
+    await entrar(page);
+    await esperarLaFicha(page);
+
+    // A la pantalla de raza y tamaño, que es donde se pintan los rangos.
+    await page.getByRole("button", { name: "Editar raza y tamaño" }).click();
+    await expect(page.getByText(/¿Qué tamaño tiene o tendrá de adulto\?/)).toBeVisible();
+    await expect(page.getByText("111-222kg").first(),
+      "la pantalla de tamaño no pinta el rango que sirve el motor (111-222kg). Si pinta " +
+      "«14-34kg», esta usando RANGO_PESO_POR_TAMANO_RESPALDO, que ya tenia cuatro de seis " +
+      "rangos caducados el dia que se escribio esto")
+      .toBeVisible();
   });
 
   // ⚠️ Y SI EL MOTOR NO CONTESTA, LA APP NO SE QUEDA EN BLANCO. La API de
@@ -270,6 +362,79 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
           `el dueño o el veterinario`)
           .toBe(true);
       });
+    }
+  });
+
+  // ⚠️ LAS 255 RAZAS, Y LAS QUE ESCRIBEN LAS PROPIAS PRUEBAS (11 septiembre).
+  //
+  // La lista vivia SOLO aqui, 255 filas dentro de App.jsx, hasta que se movio a
+  // `razas.json` del motor. De cada raza salen el peso adulto esperado -- y de
+  // ahi las kcal, la etapa y el techo de calcio del cachorro de raza grande --
+  // y las dos cifras de energia propias de FEDIAF.
+  //
+  // Y buscandolo salio otra cosa: **el Supabase de mentira sembraba razas que no
+  // existen**. «Pastor alemán» con a minuscula no esta en la lista, asi que
+  // `razaDesdeNombre` devolvia `{nombre}` a secas -- sin tamaño y sin peso
+  // medio -- y durante meses TODAS las pruebas que usan el perro por defecto
+  // corrieron contra un mestizo con nombre de raza. Lo mismo «Bulldog francés»,
+  // «Border collie», «Galgo español» y «Teckel», que no es ni un nombre de la
+  // lista. Es el fallo que ya tiene escrito `patologias-app-y-motor.spec.js`:
+  // una prueba que pasa contra una ficcion.
+  test("las razas de la app son las del motor, fila a fila", () => {
+    const TABLA_RAZAS = path.resolve(AQUI, "../../Canislab-api/razas.json");
+    if (!fs.existsSync(TABLA_RAZAS)) {
+      throw new Error("No se encuentra razas.json del motor en " + TABLA_RAZAS);
+    }
+    const delMotor = JSON.parse(fs.readFileSync(TABLA_RAZAS, "utf-8")).razas;
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const i = app.indexOf("const RAZAS_RESPALDO = [");
+    expect(i, "App.jsx ya no tiene la lista RAZAS_RESPALDO").toBeGreaterThan(-1);
+    const delaApp = JSON.parse(
+      app.slice(i + "const RAZAS_RESPALDO = ".length, app.indexOf("\n];", i) + 2)
+        .replace(/,(\s*])/, "$1"));
+
+    expect(delaApp.length,
+      `la app ofrece ${delaApp.length} razas y el motor tiene ${delMotor.length}. Con una de mas, ` +
+      `alguien elige una raza cuyo peso adulto el motor no sabe; con una de menos, una raza que ` +
+      `el motor conoce no se puede elegir`)
+      .toBe(delMotor.length);
+
+    const porNombre = new Map(delMotor.map((r) => [r.nombre, r]));
+    for (const r of delaApp) {
+      const m = porNombre.get(r.nombre);
+      expect(m, `«${r.nombre}» esta en la app y no en razas.json del motor`).toBeTruthy();
+      expect(m, `«${r.nombre}» dice cosas distintas en la app y en el motor`).toEqual(r);
+    }
+  });
+
+  // Y las que escriben las PRUEBAS, que es donde se coló la ficción.
+  test("ninguna prueba siembra una raza o un tamaño que el motor no conoce", () => {
+    const datos = JSON.parse(
+      fs.readFileSync(path.resolve(AQUI, "../../Canislab-api/razas.json"), "utf-8"));
+    const nombres = new Set(datos.razas.map((r) => r.nombre));
+    const tamanos = new Set(datos._meta.tamanos);
+
+    for (const archivo of fs.readdirSync(AQUI).filter((f) => f.endsWith(".js"))) {
+      const texto = fs.readFileSync(path.join(AQUI, archivo), "utf-8");
+      for (const linea of texto.split("\n")) {
+        if (linea.trim().startsWith("//")) continue;      // los comentarios citan los malos
+        const raza = linea.match(/\braza:\s*"([^"]+)"/);
+        if (raza) {
+          expect(nombres.has(raza[1]),
+            `${archivo} siembra la raza «${raza[1]}», que no esta en razas.json. La app la ` +
+            `tratara como un mestizo sin peso medio y la prueba correra contra una ficcion:\n` +
+            `    ${linea.trim()}`)
+            .toBe(true);
+        }
+        const tam = linea.match(/\btamano:\s*"([^"]+)"/);
+        if (tam) {
+          expect(tamanos.has(tam[1]),
+            `${archivo} siembra el tamaño «${tam[1]}», que no es ninguno de los seis del motor ` +
+            `(${[...tamanos].join(", ")}). El catalogo indexa con \`{tamano}_{etapa}\`:\n` +
+            `    ${linea.trim()}`)
+            .toBe(true);
+        }
+      }
     }
   });
 
