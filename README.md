@@ -12,6 +12,12 @@ npm run build    # build de producción
 npm test         # tests automáticos (Playwright + Chromium)
 ```
 
+Las cabeceras de seguridad del sitio (quién puede meter rawku.app dentro de
+un marco, y las otras cuatro) viven en `vercel.json`, y el porqué de cada
+una en **`SEGURIDAD.md`** — aparte, porque el JSON no admite comentarios y
+una lista de cabeceras sin explicación es lo que alguien borra en seis meses
+pensando que no hacía nada.
+
 ---
 
 ## Sentry — errores de producción
