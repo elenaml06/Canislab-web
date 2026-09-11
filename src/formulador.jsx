@@ -276,6 +276,21 @@ export default function Formulador({
         setGramos(Object.fromEntries(
           Object.entries(d.menu).map(([k, v]) => [k, redondea(v)])));
         if (d.estado) setEstado(d.estado);
+        // ⚠️ Y SI HA HABIDO QUE BAJAR DE PELDAÑO, SE DICE (11 septiembre).
+        // Desde hoy autocompletar recorre la escalera, así que puede salir
+        // con proporciones más sueltas que las que el veterinario tenía
+        // delante. Callarlo sería cambiarle la forma de la ración en
+        // silencio, que es la regla 3 al revés — y quien firma tiene que
+        // poder decir con qué proporciones salió.
+        if (d.se_bajo_de_peldano && d.peldano) {
+          const cual = (peldanos || []).find((p) => p.clave === d.peldano);
+          setPeldano(d.peldano);
+          setAvisoAuto(
+            `Con las proporciones que tenías puestas no salía, así que se ha completado con ` +
+            `«${cual ? cual.titulo : d.peldano}». Solo cambia la forma de la ración: los 43 ` +
+            `requisitos, el ratio Ca:P y los topes de seguridad y de patología son los mismos.`);
+          setPeldanosAbiertos(true);
+        }
       } else {
         // ⚠️ «NO SALE» TIENE QUE DECIR EN QUÉ PELDAÑO NO SALE (8 septiembre).
         // Sin eso, un no se lee como «no existe» cuando muchas veces es «no
@@ -550,9 +565,21 @@ export default function Formulador({
                      opacity: autocompletando ? 0.6 : 1, cursor: "pointer" }}>
             <Sparkles size={16} /> {autocompletando ? "Completando…" : "Autocompletar lo que falta"}
           </button>
+          {/* ⚠️ ESTO PROMETÍA UN RESULTADO Y NO PODÍA CUMPLIRLO (11 septiembre).
+              Ponía «el motor completa alrededor» a secas, en indicativo. Elena:
+              «hay un aviso que dice que se autocompleta el menú con los gramos
+              que ya ha puesto y en la mayoría de casos no pasa; pon que se
+              intentará y que saldrá un aviso si no es posible».
+              Y era verdad y medible: con seis entradas realistas de un adulto de
+              22 kg, CERO salían -- el endpoint probaba UN peldaño y se rendía,
+              mientras el generador del dueño recorría la escalera entera. Eso ya
+              está arreglado en el motor (4 de 6 ahora), pero el texto tampoco
+              puede volver a prometer: lo que se promete es que sus cifras NO SE
+              TOCAN, que eso sí se cumple siempre. */}
           <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-            Tus cantidades no se tocan: el motor completa alrededor, y lo que rellena se puede
-            seguir editando.
+            Se intenta completar la ración alrededor de tus cantidades, <b>sin tocarlas</b>. Si no
+            existe ninguna que cumpla con esas cifras, se dice — no se cambian por detrás. Lo que
+            rellene se puede seguir editando.
           </p>
 
           {/* ─── LAS PROPORCIONES CON LAS QUE COMPLETA ─────────────────────
