@@ -170,8 +170,11 @@ test("lo excluido en la ficha del paciente no se puede quitar desde aquí", asyn
 test("lo que fija el veterinario viaja al motor", async ({ page, request }) => {
   await comoVeterinario(page, request);
   await page.getByRole("button", { name: /Tus objetivos/ }).click();
-  await page.getByLabel("Máximo de Grasa (g)").fill("30");
-  await page.getByLabel("Mínimo de Proteína (g)").fill("80");
+  // ⚠️ La etiqueta lleva la unidad POR 1000 KCAL desde el 11 de septiembre: el
+// objetivo viaja en la unidad del motor, y quien escriba 2 creyendo que son
+// gramos cuando son miligramos aprieta mil veces de más.
+  await page.getByLabel("Máximo de Grasa (g/1000 kcal)").fill("30");
+  await page.getByLabel("Mínimo de Proteína (g/1000 kcal)").fill("80");
   await page.getByRole("button", { name: /Autocompletar/ }).click();
 
   await expect.poll(async () => {

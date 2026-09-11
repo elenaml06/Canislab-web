@@ -822,7 +822,11 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     const claves = (texto) => [...texto.matchAll(/\{ key: "([a-z0-9_]+)"/g)].map((m) => m[1]);
     const ofrece = new Set([
       ...claves(trozo("const PATOLOGIAS = [", "\n];")),
-      ...claves(trozo("const FAMILIAS_PATOLOGIA = {", "\n};")),
+      // ⚠️ `let` y no `const` desde el 11 de septiembre: la lista la sirve el
+      // motor y esta tabla es el RESPALDO. Se sigue leyendo de aquí a
+      // propósito -- el respaldo es lo que se pinta cuando la API duerme, así
+      // que también tiene que ofrecer las claves que el motor conoce.
+      ...claves(trozo("let FAMILIAS_PATOLOGIA = {", "\n};")),
     ]);
 
     const sinCasilla = [...delMotor].filter((k) => !ofrece.has(k)).sort();

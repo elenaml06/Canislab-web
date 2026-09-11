@@ -745,6 +745,15 @@ function instalarVocabulario(vocab) {
       .map((p) => ({ label: p.dueno.titulo, detalle: p.dueno.detalle || "" }));
     if (delDueno.length === CONDICIONES_RESPALDO.length) CONDICIONES = delDueno;
   }
+  // Las familias de patología: la pregunta, sus respuestas y a qué clave del
+  // motor lleva cada una. Solo se instala si viene completa, como las demás:
+  // media lista aquí sería un estadio que no se puede elegir.
+  const familias = familiasDelVocabulario(vocab);
+  if (familias) {
+    FAMILIAS_PATOLOGIA = familias;
+    rehacerIndicesDeFamilia();
+  }
+
   return vocab;
 }
 
@@ -1304,7 +1313,7 @@ const PATOLOGIAS_POR_APARATO = (() => {
 // la cabecera (y a cualquier otra hermana) en `perfil.patologias` -- el
 // array que ve el backend nunca lleva dos claves de la misma familia a
 // la vez.
-const FAMILIAS_PATOLOGIA = {
+let FAMILIAS_PATOLOGIA = {
   cardiopatia: {
     pregunta: "¿Sabes el estadio ACVIM?",
     opciones: [
@@ -1356,22 +1365,79 @@ const FAMILIAS_PATOLOGIA = {
     ],
   },
 };
+// ⚠️ LA LISTA LA SIRVE EL MOTOR (11 de septiembre de 2026, noche).
+//
+// Lo de arriba es el RESPALDO. Las preguntas, sus respuestas y a qué clave
+// lleva cada una viven en `preguntas_por_patologia.json` del motor y se sirven
+// por `GET /vocabulario`, igual que quién puede marcar cada casilla. Copiadas
+// aquí eran una segunda lista: el día que el motor añadiera un estadio -- y ya
+// pasó con los cinco de la cardiopatía y con los cinco tipos de urolito -- la
+// app se quedaría con la suya vieja, el veterinario no podría elegirlo, y el
+// menú saldría verde igual porque el semáforo mide contra el perro SANO.
+//
+// ⚠️ Y `segura` SE DERIVA DE LO QUE DICE EL MOTOR, no de esta tabla. Era el
+// riesgo que el comentario de `PATOLOGIAS` lleva escrito desde agosto --
+// «`segura` es el `formulable` del backend, si un día se desincronizan...» --,
+// y el motor lo dice en cada respuesta: `cifras_que_aplica._no_formulable`.
+// Lo que SÍ sigue viniendo de aquí es el `aviso`, que es texto clínico y el
+// motor no lo tiene. Una respuesta no formulable que llegara sin aviso lleva
+// uno genérico: mejor un aviso corto que ninguno.
+const AVISO_SIN_TEXTO = "Esta opción necesita una dieta pautada por tu veterinario: sus cifras "
+  + "caen por debajo de lo que un perro sano necesita, y eso no se arregla eligiendo mejor "
+  + "los alimentos.";
+
+function familiasDelVocabulario(vocab) {
+  const servidas = vocab?.preguntas_por_patologia?.que_decide_cada_respuesta;
+  if (!servidas || typeof servidas !== "object") return null;
+  const salida = {};
+  for (const [cabecera, info] of Object.entries(servidas)) {
+    if (!info?.la_hace_la_app) continue;
+    const respuestas = Array.isArray(info.respuestas) ? info.respuestas : [];
+    if (respuestas.length < 2) continue;   // una sola respuesta no es una pregunta
+    const local = FAMILIAS_RESPALDO[cabecera];
+    salida[cabecera] = {
+      pregunta: info.pregunta || local?.pregunta || "",
+      opciones: respuestas.filter((r) => r?.clave_motor).map((r) => {
+        const suyo = (local?.opciones || []).find((o) => o.key === r.clave_motor) || {};
+        const formulable = !(r.cifras_que_aplica || {})._no_formulable;
+        return {
+          key: r.clave_motor,
+          label: r.label || suyo.label || r.clave_motor,
+          segura: formulable,
+          aviso: formulable ? suyo.aviso : (suyo.aviso || AVISO_SIN_TEXTO),
+        };
+      }),
+    };
+  }
+  return Object.keys(salida).length ? salida : null;
+}
+
 // Clave real -> familia a la que pertenece, para poder quitar a las
-// hermanas del array al elegir una nueva.
-const FAMILIA_DE_CLAVE = Object.fromEntries(
-  Object.entries(FAMILIAS_PATOLOGIA).flatMap(([cabecera, { opciones }]) =>
-    opciones.map((o) => [o.key, cabecera]))
-);
+// hermanas del array al elegir una nueva. Se REHACE cuando llega el
+// vocabulario: si se quedara con las claves del respaldo, elegir un estadio
+// nuevo dejaría DOS claves de la misma familia en el array y el motor
+// aplicaría el `min()` de las dos sin que nadie lo pidiera.
+const FAMILIAS_RESPALDO = FAMILIAS_PATOLOGIA;
+let FAMILIA_DE_CLAVE = {};
+let OPCIONES_DE_FAMILIA_POR_CLAVE = {};
+
+function rehacerIndicesDeFamilia() {
+  FAMILIA_DE_CLAVE = Object.fromEntries(
+    Object.entries(FAMILIAS_PATOLOGIA).flatMap(([cabecera, { opciones }]) =>
+      opciones.map((o) => [o.key, cabecera]))
+  );
+  OPCIONES_DE_FAMILIA_POR_CLAVE = Object.fromEntries(
+    Object.values(FAMILIAS_PATOLOGIA).flatMap(({ opciones }) =>
+      opciones.map((o) => [o.key, o]))
+  );
+}
+rehacerIndicesDeFamilia();
 
 // Toda opción de toda familia, indexada por su propia clave -- para poder
 // resolver "urato" o "renal_avanzada" aunque no tengan su propia entrada
 // en `PATOLOGIAS` (algunas sí la tienen también, p.ej. "urato"; la
 // entrada de `PATOLOGIAS` manda si existen las dos, por eso se comprueba
 // primero en `datosPatologia`).
-const OPCIONES_DE_FAMILIA_POR_CLAVE = Object.fromEntries(
-  Object.values(FAMILIAS_PATOLOGIA).flatMap(({ opciones }) =>
-    opciones.map((o) => [o.key, o]))
-);
 
 // La ÚNICA función que hay que llamar para saber si una clave de patología
 // (venga de una casilla simple o de una opción de familia) es segura y qué
@@ -1427,6 +1493,10 @@ function familiaPatologiaActiva(cabecera, patologias) {
 // La pregunta de subtipo, si esta cabecera tiene familia y está activa.
 // `onCambiar` recibe el array de patologías YA actualizado.
 function SelectorSubtipoPatologia({ cabecera, patologias, onCambiar }) {
+  // Se pide aquí para que el componente se vuelva a pintar cuando llegue: las
+  // familias son una variable de módulo, y sin este hook las respuestas del
+  // motor no aparecerían hasta el siguiente re-render por otra causa.
+  useVocabulario();
   const familia = FAMILIAS_PATOLOGIA[cabecera];
   if (!familia || !familiaPatologiaActiva(cabecera, patologias)) return null;
   const actual = patologias.find((k) => FAMILIA_DE_CLAVE[k] === cabecera) || cabecera;
