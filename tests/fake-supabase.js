@@ -194,6 +194,17 @@ export function crearFakeSupabase(opciones = {}) {
     avisosPatologia: [],
     // El caso de la pancreatitis: solo sale en el último peldaño.
     soloSaleEnElUltimoPeldano: false,
+    // ⚠️ AÑADIDO (11 septiembre) — lo que contesta `GET /vocabulario`.
+    //
+    // Va a `null` por defecto Y ESO ES LO QUE SE QUIERE: sin él, el endpoint
+    // contesta 404 y la app cae a sus listas de respaldo, que es como corren
+    // las demás pruebas de este repo. Aquí NO hay una copia del vocabulario
+    // del motor a propósito -- sería la tercera copia de la misma lista, que
+    // es el fallo que todo esto viene a evitar. Quien lo necesite lo siembra
+    // con palabras INVENTADAS: solo así se distingue «la app lo ha leído del
+    // motor» de «la app está pintando su respaldo», que a simple vista se ven
+    // igual.
+    vocabulario: null,
     // Lo que la cuenta tenga guardado de su clínica (y de su nº de
     // colegiado, que se escribe por el mismo PATCH).
     clinica: {},
@@ -358,6 +369,13 @@ export function crearFakeSupabase(opciones = {}) {
       estado.avisosPatologia = Array.isArray(cfg.avisosPatologia)
         ? cfg.avisosPatologia.slice() : [];
       estado.soloSaleEnElUltimoPeldano = cfg.soloSaleEnElUltimoPeldano === true;
+      // Como `clinica`: leer no puede borrarlo. `leer()` hace un POST vacío
+      // para mirar el estado, y si esto se reseteara ahí, una prueba que
+      // siembre el vocabulario y luego lea perdería el escenario a mitad.
+      if (Object.keys(cfg).length > 0) {
+        estado.vocabulario = cfg.vocabulario && typeof cfg.vocabulario === "object"
+          ? JSON.parse(JSON.stringify(cfg.vocabulario)) : null;
+      }
       estado.sinColumnasDeClinica = cfg.sinColumnasDeClinica === true;
       // ⚠️ LEER NO PUEDE BORRAR (8 septiembre). `leer()` hace un POST con el
       // cuerpo vacío para mirar el estado, y aquí `clinica` no es un
@@ -855,6 +873,16 @@ export function crearFakeSupabase(opciones = {}) {
           },
         },
       });
+    }
+    // ── EL VOCABULARIO DEL MOTOR ────────────────────────────────────────
+    // `GET /vocabulario` sirve las listas que la app tiene que reflejar (los
+    // niveles de actividad con sus DOS registros, las etapas, las categorías,
+    // los peldaños). Aquí solo se devuelve lo que la prueba haya sembrado: si
+    // no ha sembrado nada, 404 -- y la app se queda con su respaldo, que es lo
+    // que hace en las otras ~45 pruebas de este repo.
+    if (ruta === "/vocabulario") {
+      if (!estado.vocabulario) return responder(404, { detail: "sin vocabulario sembrado" });
+      return responder(200, estado.vocabulario);
     }
     if (ruta === "/alimentos") {
       return responder(200, {

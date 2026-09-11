@@ -166,13 +166,21 @@ test.describe("ningún camino se queda sin mandarla", () => {
     const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
     expect(app, "falta la constante ACTIVIDAD_API en App.jsx")
       .toContain('const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]');
-    // El orden importa: el índice de NIVELES es el que se usa para indexar.
-    const iNiveles = app.indexOf("const NIVELES = [");
+    // El orden importa: el índice de la lista es el que se usa para indexar.
+    //
+    // ⚠️ RENOMBRADA A `NIVELES_RESPALDO` (11 septiembre). Desde ese día las
+    // palabras las sirve el motor por `GET /vocabulario` y esta lista es solo
+    // el respaldo de cuando la API no contesta -- pero sigue siendo la que
+    // decide el ÍNDICE, así que se vigila igual. Que el respaldo tenga las
+    // mismas casillas que el motor lo comprueba `vocabulario.spec.js`.
+    const iNiveles = app.indexOf("const NIVELES_RESPALDO = [");
+    expect(iNiveles, "App.jsx ya no tiene NIVELES_RESPALDO. Si se ha vuelto a renombrar hay que " +
+                     "actualizar esta prueba, no borrarla").toBeGreaterThan(-1);
     const bloqueNiveles = app.slice(iNiveles, app.indexOf("];", iNiveles));
     for (const etiqueta of ["Sedentario", "Normal", "Activo", "Muy activo", "Trabajo"]) {
       expect(bloqueNiveles,
-        `NIVELES ya no tiene «${etiqueta}». ACTIVIDAD_API se indexa con la posición de esta ` +
-        `lista: si cambia el orden o desaparece un nivel, la app manda una clave que no ` +
+        `NIVELES_RESPALDO ya no tiene «${etiqueta}». ACTIVIDAD_API se indexa con la posición de ` +
+        `esta lista: si cambia el orden o desaparece un nivel, la app manda una clave que no ` +
         `corresponde y el motor la tira sin decir nada`)
         .toContain(etiqueta);
     }

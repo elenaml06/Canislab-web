@@ -1741,6 +1741,26 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // lado seguro del error.
   enModoProfesional = false }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
+  // ⚠️ LA CUARTA COPIA DE LOS NIVELES DE ACTIVIDAD, encontrada el 11 de
+  // septiembre escribiendo `tests/vocabulario.spec.js`. Esta pantalla tenía la
+  // lista escrita A MANO dentro del propio JSX:
+  //
+  //     valor: [«Sedentario», «Normal», «Activo», «Muy activo», «Trabajo»][idx]
+  //
+  // (escrito con comillas angulares a posta: con las rectas, el guardián de
+  //  `vocabulario.spec.js` cazaría este comentario como si fuera una quinta copia.)
+  //
+  // Cuatro copias de la misma lista y ninguna prueba que las comparara, que es
+  // exactamente la forma del fallo de `CATEGORIAS_QUE_ELIGE_EL_USUARIO`. Y ésta
+  // era la peor de las cuatro, porque además ENSEÑABA EL REGISTRO DEL DUEÑO A
+  // UN VETERINARIO: con `enModoProfesional` a mano en esta misma función, la
+  // ficha del paciente decía «Muy activo» donde la de al lado dice «Actividad
+  // alta (extremo bajo del rango)».
+  //
+  // La petición no se repite: `pedirVocabulario` la cachea a nivel de módulo.
+  const vocabDeLaVista = useVocabulario();
+  const nivelesDeLaVista = nivelesDeActividad(vocabDeLaVista,
+                                              enModoProfesional ? "veterinario" : "dueno");
   // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
   // pantalla del menú era un scroll larguísimo donde el plan de
   // transición y la congelación quedaban enterrados a mitad de
@@ -3512,7 +3532,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           {[
             { label: "Peso actual", valor: `${perfil?.pesoActual || "-"}kg` },
             { label: "Etapa actual", valor: etapaLabel },
-            { label: "Actividad", valor: ["Sedentario", "Normal", "Activo", "Muy activo", "Trabajo"][perfil?.actividadIdx] || "Normal" },
+            { label: "Actividad", valor: (nivelesDeLaVista[perfil?.actividadIdx] || nivelesDeLaVista[1] || {}).label || "—" },
             { label: "Esterilizado", valor: perfil?.esterilizado === "si" ? "Sí" : "No" },
             { label: "Alergias", valor: (perfil?.alergias || []).map((a) => a.alimento.replace("Todo: ", "")).join(", ") || "Ninguna" },
             // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: aquí solo
