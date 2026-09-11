@@ -278,7 +278,35 @@ export async function getPerros(userId) {
 // A partir de aquí esta función recibe la ficha TAL Y COMO LA TIENE LA
 // APP y hace ella las conversiones. Sigue aceptando la forma antigua
 // (fechaNacimiento, castrado, actividad) por si algún sitio la usa.
-const ACTIVIDAD_POR_INDICE = ['baja', 'media', 'alta']
+// ⚠️ ARREGLADO EL 11 DE SEPTIEMBRE — LOS DOS NIVELES DE ARRIBA NO SE GUARDABAN.
+//
+// Aqui ponia `['baja', 'media', 'alta']`: TRES. Y la app ofrece CINCO niveles
+// (NIVELES, en App.jsx: Sedentario, Normal, Activo, Muy activo, Trabajo).
+//
+// O sea que los indices 3 y 4 caian en `undefined`, el `?? 'media'` de abajo los
+// convertia en «media», y al recargar la ficha volvian como **Normal**. En
+// silencio, sin error y sin que cambiara nada en pantalla.
+//
+// Y eso cambia la comida: Trabajo son 175 kcal/kg^0,75 y Normal 110, o sea que
+// **un perro de trabajo recibia un 37 % menos** del que le toca cada vez que se
+// recargaba su ficha. El menu salia verde porque era un menu correcto para el
+// perro equivocado. Es la familia del apartado «Fallos que no puede encontrar la
+// usuaria» del CLAUDE.md del motor, y el caso que lo define es identico: siete
+// campos de `guardarPerro` que se guardaban vacios porque se leian con nombres
+// que no existian.
+//
+// COMO SALIO: escribiendo `tests/actividad-en-cada-peticion.spec.js`, con un
+// perro de trabajo, para comprobar otra cosa -- que la actividad viaja en el
+// cuerpo de la peticion. Viajaba bien; lo que estaba roto era la ficha.
+//
+// POR QUE NO LO CAZO `ficha-ida-y-vuelta.spec.js`, que tiene «actividad» en su
+// lista de campos: su perro usaba `actividad: "baja"`, el indice 0, que esta
+// dentro del rango que si sobrevivia. Ahora usa el 4, que es el que lo prueba.
+//
+// LOS TRES PRIMEROS NO SE RENOMBRAN, a proposito: hay fichas guardadas con
+// «baja», «media» y «alta» desde el primer dia, y renombrarlos las romperia
+// todas. Los dos nuevos se anaden detras.
+const ACTIVIDAD_POR_INDICE = ['baja', 'media', 'alta', 'muy_alta', 'trabajo']
 
 function fechaNacimientoISO(perfil) {
   if (perfil.fechaNacimiento) return perfil.fechaNacimiento   // forma antigua

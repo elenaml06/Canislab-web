@@ -56,7 +56,11 @@ function perroDeTrabajo() {
     ...PERRO_DE_PRUEBA,
     nombre: "Duna",
     peso_actual: 25.0,
-    actividad: 4,              // "Trabajo" en NIVELES
+    // La fila de Supabase guarda el TEXTO, no el índice: es lo que escribe
+    // `ACTIVIDAD_POR_INDICE` y lo que lee `perfilDesdeSupabase`. Poner aquí un 4
+    // daba «normal» y parecía que el fallo seguía -- lo que fallaba era la
+    // fixture.
+    actividad: "trabajo",      // el índice 4 de NIVELES, tal y como se guarda
     etapa: "adulto",
     tamano: "grande",
     raza: "Border collie",
@@ -75,37 +79,22 @@ test.describe("la actividad llega al servidor", () => {
     });
   });
 
-  // ⚠️ MARCADA `test.fail` A PROPOSITO (11 septiembre). Esta prueba está BIEN y
-  // el código está MAL: al escribirla salió un fallo de producción que no
-  // buscaba nadie.
+  // ⚠️ ESTA PRUEBA ESTUVO EN `test.fail` DURANTE UNA HORA, el 11 de septiembre,
+  // y conviene que quede escrito por qué. Al escribirla salió un fallo de
+  // producción que no buscaba nadie:
   //
   //     src/supabase.js:  const ACTIVIDAD_POR_INDICE = ['baja', 'media', 'alta']
   //
-  // La app ofrece CINCO niveles (NIVELES, en App.jsx) y la base de datos solo
-  // sabe guardar TRES. «Muy activo» (índice 3) y «Trabajo» (índice 4) caen en
-  // `undefined`, el `?? 'media'` los convierte en «media», y al recargar la
-  // ficha vuelven como **Normal**. En silencio.
+  // La app ofrece CINCO niveles y la base de datos sabía guardar TRES. «Muy
+  // activo» (índice 3) y «Trabajo» (índice 4) caían en `undefined`, el
+  // `?? 'media'` los convertía en «media», y al recargar la ficha volvían como
+  // **Normal**. En silencio. Y eso cambia la comida: Trabajo son 175
+  // kcal/kg^0,75 y Normal 110, o sea que un perro de trabajo recibía un **37 %
+  // menos** del que le toca cada vez que se recargaba su ficha.
   //
-  // Y eso cambia la comida: Trabajo son 175 kcal/kg^0,75 y Normal 110, o sea
-  // que un perro de trabajo recibe un **37 % menos** del que le toca cada vez
-  // que se recarga su ficha. Sin error, sin aviso, y el menú sale verde porque
-  // es un menú correcto para el perro equivocado. Es la familia de fallos del
-  // apartado «Fallos que no puede encontrar la usuaria» del CLAUDE.md.
-  //
-  // POR QUÉ NO LO CAZÓ `ficha-ida-y-vuelta.spec.js`, que tiene «actividad» en
-  // su lista: su perro de prueba usa `actividad: "baja"`, el índice 0, que está
-  // dentro del rango que sí sobrevive. La prueba pasa porque eligió un valor
-  // que no toca el fallo -- la misma lección de los bloques 57, 58 y 60 del
-  // motor.
-  //
-  // `test.fail` y no `skip` a propósito: así queda ROJO el día que alguien lo
-  // arregle, y entonces se quita esta marca. Un `skip` se olvida.
-  //
-  // ⚠️ ARREGLARLO TOCA LA BASE DE DATOS (la columna `actividad` de `perros`
-  // pasaría a admitir cinco textos en vez de tres) y por eso no se ha hecho
-  // aquí sin preguntar: en el repo no hay ninguna migración que declare una
-  // restricción sobre esa columna, pero eso no prueba que no exista.
-  test.fail();
+  // Arreglado en los DOS lados el mismo día -- `ACTIVIDAD_POR_INDICE` al
+  // guardar y `perfilDesdeSupabase` al leer --, así que la marca se ha quitado.
+  // Si vuelve a aparecer, el fallo ha vuelto.
   test("al generar el menú de un perro de trabajo", async ({ page, request }) => {
     await page.goto("/");
     await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);

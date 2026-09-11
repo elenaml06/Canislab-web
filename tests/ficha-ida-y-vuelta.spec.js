@@ -44,7 +44,14 @@ const FICHA_COMPLETA = {
   peso_actual: 17.4,
   fecha_nacimiento: "2015-03-10",     // ni el 15 de febrero de este año
   castrado: true,                      // el defecto es false
-  actividad: "baja",                   // el defecto es "media"
+  // ⚠️ «trabajo» Y NO «baja» (11 septiembre). Hasta hoy aquí ponía "baja", que
+  // es el índice 0, y el fallo que esta prueba existe para cazar vivía en los
+  // índices 3 y 4: la app ofrecía cinco niveles y la base de datos guardaba
+  // tres, así que «Muy activo» y «Trabajo» volvían como Normal. Con "baja" la
+  // prueba pasaba sin tocar el fallo -- eligió un valor que no lo prueba, que
+  // es la misma lección de los bloques 57, 58 y 60 del motor. Con el extremo de
+  // arriba, si alguien vuelve a recortar la lista, esto se pone rojo.
+  actividad: "trabajo",                // el defecto es "media"; este es el índice 4
   condicion_idx: 3,                    // el defecto es 2
   bcs: 6,
   tutor_nombre: "María López",

@@ -4403,7 +4403,14 @@ function perfilDesdeSupabase(p) {
     // casos `objetivoVigente` lo calcula al vuelo y Evolución pide
     // confirmarlo.
     pesoObjetivoKg: p.peso_objetivo_kg ?? null,
-    actividadIdx: p.actividad === "alta" ? 2 : p.actividad === "baja" ? 0 : 1,
+    // ⚠️ LOS CINCO NIVELES, NO TRES (11 septiembre). Esto leia solo «alta»,
+    // «baja» y todo lo demas como 1, asi que aunque la base de datos guardara
+    // «muy_alta» o «trabajo» volvian como Normal. Es la otra mitad del arreglo
+    // de `ACTIVIDAD_POR_INDICE` en supabase.js -- si solo se arregla uno de los
+    // dos lados, el dato sigue perdiendose. El orden es el de NIVELES.
+    actividadIdx: ["baja", "media", "alta", "muy_alta", "trabajo"].indexOf(p.actividad) >= 0
+      ? ["baja", "media", "alta", "muy_alta", "trabajo"].indexOf(p.actividad)
+      : 1,
     actividadTocado: true,
     esterilizado: p.castrado ? "si" : "no",
     alergiaSi: p.alergia_si,
