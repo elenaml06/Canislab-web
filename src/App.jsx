@@ -606,7 +606,27 @@ const BANDERA_DE = {
 // El índice es lo único que llega al cálculo del DER, así que cambiar las
 // palabras no cambia ni una kcal -- y estas son las palabras que usa quien
 // escribe una pauta, no "no para".
-const NIVELES_CLINICOS = [
+// ⚠️ ESTAS DOS LISTAS SON UN RESPALDO, NO LA VERDAD (11 de septiembre de 2026).
+//
+// Elena: «no hay que hacer que el motor coincida con lo de la app. hay que hacer
+// que la app coincida con lo del motor [...] si el motor dice que hay dieciocho
+// niveles de actividad, la app tiene que tener 18 niveles de actividad porque si
+// no no sirve de nada, y asi con todo».
+//
+// La verdad es `GET /vocabulario`, que sirve los niveles con su clave, su cifra
+// de FEDIAF y LAS DOS ETIQUETAS -- la del dueño y la del veterinario --, porque
+// eso tambien lo pidio Elena: «el vocabulario que usa la app en modo usuario
+// tiene que ser entendible para el usuario y el que se usa en modo veterinario
+// tiene que ser mas tecnico».
+//
+// Estas listas solo se usan mientras esa peticion no ha llegado, o si falla. Si
+// se desincronizan del motor, el respaldo enseña un nivel que el motor no sabe
+// recibir -- por eso `tests/vocabulario.spec.js` compara las dos.
+//
+// ⚠️ Y ojo con el numero: el motor tiene CINCO niveles y la Tabla VII-7 de
+// FEDIAF tiene CUATRO filas de actividad. La cuarta, «High activity 150-175»,
+// la partimos nosotros en dos. Esta escrito en `niveles_de_actividad.json`.
+const NIVELES_CLINICOS_RESPALDO = [
   { label: "Reposo / restricción", detalle: "sedentario, postoperatorio" },
   { label: "Mantenimiento", detalle: "paseos diarios" },
   { label: "Actividad moderada", detalle: "ejercicio regular" },
@@ -614,7 +634,7 @@ const NIVELES_CLINICOS = [
   { label: "Trabajo", detalle: "pastoreo, guarda, tiro" },
 ];
 
-const NIVELES = [
+const NIVELES_RESPALDO = [
   { label: "Sedentario", detalle: "Paseos cortos, se mueve poco", Icono: Moon },
   { label: "Normal", detalle: "Paseos diarios de siempre", Icono: Footprints },
   { label: "Activo", detalle: "Paseos largos, juega bastante", Icono: Zap },
@@ -645,6 +665,50 @@ const NIVELES = [
 //
 // Las cinco claves son las de `der.ACTIVIDAD_KEY` en el repo del motor y el
 // orden es el mismo que el de NIVELES, arriba.
+// ⚠️ EL VOCABULARIO SE LEE DEL MOTOR, UNA SOLA VEZ POR SESION.
+//
+// Se cachea en una promesa a nivel de modulo a proposito: si cada pantalla que
+// necesita los niveles lanzara su propia peticion, la API de Render -- que
+// duerme tras 15 minutos -- recibiria cuatro despertares en vez de uno.
+//
+// Si falla, se devuelve null y quien lo use cae al respaldo. No se reintenta:
+// una lista de cinco etiquetas no justifica insistirle a un servidor dormido, y
+// el respaldo esta comprobado contra el motor por `tests/vocabulario.spec.js`.
+let _vocabularioPedido = null;
+
+function pedirVocabulario() {
+  if (!_vocabularioPedido) {
+    _vocabularioPedido = fetchConTimeout(`${API_BASE}/vocabulario`)
+      .then((r) => (r.ok ? r.json() : null))
+      .catch(() => null);
+  }
+  return _vocabularioPedido;
+}
+
+function useVocabulario() {
+  const [vocab, setVocab] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    pedirVocabulario().then((v) => { if (vivo) setVocab(v); });
+    return () => { vivo = false; };
+  }, []);
+  return vocab;
+}
+
+// Los niveles que hay que pintar, en el registro que toque. `modo` es "dueno" o
+// "veterinario", que son las dos claves que sirve el motor.
+function nivelesDeActividad(vocab, modo) {
+  const respaldo = modo === "veterinario" ? NIVELES_CLINICOS_RESPALDO : NIVELES_RESPALDO;
+  const servidos = vocab?.niveles_de_actividad?.niveles;
+  if (!Array.isArray(servidos) || servidos.length === 0) return respaldo;
+  return servidos.map((n, i) => ({
+    label: n?.[modo]?.titulo ?? respaldo[i]?.label ?? n.clave,
+    detalle: n?.[modo]?.detalle ?? respaldo[i]?.detalle ?? "",
+    // El icono es cosa de la app: el motor no sabe de iconos.
+    Icono: NIVELES_RESPALDO[i]?.Icono ?? NIVELES_RESPALDO[0].Icono,
+  }));
+}
+
 const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"];
 
 function claveDeActividad(perfil) {
@@ -4592,6 +4656,14 @@ function RawkuOnboardingInterna({
   onCrearCuenta = () => {},
   onDescartarLocal = () => {},
 }) {
+  // ⚠️ EL VOCABULARIO DEL MOTOR (11 septiembre). Una sola peticion por sesion,
+  // cacheada a nivel de modulo. De aqui salen los niveles de actividad con SUS
+  // DOS registros -- el del dueño y el del veterinario --, en vez de las listas
+  // que esta app tenia copiadas a mano. Si no llega, se cae al respaldo.
+  const vocab = useVocabulario();
+  const nivelesDueno = nivelesDeActividad(vocab, "dueno");
+  const nivelesVet = nivelesDeActividad(vocab, "veterinario");
+
   // Sin cuenta: `usuario` existe (USUARIO_LOCAL) para que todos los
   // `usuario && ...` de esta pantalla sigan valiendo, pero no hay sesión
   // de Supabase detrás. Lo que cambia es dónde se guardan las cosas y
@@ -8426,7 +8498,7 @@ function RawkuOnboardingInterna({
 
           <BloqueFicha titulo="Actividad">
             <div className="grid grid-cols-1 gap-1.5">
-              {NIVELES_CLINICOS.map((n, idx) => {
+              {nivelesVet.map((n, idx) => {
                 const activo = perfil.actividadTocado && perfil.actividadIdx === idx;
                 return (
                   <button key={n.label}
@@ -9080,7 +9152,7 @@ function RawkuOnboardingInterna({
 
   if (!enModoProfesional && paso === 5) {
     const puedeContinuar = perfil.actividadTocado && perfil.esterilizado !== null;
-    const actual = NIVELES[perfil.actividadIdx];
+    const actual = nivelesDueno[perfil.actividadIdx] || nivelesDueno[0];
     const Icono = actual.Icono;
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -9919,7 +9991,7 @@ function RawkuOnboardingInterna({
       paso: 5,
       Icono: Zap,
       titulo: "Actividad y esterilización",
-      valor: `${NIVELES[perfil.actividadIdx].label} · Esterilizado: ${perfil.esterilizado === "si" ? "Sí" : perfil.esterilizado === "no" ? "No" : "—"}`,
+      valor: `${(nivelesDueno[perfil.actividadIdx] || nivelesDueno[0]).label} · Esterilizado: ${perfil.esterilizado === "si" ? "Sí" : perfil.esterilizado === "no" ? "No" : "—"}`,
     },
     {
       paso: 6,
@@ -10079,7 +10151,7 @@ function RawkuOnboardingInterna({
               kilocalorías al día
             </p>
             <p className="text-[11px] mt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-              {etapaLabel} · {NIVELES[perfil.actividadIdx].label.toLowerCase()}
+              {etapaLabel} · {(nivelesDueno[perfil.actividadIdx] || nivelesDueno[0]).label.toLowerCase()}
               {perfil.raza?.nombre ? ` · ${perfil.raza.nombre}` : ""}
             </p>
             <div className="mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.18)" }}>
