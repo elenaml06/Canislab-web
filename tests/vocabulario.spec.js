@@ -590,6 +590,49 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     }
   });
 
+  // ⚠️ LAS 47 PATOLOGÍAS DEL MOTOR SE OFRECEN, Y NO SE OFRECE NINGUNA MÁS.
+  //
+  // Elena, 10 de septiembre: «todo lo que has hecho en backend tiene que poder
+  // ser efectivo y servir para algo en el frontend». `FRONTEND_VS_MOTOR.md`
+  // midió ese día que DIEZ patologías del motor no tenían casilla en ninguna
+  // parte -- entre ellas los cuatro estadios ACVIM, así que un perro en
+  // insuficiencia cardíaca recibía el sodio del B2 (739 en vez de 625).
+  //
+  // Ya están las 47, y esto es lo que impide que vuelva a abrirse el hueco: un
+  // documento que lo midió una vez se queda viejo, y este se ejecuta.
+  //
+  // Y vigila las DOS direcciones. La de vuelta es la que calla más: una clave
+  // que la app manda y el motor no conoce se tira sin decir nada, y el menú
+  // sale verde igual -- es lo que pasó con «estruvita», que se mandaba aunque
+  // el perro tuviera urato o cistina.
+  test("la app ofrece exactamente las patologías que el motor tiene", () => {
+    const TABLA = path.resolve(AQUI, "../../Canislab-api/patologias.json");
+    if (!fs.existsSync(TABLA)) throw new Error("No se encuentra patologias.json en " + TABLA);
+    const delMotor = new Set(Object.keys(JSON.parse(fs.readFileSync(TABLA, "utf-8")).patologias));
+
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const trozo = (desde, hasta) => app.slice(app.indexOf(desde), app.indexOf(hasta,
+      app.indexOf(desde)));
+    const claves = (texto) => [...texto.matchAll(/\{ key: "([a-z0-9_]+)"/g)].map((m) => m[1]);
+    const ofrece = new Set([
+      ...claves(trozo("const PATOLOGIAS = [", "\n];")),
+      ...claves(trozo("const FAMILIAS_PATOLOGIA = {", "\n};")),
+    ]);
+
+    const sinCasilla = [...delMotor].filter((k) => !ofrece.has(k)).sort();
+    expect(sinCasilla,
+      `el motor sabe formular estas patologías y la app no las ofrece a nadie, ni al dueño ni ` +
+      `al veterinario: ${sinCasilla.join(", ")}. Es lo que pasó con los cuatro estadios ACVIM ` +
+      `-- un perro en insuficiencia cardíaca recibía el sodio del B2`)
+      .toEqual([]);
+
+    const inventadas = [...ofrece].filter((k) => !delMotor.has(k)).sort();
+    expect(inventadas,
+      `la app ofrece estas claves y el motor no las conoce: ${inventadas.join(", ")}. Las tira ` +
+      `sin decir nada y el menú sale verde igual`)
+      .toEqual([]);
+  });
+
   // El inventario de la Tabla VII-7, fila por fila. Lo que la app ofrece tiene
   // que ser lo que ese fichero declara ofrecible -- ni más ni menos.
   test("la app ofrece las filas que el inventario declara ofrecibles", () => {
