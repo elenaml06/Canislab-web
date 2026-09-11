@@ -22,6 +22,10 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { AlertCircle, Ban, Check, ChevronDown, Menu, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
 import { API_BASE, fetchConTimeout } from "./api.js";
+// La clave de actividad que entiende el motor. Vive en `vocabulario.js` y no en
+// `App.jsx` porque esta pantalla la necesita y no puede importar de allí sin
+// hacer un ciclo -- que es justo por lo que este formulador no la mandaba.
+import { claveDeActividad } from "./vocabulario.js";
 import { agruparNutrientes, resumenDeLaFicha, nombreLegible } from "./nutrientes.js";
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
 
@@ -267,6 +271,35 @@ export default function Formulador({
 
   const cuerpoBase = useMemo(() => ({
     der_objetivo: derObjetivo,
+    // ⚠️ LOS DOS CAMPOS QUE LA FICHA YA RECOGE Y QUE ESTA PANTALLA NO MANDABA
+    // (11 de septiembre de 2026).
+    //
+    // Elena, el mismo día: «por eso te dije que todo lo tienes que probar
+    // dentro de la app con los usuarios que tienes para comprobar que funciona,
+    // y no lo has hecho en nada, ni con todo lo que hemos aplicado para el
+    // perfil de veterinario hoy ni para el de usuarios». Tenía razón: el
+    // generador del tutor mandaba los dos desde App.jsx y este formulador, que
+    // es la pantalla del VETERINARIO, no mandaba ninguno.
+    //
+    // Y no fue un descuido de escribir dos líneas: `claveDeActividad` vivía
+    // dentro de `App.jsx`, y esta pantalla no puede importar de allí sin hacer
+    // un ciclo. O sea que el dato estaba y el camino no existía. Ahora vive en
+    // `vocabulario.js`, que es de donde tiran los dos.
+    //
+    // QUÉ SE PERDÍA, que es lo que lo hace un fallo y no una omisión:
+    //   · `premios_nivel` — el motor formula la ración con las kcal QUE QUEDAN
+    //     y le sigue exigiendo el día entero de nutrientes. Sin él, al paciente
+    //     al que su dueño da un 20 % de las calorías en premios se le formula
+    //     como si no tomara ninguno, y esas calorías se suman POR ENCIMA de la
+    //     ración que el veterinario FIRMA.
+    //   · `actividad` — decide si se le aprietan los topes crónicos por peso
+    //     metabólico y si el menú lleva la nota del perro de trabajo. Sin él el
+    //     motor la deduce del cociente DER/peso^0,75, que confunde al Gran
+    //     Danés: su cifra de energía es POR RAZA, no por actividad.
+    //
+    // Lo vigila `tests/formulador.spec.js`, comprobado con el fallo puesto.
+    premios_nivel: perfil?.premiosNivel || null,
+    actividad: claveDeActividad(perfil),
     etapa_requisitos: etapaRequisitos,
     peso_perro_kg: pesoPerroKg ?? null,
     peso_adulto_esperado_kg: pesoAdultoEsperadoKg ?? null,
@@ -293,7 +326,7 @@ export default function Formulador({
     raciones_ya_puestas: (racionesDeLaSemana || []).length
       ? racionesDeLaSemana.map((r) => ({ gramos: r.gramos || {}, dias: Math.max(1, Number(r.dias) || 1) }))
       : undefined,
-  }), [derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg, pesoObjetivoKg,
+  }), [perfil, derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg, pesoObjetivoKg,
       patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas, peldano,
       fueraDeLaPrueba, objetivos, diasDeEstaRacion, racionesDeLaSemana]);
 
@@ -1391,7 +1424,13 @@ export default function Formulador({
 
         {onGuardar && !pautaFirmada && (
           <button onClick={async () => {
-              await onGuardar(soloPositivos(gramos), estado, indicaciones);
+              // ⚠️ LOS DÍAS VIAJAN CON LA RACIÓN AL GUARDARLA (11 septiembre).
+              // Sin esto, «esta ración cubre N días» servía para ESTA llamada y
+              // se perdía: la siguiente ración de la semana no tenía forma de
+              // saber cuánto presupuesto semanal se habían llevado las
+              // anteriores, así que la protección estaba construida en el motor
+              // (BLOQUE 92) y no se estaba usando en la app.
+              await onGuardar(soloPositivos(gramos), estado, indicaciones, diasDeEstaRacion);
               setGuardada(true);
             }}
             disabled={!puedeGuardar}

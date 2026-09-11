@@ -163,9 +163,14 @@ test.describe("ningún camino se queda sin mandarla", () => {
   // motor. Si se renombra una de las dos listas y la otra no, el servidor
   // recibe un valor que no reconoce y lo tira EN SILENCIO.
   test("las cinco claves son las que entiende el motor", () => {
+    // ⚠️ `ACTIVIDAD_API` VIVE EN `vocabulario.js` DESDE EL 11 DE SEPTIEMBRE.
+    // Se movió de App.jsx porque `formulador.jsx` la necesita y no puede
+    // importar de allí sin hacer un ciclo -- y por eso la pantalla del
+    // veterinario llevaba mandando sus peticiones SIN actividad.
+    const vocab = fs.readFileSync(path.resolve(AQUI, "../src/vocabulario.js"), "utf-8");
+    expect(vocab, "falta la constante ACTIVIDAD_API en vocabulario.js")
+      .toContain('export const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]');
     const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-    expect(app, "falta la constante ACTIVIDAD_API en App.jsx")
-      .toContain('const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]');
     // El orden importa: el índice de la lista es el que se usa para indexar.
     //
     // ⚠️ RENOMBRADA A `NIVELES_RESPALDO` (11 septiembre). Desde ese día las

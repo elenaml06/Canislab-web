@@ -556,9 +556,14 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     }
 
     // Y el conversor de índice a clave, que es el que hace el viaje.
-    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-    const i = app.indexOf("const ACTIVIDAD_API = [");
-    expect(i, "falta ACTIVIDAD_API en App.jsx").toBeGreaterThan(-1);
+    // ⚠️ VIVE EN `vocabulario.js` DESDE EL 11 DE SEPTIEMBRE, no en `App.jsx`.
+    // Se movió porque `formulador.jsx` -- la pantalla del veterinario -- lo
+    // necesita y no puede importar de App.jsx sin hacer un ciclo, así que
+    // estaba mandando sus peticiones SIN actividad. Esta prueba se actualiza,
+    // no se borra: sigue comparando las claves contra `der.py` del motor.
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/vocabulario.js"), "utf-8");
+    const i = app.indexOf("export const ACTIVIDAD_API = [");
+    expect(i, "falta ACTIVIDAD_API en vocabulario.js").toBeGreaterThan(-1);
     const claveApp = [...app.slice(i, app.indexOf("]", i)).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
     expect(claveApp,
       "ACTIVIDAD_API ya no dice las mismas claves que BASE_ACTIVIDAD, o no en el mismo orden. " +

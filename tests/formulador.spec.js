@@ -512,3 +512,114 @@ test("los menús de TODOS sus pacientes, y se pueden buscar", async ({ page, req
   await buscador.fill("pastor aleman");   // sin tilde, como se escribe en un móvil
   await expect(filaDe("Nala")).toBeVisible();
 });
+
+// ─── LO QUE LA FICHA RECOGE TIENE QUE LLEGAR TAMBIÉN DESDE AQUÍ ──────────────
+//
+// ⚠️ POR QUÉ EXISTE, y es una corrección (11 de septiembre de 2026)
+//
+// Elena, probándolo ella: «por eso te dije que todo lo tienes que probar dentro
+// de la app con los usuarios que tienes para comprobar que funciona, y no lo
+// has hecho en nada, ni con todo lo que hemos aplicado para el perfil de
+// veterinario hoy ni para el de usuarios».
+//
+// Y el perfil de veterinario tenía el fallo entero: `formulador.jsx` no mandaba
+// NI la actividad NI el nivel de premios en ninguna de sus llamadas a
+// `/formular/*`. El generador del tutor sí los mandaba, porque el conversor de
+// actividad vivía dentro de `App.jsx`; esta pantalla no puede importar de allí
+// sin hacer un ciclo, así que se quedó sin ellos y nadie lo vio.
+//
+// QUÉ SE PERDÍA, que es lo que lo hace un fallo y no una omisión:
+//   · Sin `premios_nivel`, al paciente al que su dueño le da un 20 % de las
+//     calorías en premios se le formula la ración como si no tomara ninguno --
+//     y esas calorías se suman POR ENCIMA de la ración que el veterinario FIRMA.
+//   · Sin `actividad`, el motor tiene que deducirla del cociente DER/peso^0,75,
+//     que confunde al Gran Danés (su cifra es POR RAZA, no por actividad).
+//
+// Es la misma familia que `premios-en-cada-peticion.spec.js` y
+// `actividad-en-cada-peticion.spec.js`, que vigilaban los cinco cuerpos de
+// App.jsx y no este, que es el SEXTO.
+test.describe("los datos de la ficha llegan desde el formulador", () => {
+  for (const [nivel, actividadGuardada, claveEsperada] of [
+    ["mas_del_maximo", "trabajo", "trabajo"],
+    ["ninguno", "baja", "sedentario"],
+  ]) {
+    test(`premios «${nivel}» y actividad «${actividadGuardada}» viajan a /formular`,
+      async ({ page, request }) => {
+        await comoVeterinario(page, request, {
+          perros: [{ ...PERRO_DE_PRUEBA, premios_nivel: nivel, actividad: actividadGuardada }],
+        });
+        await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+        await expect.poll(async () => {
+          const { peticionesFormular } = await leer(request);
+          const u = peticionesFormular[peticionesFormular.length - 1];
+          return { premios: u?.premios_nivel ?? null, actividad: u?.actividad ?? null };
+        }, { message: "la pantalla del veterinario formula sin el nivel de premios o sin la " +
+                      "actividad del paciente. La ración que va a FIRMAR está calculada con " +
+                      "datos que la ficha sí tiene" })
+          .toEqual({ premios: nivel, actividad: claveEsperada });
+      });
+  }
+});
+
+// ─── LA SEMANA DEL PACIENTE, PROBADA EN LA APP ───────────────────────────────
+//
+// ⚠️ POR QUÉ EXISTE, y es la segunda corrección del mismo día (11 de septiembre
+// de 2026). Elena: «de la lista de cosas que teníamos que hacer hoy de
+// veterinario no se han completado todas».
+//
+// El presupuesto semanal de seguridad crónica para el formulador se construyó
+// hoy en TRES piezas, y la primera estaba desconectada:
+//
+//   1. `App.jsx` tenía que pasarle al formulador las raciones ya puestas
+//      → NO LE PASABA NADA. El prop se quedaba en su `[]` por defecto.
+//   2. `formulador.jsx` las manda como `raciones_ya_puestas`  ✔ hecho
+//   3. El motor resta y se lo pasa al solver como restricción DURA  ✔ BLOQUE 92
+//
+// O sea: medido en el motor, funcionando en el motor, y en la app no llegaba
+// ninguna ración. Esto lo vigila desde la app, que es donde faltaba.
+test("las raciones ya puestas viajan al motor con sus días", async ({ page, request }) => {
+  // Un menú que el PROFESIONAL ya formuló para este paciente, con sus días.
+  // Es la forma exacta que guarda `onGuardar`: `menus_data[]` con `menu`,
+  // `formulado_por_el_profesional` y `dias`.
+  await comoVeterinario(page, request, {
+    menus: [{
+      id: "m-semana-1",
+      perro_id: PERRO_DE_PRUEBA.id,
+      nombre: "Ración de lunes a miércoles",
+      created_at: "2026-09-10T10:00:00.000Z",
+      menus_data: [{
+        factible: true,
+        formulado_por_el_profesional: true,
+        dias: 3,
+        menu: { "Carne muscular de pollo": 400, "Hueso carnoso de pollo": 140 },
+      }],
+    }],
+  });
+
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.raciones_ya_puestas || null;
+  }, { message: "el formulador del veterinario formula SIN las raciones que ya hay puestas en la " +
+                "semana. El presupuesto semanal de seguridad crónica está construido en el motor " +
+                "y no se está usando: cada ración se calcula como si fuera la semana entera" })
+    .toEqual([{ gramos: { "Carne muscular de pollo": 400, "Hueso carnoso de pollo": 140 }, dias: 3 }]);
+});
+
+// Y los días de ESTA ración, que es la otra mitad: sin ellos el servidor no
+// sabe por cuánto multiplicar lo que se va a llevar del presupuesto.
+test("los días que cubre esta ración viajan en cada llamada", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByLabel("Días que cubre esta ración").fill("4");
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.dias_de_esta_racion ?? null;
+  }, { message: "los días que el veterinario ha dicho que cubre esta ración no llegan al motor" })
+    .toBe(4);
+});

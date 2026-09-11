@@ -73,3 +73,27 @@ export function useVocabulario() {
 
 /** Para las pruebas: dejar la caché como estaba. */
 export function olvidarVocabulario() { _pedido = null }
+
+// ─── LAS CLAVES QUE VIAJAN AL MOTOR ──────────────────────────────────────────
+//
+// ⚠️ MOVIDAS AQUÍ DESDE `App.jsx` EL 11 DE SEPTIEMBRE DE 2026, y el motivo es
+// un fallo real: `formulador.jsx` -- la pantalla del VETERINARIO -- no mandaba
+// `actividad` ni `premios_nivel` en ninguna de sus llamadas a `/formular/*`.
+// El generador del tutor sí los mandaba, porque el conversor vivía dentro de
+// App.jsx y allí lo tenía a mano; el formulador no puede importar de App.jsx
+// sin hacer un ciclo (App importa el formulador), así que se quedó sin ellos.
+//
+// La salida NO podía ser copiar la lista en el formulador: dos copias de las
+// claves que entiende el motor son dos copias que se desincronizan, y con una
+// clave que el motor no reconoce la petición se cae con un 422. Así que viven
+// aquí, que es el módulo de «lo que el motor enumera», y lo importan los dos.
+//
+// El ORDEN importa: lo que viaja es la clave en la posición del índice que
+// guarda la ficha (`actividadIdx`). Lo compara con `der.BASE_ACTIVIDAD` del
+// repo del motor `tests/vocabulario.spec.js`.
+export const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]
+
+export function claveDeActividad(perfil) {
+  const i = perfil?.actividadIdx
+  return Number.isInteger(i) && ACTIVIDAD_API[i] ? ACTIVIDAD_API[i] : null
+}

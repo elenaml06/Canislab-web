@@ -38,7 +38,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout } from "./api.js";
-import { useVocabulario, alLlegarVocabulario } from "./vocabulario.js";
+import { useVocabulario, alLlegarVocabulario, ACTIVIDAD_API, claveDeActividad } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
@@ -824,12 +824,11 @@ function preguntaDePremios(vocab, modo) {
   return vocab?.premios?.pregunta?.[modo] || PREGUNTA_PREMIOS_RESPALDO[modo];
 }
 
-const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"];
-
-function claveDeActividad(perfil) {
-  const i = perfil?.actividadIdx;
-  return Number.isInteger(i) && ACTIVIDAD_API[i] ? ACTIVIDAD_API[i] : null;
-}
+// ⚠️ `ACTIVIDAD_API` y `claveDeActividad` VIVEN EN `vocabulario.js` DESDE EL 11
+// DE SEPTIEMBRE, y no es un traslado por orden: `formulador.jsx` -- la pantalla
+// del veterinario -- las necesita y no puede importar de aquí sin hacer un
+// ciclo. Estaban solo aquí, así que el formulador no mandaba la actividad ni el
+// nivel de premios en ninguna de sus llamadas. Ver el comentario de allí.
 
 // ─── ELEGIR ALIMENTO: LA LISTA DE ESPECIES, UNA SOLA VEZ ─────────────────────
 //
@@ -1560,7 +1559,28 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // pantalla lo pisaba con el número cada vez que se abría.
       nombre: data.nombre || `Menú ${i + 1}`,
       dias: diasPorMenuArr[i],
-      kcal: Math.round(derObjetivo),
+      // ⚠️ LAS KCAL QUE SE ENSEÑAN SON LAS DE LA RACIÓN, NO LAS QUE SE PIDIERON
+      // (11 de septiembre de 2026).
+      //
+      // Aquí ponía `Math.round(derObjetivo)`: el número que se le MANDA al
+      // servidor, no el que devuelve. Mientras la ración pesaba lo mismo que el
+      // DER (±3 % de tolerancia) la diferencia no se veía, y por eso llevaba así
+      // desde siempre.
+      //
+      // CASO REAL, y lo encontró Elena probándolo en la app el mismo día que se
+      // puso la pregunta de los premios: «he probado lo de los premios y ponga
+      // muchos o ninguno me da las mismas kcal». Claro: con premios la ración se
+      // calcula con las kcal QUE QUEDAN -- un 20 % menos si dices «muchos» --,
+      // el servidor devolvía 859 y la tarjeta seguía pintando 1100. La ración
+      // había cambiado de verdad (los gramos también) y el número que la
+      // resume decía que no.
+      //
+      // Es la familia de fallos del CLAUDE.md: no da error, no rompe nada, y lo
+      // que enseña la pantalla deja de ser lo que hay.
+      kcal: Math.round(data.kcal_total ?? derObjetivo),
+      // Y las del día entero, para poder decir las dos cuando hay premios: la
+      // ración es una parte del día, no el día.
+      kcalDelDia: Math.round(derObjetivo),
       items,
       // ⚠️ AÑADIDO (5 agosto): antes el "27/27 OK" era texto fijo, sin
       // ningún dato real detrás. Ahora se lleva la ficha de verdad que
@@ -2799,6 +2819,40 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 hay <b>bebés, embarazadas, personas mayores o alguien con las defensas bajas</b> (quimioterapia,
                 trasplante, tratamiento inmunosupresor), esto importa bastante más y merece hablarlo con
                 vuestro médico.
+              </p>
+            </div>
+            {/* ⚠️ AÑADIDO (11 septiembre) — LA REVISIÓN CON EL VETERINARIO, QUE
+                LA APP NO PEDÍA EN NINGUNA PARTE.
+                Fascetti & Delaney 2ª ed., cap. 8, literal: «It is recommended
+                that any animal receiving a home-prepared diet be checked by a
+                veterinarian at least every six months», y cada tres meses o
+                menos si hay una enfermedad de por medio, con peso, condición
+                corporal y analítica si procede.
+                Rawku formula dietas caseras: esta frase habla exactamente de lo
+                que hace esta pantalla, y no estaba dicha. No cambia ningún menú
+                -- es lo que el motor NO puede hacer solo --, y por eso va aquí,
+                con la congelación y la higiene, que son las otras dos cosas que
+                dependen de la persona y no del cálculo.
+                El mismo párrafo trae el nombre del fallo que vigila: el «diet
+                drift», que el dueño vaya sustituyendo ingredientes por su
+                cuenta. Eso sí lo puede arreglar la app -- regenerar el menú con
+                lo que de verdad le da -- y por eso se dice. */}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle size={14} style={{ color: VIOLETA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  Revisión con tu veterinario
+                </p>
+              </div>
+              <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Un perro que come una dieta casera conviene que lo vea su veterinario <b>al menos cada seis
+                meses</b> — y cada tres o antes si tiene alguna enfermedad —, con su peso, su condición
+                corporal y la analítica que crea necesaria. No es porque este menú no cumpla: es que quien
+                vigila a {nombrePerro} por dentro no es una cuenta, es alguien que lo ve.
+                <br /><br />
+                Y si has ido cambiando ingredientes por tu cuenta — un día sin hueso, otra verdura porque no
+                había —, <b>vuelve aquí y regenéralo</b> con lo que de verdad le das. Un menú que ya no es el
+                que se calculó deja de cumplir sin que se note.
               </p>
             </div>
           {/* ⚠️ AÑADIDO — CÓMO PREPARAR CADA ALIMENTO, TODO JUNTO.
@@ -10857,10 +10911,29 @@ function RawkuOnboardingInterna({
             });
             return fila;
           }}
-          onGuardar={(gramosFormulados, estadoFinal, indicaciones) => {
+          // ⚠️ LAS RACIONES QUE YA HAY PUESTAS EN LA SEMANA (11 septiembre).
+          //
+          // El formulador tenía este prop desde que se construyó el presupuesto
+          // semanal, y AQUÍ NO SE LE PASABA NADA: se quedaba en su valor por
+          // defecto `[]`. O sea que la protección estaba en el motor (BLOQUE
+          // 92, que la mide con el fallo puesto), el formulador la mandaba
+          // (`raciones_ya_puestas`), y la app nunca le daba las raciones. Una
+          // cadena de tres piezas con la primera desconectada.
+          //
+          // Son los menús que el PROFESIONAL ha formulado para este paciente,
+          // con sus gramos y los días que cubre cada uno. La resta la hace el
+          // servidor: aquí solo se declaran.
+          racionesDeLaSemana={(menusGuardados || [])
+            .flatMap((fila) => (fila?.menus_data || []))
+            .filter((m) => m && m.formulado_por_el_profesional && m.menu)
+            .map((m) => ({ gramos: m.menu, dias: Math.max(1, Number(m.dias) || 1) }))}
+          onGuardar={(gramosFormulados, estadoFinal, indicaciones, diasDeEstaRacion) => {
             const comoUnMenu = {
               factible: true,
               menu: gramosFormulados,
+              // Los días que cubre, para que la SIGUIENTE ración de la semana
+              // sepa cuánto presupuesto crónico se ha llevado ésta.
+              dias: Math.max(1, Number(diasDeEstaRacion) || 1),
               ficha: estadoFinal?.ficha || null,
               problemas_seguridad: estadoFinal?.problemas_seguridad || [],
               kcal_total: estadoFinal?.kcal ?? null,

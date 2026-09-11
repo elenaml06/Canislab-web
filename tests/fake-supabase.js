@@ -622,6 +622,31 @@ export function crearFakeSupabase(opciones = {}) {
       });
     }
 
+    // ⚠️ LAS FRACCIONES DE LOS PREMIOS, PARA QUE ESTE SERVIDOR DEJE DE MENTIR
+    // EN ALGO QUE SÍ CAMBIA EL MENÚ (11 de septiembre de 2026).
+    //
+    // CASO REAL, y lo encontró Elena probándolo en la app: «he probado lo de los
+    // premios y ponga muchos o ninguno me da las mismas kcal». Eran DOS fallos
+    // encadenados, y este servidor tapaba el segundo:
+    //
+    //   1. La app pintaba `derObjetivo` -- lo que MANDA -- en vez de las kcal
+    //      que devuelve el servidor. Arreglado en App.jsx.
+    //   2. Y aquí `/menu/v2` devolvía SIEMPRE el mismo menú, con las mismas
+    //      kcal, dijera lo que dijera la petición. Así que ninguna prueba de
+    //      esta carpeta podía ver el fallo 1: los dos números coincidían porque
+    //      el de mentira no se movía nunca.
+    //
+    // Es literalmente lo que ya está escrito en la cabecera de `menusDistintos`
+    // y en el arreglo de `/patologias` del 8 de septiembre: «un servidor de
+    // mentira que miente solo comprueba lo que ya sabes».
+    //
+    // Estas cuatro fracciones son las de `NIVELES_DE_PREMIOS` en `main.py` del
+    // motor, y NO se pueden desincronizar en silencio: las compara
+    // `tests/vocabulario.spec.js` contra el fichero vivo.
+    const FRACCION_DE_PREMIOS = {
+      ninguno: 0, alguno: 0.05, hasta_el_maximo: 0.10, mas_del_maximo: 0.20,
+    };
+
     if (ruta === "/menu/v2") {
       estado.peticionesMenu.push(JSON.parse(cuerpo || "{}"));
       // ⚠️ AÑADIDO (24 agosto) — con `menusDistintos`, cada llamada devuelve
@@ -638,7 +663,32 @@ export function crearFakeSupabase(opciones = {}) {
           aviso_composicion: estado.avisoComposicion,
         });
       }
-      return responder(200, { ...MENU_FALSO, aviso_composicion: estado.avisoComposicion });
+      // La ración pesa las kcal QUE QUEDAN después de los premios, igual que
+      // hace el motor de verdad, y los gramos bajan con ellas. Sin premios
+      // (`premios_nivel` ausente o «ninguno») esto devuelve exactamente lo de
+      // siempre y ninguna prueba anterior cambia.
+      const _p = JSON.parse(cuerpo || "{}");
+      const _frac = FRACCION_DE_PREMIOS[_p.premios_nivel] || 0;
+      const _der = Number(_p.der_objetivo) || 0;
+      if (_frac > 0 && _der > 0) {
+        const _factor = 1 - _frac;
+        return responder(200, {
+          ...MENU_FALSO,
+          menu: Object.fromEntries(
+            Object.entries(MENU_FALSO.menu).map(([n, g]) => [n, Math.round(g * _factor)])),
+          kcal_total: Math.round(_der * _factor),
+          gramos_total: Math.round(
+            Object.values(MENU_FALSO.menu).reduce((a2, b2) => a2 + b2, 0) * _factor),
+          problemas_seguridad: [
+            ...(MENU_FALSO.problemas_seguridad || []),
+            `PREMIOS: este menú está calculado contando ${Math.round(_der * _frac)} kcal al día ` +
+            `fuera de su ración (${Math.round(_frac * 100)} % de lo que come).`,
+          ],
+          aviso_composicion: estado.avisoComposicion,
+        });
+      }
+      return responder(200, { ...MENU_FALSO, kcal_total: _der || undefined,
+                              aviso_composicion: estado.avisoComposicion });
     }
     // Los tres caminos de edición devuelven el menú en "gramos", no en
     // "menu" -- igual que el backend de verdad.
