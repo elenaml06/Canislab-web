@@ -1397,11 +1397,24 @@ function familiasDelVocabulario(vocab) {
     const local = FAMILIAS_RESPALDO[cabecera];
     salida[cabecera] = {
       pregunta: info.pregunta || local?.pregunta || "",
-      opciones: respuestas.filter((r) => r?.clave_motor).map((r) => {
+      // ⚠️ LA FORMA VIENE DEL MOTOR Y NO SE DEDUCE. Hay dos, y se aplican al
+      // revés: `sustituye_a_la_cabecera` (los cinco subtipos: la respuesta es
+      // una clave HERMANA y echa a la cabecera) y `anade_otra_patologia` (las
+      // de analítica: la respuesta SUMA una segunda patología y la cabecera se
+      // queda). Confundirlas dejaría al perro sin su pancreatitis.
+      comoSeAplica: info.como_se_aplica || "sustituye_a_la_cabecera",
+      // En la forma que SUMA, una respuesta puede no añadir nada («no los tiene
+      // altos»), y entonces no lleva clave. Es el caso bueno: lo que decide es
+      // la otra.
+      opciones: respuestas.filter((r) => r?.clave_motor || info.como_se_aplica === "anade_otra_patologia").map((r) => {
         const suyo = (local?.opciones || []).find((o) => o.key === r.clave_motor) || {};
         const formulable = !(r.cifras_que_aplica || {})._no_formulable;
         return {
-          key: r.clave_motor,
+          // `null` es una respuesta legítima en la forma que suma: significa
+          // «no añadas nada». Se le da una clave propia para poder pintarla y
+          // saber cuál está elegida.
+          key: r.clave_motor || `__ninguna__${(r.label || "").slice(0, 24)}`,
+          anade: r.clave_motor || null,
           label: r.label || suyo.label || r.clave_motor,
           segura: formulable,
           aviso: formulable ? suyo.aviso : (suyo.aviso || AVISO_SIN_TEXTO),
@@ -1422,13 +1435,18 @@ let FAMILIA_DE_CLAVE = {};
 let OPCIONES_DE_FAMILIA_POR_CLAVE = {};
 
 function rehacerIndicesDeFamilia() {
+  // ⚠️ SOLO LAS FAMILIAS QUE SUSTITUYEN. Las de analítica añaden una patología
+  // que tiene su PROPIA casilla (`hiperlipidemia`, `renal_proteinuria`), así
+  // que meterla aquí haría que marcar otra cosa de esa «familia» la borrase del
+  // array -- y la borraría también si el dueño la había marcado por su cuenta.
+  const soloSustituyen = Object.entries(FAMILIAS_PATOLOGIA)
+    .filter(([, f]) => f.comoSeAplica !== "anade_otra_patologia");
   FAMILIA_DE_CLAVE = Object.fromEntries(
-    Object.entries(FAMILIAS_PATOLOGIA).flatMap(([cabecera, { opciones }]) =>
+    soloSustituyen.flatMap(([cabecera, { opciones }]) =>
       opciones.map((o) => [o.key, cabecera]))
   );
   OPCIONES_DE_FAMILIA_POR_CLAVE = Object.fromEntries(
-    Object.values(FAMILIAS_PATOLOGIA).flatMap(({ opciones }) =>
-      opciones.map((o) => [o.key, o]))
+    soloSustituyen.flatMap(([, { opciones }]) => opciones.map((o) => [o.key, o]))
   );
 }
 rehacerIndicesDeFamilia();
@@ -1498,8 +1516,22 @@ function SelectorSubtipoPatologia({ cabecera, patologias, onCambiar }) {
   // motor no aparecerían hasta el siguiente re-render por otra causa.
   useVocabulario();
   const familia = FAMILIAS_PATOLOGIA[cabecera];
-  if (!familia || !familiaPatologiaActiva(cabecera, patologias)) return null;
-  const actual = patologias.find((k) => FAMILIA_DE_CLAVE[k] === cabecera) || cabecera;
+  if (!familia) return null;
+  const suma = familia.comoSeAplica === "anade_otra_patologia";
+  // En la forma que SUMA, la pregunta sale cuando está marcada la CABECERA
+  // (pancreatitis, diabetes, renal); en la que sustituye, cuando está activa
+  // cualquiera de la familia.
+  if (!(suma ? patologias.includes(cabecera) : familiaPatologiaActiva(cabecera, patologias))) {
+    return null;
+  }
+  // Cuál está elegida. Al sustituir, la hermana que esté en el array; al
+  // sumar, la que añade una clave que YA está puesta, y si no hay ninguna, la
+  // primera respuesta que no añade nada («no lo sé»).
+  const queAnaden = familia.opciones.filter((o) => o.anade !== null && o.anade !== undefined);
+  const puesta = queAnaden.find((o) => patologias.includes(o.anade));
+  const actual = suma
+    ? (puesta ? puesta.key : (familia.opciones.find((o) => !o.anade) || {}).key)
+    : (patologias.find((k) => FAMILIA_DE_CLAVE[k] === cabecera) || cabecera);
   return (
     <div className="ml-3 mt-1 mb-1.5 pl-3 flex flex-col gap-1" style={{ borderLeft: `2px solid #E3DAF0` }}>
       <p className="text-[11px] leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -1509,6 +1541,15 @@ function SelectorSubtipoPatologia({ cabecera, patologias, onCambiar }) {
         const elegido = actual === o.key;
         return (
           <button key={o.key} type="button" onClick={() => {
+            if (suma) {
+              // Se quitan TODAS las que esta pregunta puede añadir y se pone la
+              // elegida, si añade algo. Así contestar «no» retira la que
+              // hubiera: cambiar de respuesta tiene que poder deshacer.
+              const puedeAnadir = queAnaden.map((x) => x.anade);
+              const sinLasSuyas = patologias.filter((k) => !puedeAnadir.includes(k));
+              onCambiar(o.anade ? [...sinLasSuyas, o.anade] : sinLasSuyas);
+              return;
+            }
             const sinHermanas = patologias.filter((k) => FAMILIA_DE_CLAVE[k] !== cabecera);
             onCambiar([...sinHermanas, o.key]);
           }}
