@@ -622,6 +622,36 @@ const NIVELES = [
   { label: "Trabajo", detalle: "Pastoreo, guarda, o similar", Icono: Award },
 ];
 
+// ⚠️ LA ACTIVIDAD TIENE QUE LLEGAR AL MOTOR, NO SOLO A LAS KCAL (11 septiembre).
+//
+// Elena: «ten en cuenta que TODOS LOS DATOS QUE RECOJA LA APP TIENEN QUE LLEGAR
+// DE ALGUNA MANERA AL MOTOR, SI NO SON DATOS INUTILES Y CUANDO SE PIDEN ES
+// SIEMPRE POR ALGO».
+//
+// La ficha pregunta la actividad desde siempre, y esta app la usaba SOLO para
+// calcular el DER. Al motor le llegaban las kcal ya hechas, o sea que veia 1955
+// y no sabia si era un galgo de sofa o un perro de trineo. Y eso decide dos
+// cosas suyas:
+//
+//   · que le apriete los topes de seguridad cronica por peso metabolico (yodo,
+//     selenio, mercurio, tiaminasa y vitamina D), porque un tope por 1000 kcal
+//     deja pasar el doble a quien come el doble;
+//   · que el menu lleve la nota de que su techo de fosforo sale de la tabla del
+//     perro en MANTENIMIENTO y su propia fuente le pide un 50 % mas.
+//
+// El motor sabe deducirlo del cociente DER/peso^0,75, y lo seguira haciendo si
+// este campo no llega. Pero deducirlo confunde al Gran Danes, que come 200
+// kcal/kg^0,75 POR RAZA y no por actividad. Mejor mandarlo.
+//
+// Las cinco claves son las de `der.ACTIVIDAD_KEY` en el repo del motor y el
+// orden es el mismo que el de NIVELES, arriba.
+const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"];
+
+function claveDeActividad(perfil) {
+  const i = perfil?.actividadIdx;
+  return Number.isInteger(i) && ACTIVIDAD_API[i] ? ACTIVIDAD_API[i] : null;
+}
+
 // ─── ELEGIR ALIMENTO: LA LISTA DE ESPECIES, UNA SOLA VEZ ─────────────────────
 //
 // ⚠️ CASO REAL ENCONTRADO (25 agosto): "veo que hay en ciertas categorías
@@ -2009,6 +2039,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           der_objetivo: menu.kcal,
+          actividad: claveDeActividad(perfil),
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
           nombres_excluidos: Array.from(alimentosEvitados || []),
@@ -4472,6 +4503,7 @@ function cuerpoApiDeUnPerro(perfil) {
     forzar_presencia: [],
     restringir_especie: null,
     der_objetivo: d.derReal,
+    actividad: claveDeActividad(perfil),
     etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
     especies_excluidas: Array.from(d.especiesExcluidas),
     evitar_especies: [],
@@ -7485,6 +7517,7 @@ function RawkuOnboardingInterna({
 
     const cuerpoBase = {
       der_objetivo: derReal,                       // el DER de AHORA
+      actividad: claveDeActividad(perfil),
       etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
@@ -7644,6 +7677,7 @@ function RawkuOnboardingInterna({
           forzar_presencia: eleccionesDelUsuario(modo, configDeEsteMenu),
           restringir_especie: restriccionesDeEspecie(modo, configDeEsteMenu),
           der_objetivo: derReal,
+          actividad: claveDeActividad(perfil),
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
           // (para dar variedad entre varios menús automáticos) se
@@ -7740,6 +7774,7 @@ function RawkuOnboardingInterna({
             forzar_presencia: [],
             restringir_especie: null,
             der_objetivo: derReal,
+            actividad: claveDeActividad(perfil),
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
             especies_excluidas: Array.from(especiesExcluidas),
             evitar_especies: [],
