@@ -25,7 +25,7 @@ import { API_BASE, fetchConTimeout } from "./api.js";
 // La clave de actividad que entiende el motor. Vive en `vocabulario.js` y no en
 // `App.jsx` porque esta pantalla la necesita y no puede importar de allí sin
 // hacer un ciclo -- que es justo por lo que este formulador no la mandaba.
-import { claveDeActividad } from "./vocabulario.js";
+import { claveDeActividad, useVocabulario } from "./vocabulario.js";
 import { agruparNutrientes, resumenDeLaFicha, nombreLegible } from "./nutrientes.js";
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
 
@@ -63,28 +63,54 @@ const ETIQUETA_ESTADO = { se_pasa: "Se pasa", falta: "Falta", dentro: "Dentro" }
 // ⚠️ LOS NUTRIENTES QUE SE OFRECEN PARA FIJAR (11 de septiembre de 2026).
 //
 // Elena: «el veterinario debe poder decidir en qué porcentaje quiere dejar la
-// grasa, la proteína, LO QUE SEA». El motor acepta cualquiera de los 43 -- la
-// clave viaja tal cual y `_objetivos_dentro_de_fediaf` la busca en el MAPA --,
-// así que esto no es una limitación del motor: es qué se pinta.
+// grasa, la proteína, LO QUE SEA».
 //
-// Se ofrecen los ocho que las fuentes de patología tocan de verdad, que son los
-// que un clínico va a querer mover. Si hiciera falta otro, se añade aquí y el
-// motor ya lo sabe aplicar: no hay nada más que tocar.
+// LA LISTA LA SIRVE EL MOTOR, no este archivo. Aquí había OCHO nutrientes
+// escritos a mano, elegidos porque son los que tocan las fuentes de patología.
+// El motor acepta los CUARENTA Y SEIS -- la clave viaja tal cual y
+// `_objetivos_dentro_de_fediaf` la busca en `verificar.MAPA` --, así que los
+// otros 38 no faltaban por una limitación del motor: faltaban porque esta
+// pantalla decidía la lista. Es exactamente el fallo que persigue
+// `GET /vocabulario`, y la cadena es FUENTE manda, MOTOR la implementa, APP la
+// ofrece. Iba al revés.
+//
+// Los ocho se quedan como RESPALDO y solo como respaldo: si la API no contesta
+// -- Render duerme a los 15 minutos --, la pantalla sigue sirviendo para lo que
+// más se usa en vez de quedarse sin panel. Que el respaldo no se esté pintando
+// cuando la API SÍ contesta lo comprueba `tests/formulador.spec.js` sembrando
+// nombres inventados: con las palabras de verdad, «lo ha leído del motor» y
+// «está pintando su respaldo» se ven exactamente igual.
 //
 // La clave es la del MOTOR (`verificar.MAPA`), no la del texto. Escribirla mal
 // haría que el objetivo se mandara y el motor lo ignorara diciendo «no es un
 // requisito», que es mejor que aplicarlo al nutriente equivocado pero sigue
 // siendo un objetivo que no hace nada.
-const OBJETIVOS_QUE_SE_OFRECEN = [
-  { clave: "proteina", label: "Proteína (g)" },
-  { clave: "grasa", label: "Grasa (g)" },
-  { clave: "fosforo", label: "Fósforo (mg)" },
-  { clave: "calcio", label: "Calcio (mg)" },
-  { clave: "sodio", label: "Sodio (mg)" },
-  { clave: "potasio", label: "Potasio (mg)" },
-  { clave: "cobre", label: "Cobre (mg)" },
-  { clave: "fibra", label: "Fibra (g)" },
+const OBJETIVOS_DE_RESPALDO = [
+  { clave: "proteina", label: "Proteína (g/1000 kcal)" },
+  { clave: "grasa", label: "Grasa (g/1000 kcal)" },
+  { clave: "fosforo", label: "Fósforo (mg/1000 kcal)" },
+  { clave: "calcio", label: "Calcio (mg/1000 kcal)" },
+  { clave: "sodio", label: "Sodio (mg/1000 kcal)" },
+  { clave: "potasio", label: "Potasio (mg/1000 kcal)" },
+  { clave: "cobre", label: "Cobre (mg/1000 kcal)" },
+  { clave: "fibra", label: "Fibra (g/1000 kcal)" },
 ];
+
+// De lo que sirve `/vocabulario` a lo que pinta la fila. Se usa el registro de
+// VETERINARIO a propósito: esta pantalla la firma un profesional y ya trae la
+// unidad dentro del título, que es lo que evita que alguien escriba 2 creyendo
+// que son gramos cuando son miligramos.
+function objetivosDelVocabulario(vocab) {
+  const lista = vocab?.objetivos_del_profesional?.nutrientes;
+  if (!Array.isArray(lista) || lista.length === 0) return null;
+  return lista
+    .filter((n) => n && n.clave)
+    .map((n) => ({
+      clave: n.clave,
+      label: n.veterinario?.titulo || n.nombre_del_requisito || n.clave,
+      deFediaf: n.de_la_tabla_III_3b !== false,
+    }));
+}
 
 // Una fila de alimento dentro del árbol: ponerlo, o dejarlo fuera de la
 // prueba. Las dos cosas a un toque, que es lo que se pidió -- salir de la
@@ -184,6 +210,20 @@ export default function Formulador({
   // requisitos se respetan SIEMPRE, eso no se negocia».
   const [objetivos, setObjetivos] = useState({});
   const [objetivosAbiertos, setObjetivosAbiertos] = useState(false);
+  // 46 filas de dos casillas no se recorren a ojo: se busca. El filtro es de
+  // PINTADO, no de datos -- lo que ya esté fijado sigue viajando al motor
+  // aunque el buscador lo esconda, que es lo contrario de lo que haría un
+  // filtro que tocara `objetivos`.
+  const [buscaObjetivo, setBuscaObjetivo] = useState("");
+  const vocab = useVocabulario();
+  const objetivosQueSeOfrecen = useMemo(
+    () => objetivosDelVocabulario(vocab) || OBJETIVOS_DE_RESPALDO, [vocab]);
+  const objetivosVisibles = useMemo(() => {
+    const q = buscaObjetivo.trim().toLowerCase();
+    if (!q) return objetivosQueSeOfrecen;
+    return objetivosQueSeOfrecen.filter(
+      (o) => o.label.toLowerCase().includes(q) || o.clave.toLowerCase().includes(q));
+  }, [objetivosQueSeOfrecen, buscaObjetivo]);
   const [ajustes, setAjustes] = useState([]);
   const ponerObjetivo = (clave, lado, valor) =>
     setObjetivos((o) => {
@@ -977,8 +1017,19 @@ export default function Formulador({
                   nada, y un suelo por debajo del mínimo se sube al de FEDIAF. Los requisitos no se
                   negocian.
                 </p>
+                <input type="search" value={buscaObjetivo}
+                  onChange={(e) => setBuscaObjetivo(e.target.value)}
+                  aria-label="Buscar nutriente" placeholder="Buscar nutriente…"
+                  className="w-full py-1.5 px-2 mb-2 rounded-lg outline-none"
+                  style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
+                           color: TINTA, fontFamily: fontBody, fontSize: 13 }} />
                 <div className="flex flex-col gap-1.5">
-                  {OBJETIVOS_QUE_SE_OFRECEN.map(({ clave, label }) => (
+                  {objetivosVisibles.length === 0 && (
+                    <p className="text-[11px]" style={{ color: MALVA, fontFamily: fontBody }}>
+                      Ninguno de los {objetivosQueSeOfrecen.length} se llama así.
+                    </p>
+                  )}
+                  {objetivosVisibles.map(({ clave, label }) => (
                     <div key={clave} className="flex items-center gap-2">
                       <span className="flex-1" style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
                         {label}
@@ -1000,6 +1051,9 @@ export default function Formulador({
                     </div>
                   ))}
                 </div>
+                <p className="text-[10px] mt-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+                  {objetivosQueSeOfrecen.length} nutrientes · los que verifica el motor
+                </p>
               </div>
             )}
           </div>

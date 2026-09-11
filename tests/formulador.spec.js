@@ -623,3 +623,83 @@ test("los días que cubre esta ración viajan en cada llamada", async ({ page, r
   }, { message: "los días que el veterinario ha dicho que cubre esta ración no llegan al motor" })
     .toBe(4);
 });
+
+// ─── LOS NUTRIENTES QUE SE PUEDEN FIJAR LOS ENUMERA EL MOTOR ────────────────
+//
+// ⚠️ POR QUÉ EXISTE (11 de septiembre de 2026). El panel «Tus objetivos» tenía
+// OCHO nutrientes escritos a mano dentro de `formulador.jsx`. El motor acepta
+// los 46 que verifica: la clave viaja tal cual y `_objetivos_dentro_de_fediaf`
+// la busca en `verificar.MAPA`. O sea que los otros 38 no faltaban por el
+// motor, faltaban porque esta pantalla decidía la lista -- que es justo lo que
+// `GET /vocabulario` existe para impedir, y la cadena es FUENTE manda, MOTOR la
+// implementa, APP la ofrece.
+//
+// SE SIEMBRAN NOMBRES INVENTADOS a propósito, como en `vocabulario.spec.js`:
+// con los nombres de verdad, «la app lo ha leído del motor» y «la app está
+// pintando sus ocho de respaldo» se ven EXACTAMENTE IGUAL en pantalla, y la
+// prueba pasaría en verde con la petición entera comentada.
+const OBJETIVOS_INVENTADOS = {
+  objetivos_del_profesional: {
+    de_donde: "inventado por tests/formulador.spec.js",
+    cuantos: 3,
+    nutrientes: [
+      { clave: "proteina", nombre_del_requisito: "Proteína_total", unidad: "g",
+        por: "1000 kcal", de_la_tabla_III_3b: true,
+        dueno: null, veterinario: { titulo: "Zumbito total (g/1000 kcal)", detalle: null } },
+      { clave: "selenio", nombre_del_requisito: "Selenio", unidad: "µg",
+        por: "1000 kcal", de_la_tabla_III_3b: true,
+        dueno: null, veterinario: { titulo: "Farfalio (µg/1000 kcal)", detalle: null } },
+      { clave: "triptofano", nombre_del_requisito: "Triptofano", unidad: "g",
+        por: "1000 kcal", de_la_tabla_III_3b: true,
+        dueno: null, veterinario: { titulo: "Merluzina (g/1000 kcal)", detalle: null } },
+    ],
+  },
+};
+
+test("los nutrientes que se pueden fijar salen de /vocabulario, no de la app", async ({ page, request }) => {
+  await comoVeterinario(page, request, { vocabulario: OBJETIVOS_INVENTADOS });
+
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+
+  // La palabra inventada del motor, en pantalla. Si saliera «Proteína (g)» es
+  // que se está pintando el respaldo con la petición hecha.
+  await expect(page.getByText("Zumbito total (g/1000 kcal)")).toBeVisible();
+  await expect(page.getByText("Merluzina (g/1000 kcal)")).toBeVisible();
+  await expect(page.getByText("Proteína (g/1000 kcal)")).toHaveCount(0);
+
+  // Y el recuento sale de la misma lista que se pinta, no de un número aparte.
+  await expect(page.getByText("3 nutrientes · los que verifica el motor")).toBeVisible();
+});
+
+// El buscador: 46 filas de dos casillas no se recorren a ojo. Filtra lo que se
+// PINTA y nada más -- lo ya fijado sigue viajando al motor aunque se esconda,
+// que es lo contrario de lo que haría un filtro que tocara los datos.
+test("el buscador de objetivos filtra el pintado y no lo fijado", async ({ page, request }) => {
+  await comoVeterinario(page, request, { vocabulario: OBJETIVOS_INVENTADOS });
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+
+  await page.getByLabel("Mínimo de Zumbito total (g/1000 kcal)").fill("90");
+  await page.getByLabel("Buscar nutriente").fill("merluz");
+
+  await expect(page.getByText("Zumbito total (g/1000 kcal)")).toHaveCount(0);
+  await expect(page.getByText("Merluzina (g/1000 kcal)")).toBeVisible();
+
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.objetivos_del_profesional || null;
+  }, { message: "el objetivo que el buscador esconde ha dejado de viajar al motor. El filtro es " +
+                "de pintado: esconder una fila no puede borrar lo que el profesional ya escribió" })
+    .toEqual({ proteina: { min: 90 } });
+});
+
+// Y el respaldo, que tiene que seguir sirviendo: Render duerme a los 15 minutos
+// y sin `/vocabulario` la pantalla no puede quedarse sin panel de objetivos.
+test("sin /vocabulario se pintan los ocho de respaldo y no un hueco", async ({ page, request }) => {
+  await comoVeterinario(page, request);   // sin sembrar vocabulario: la API da 404
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+
+  await expect(page.getByText("Proteína (g/1000 kcal)")).toBeVisible();
+  await expect(page.getByText("8 nutrientes · los que verifica el motor")).toBeVisible();
+});
