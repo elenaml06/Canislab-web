@@ -590,6 +590,49 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     }
   });
 
+  // ⚠️ Y NINGUNA CASILLA DEL DUEÑO PUEDE DEPENDER DE UNA ANALÍTICA.
+  //
+  // Elena, 11 de septiembre: «creo que deberíamos quitar toda patología que
+  // necesite hacer alguna pregunta para los usuarios, porque igual pueden dar
+  // un dato falso de una analítica».
+  //
+  // Es más ancho que `solo_veterinario` y por eso va aparte: lo que se prohíbe
+  // aquí es que una casilla del dueño **dependa de un dato que él no puede
+  // comprobar**. Hoy se cumple -- de las 22 que ve, ninguna necesita dato
+  // clínico y ninguna tiene pregunta que decida su cifra --, pero se cumple
+  // por la coincidencia de DOS listas que viven en dos ficheros distintos. Sin
+  // esto, el día que se añada una patología con analítica y se olvide
+  // marcarla, al dueño le sale la casilla y nadie se entera.
+  test("ninguna casilla del dueño depende de una analítica", () => {
+    const RAIZ = path.resolve(AQUI, "../../Canislab-api");
+    const der = JSON.parse(
+      fs.readFileSync(path.join(RAIZ, "quien_formula_cada_patologia.json"), "utf-8")).patologias;
+    const preguntas = JSON.parse(
+      fs.readFileSync(path.join(RAIZ, "preguntas_por_patologia.json"), "utf-8")).preguntas;
+
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const i = app.indexOf("const PATOLOGIAS = [");
+    const bloque = app.slice(i, app.indexOf("\n];", i));
+    const visibles = [...bloque.matchAll(/\{ key: "([a-z0-9_]+)",( soloVeterinario: true,)?/g)]
+      .filter((m) => !m[2]).map((m) => m[1]);
+
+    expect(visibles.length, "el dueño se ha quedado sin ninguna casilla: el filtro se ha pasado")
+      .toBeGreaterThan(10);
+
+    const conAnalitica = visibles.filter((k) => der[k]?.necesita_dato_clinico);
+    expect(conAnalitica,
+      `al dueño le salen casillas cuya cifra depende de un dato clínico: ` +
+      `${conAnalitica.map((k) => `${k} (${der[k]?.que_dato})`).join(", ")}. Puede contestar lo ` +
+      `que sea y el motor le aplicará un número elegido con ese dato`)
+      .toEqual([]);
+
+    const conPregunta = visibles.filter((k) => preguntas[k]);
+    expect(conPregunta,
+      `al dueño le salen casillas que llevan una pregunta detrás para elegir su cifra: ` +
+      `${conPregunta.join(", ")}. Esa pregunta la contesta quien tiene el informe, no él`)
+      .toEqual([]);
+  });
+
   // ⚠️ LAS 47 PATOLOGÍAS DEL MOTOR SE OFRECEN, Y NO SE OFRECE NINGUNA MÁS.
   //
   // Elena, 10 de septiembre: «todo lo que has hecho en backend tiene que poder
