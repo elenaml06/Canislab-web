@@ -112,6 +112,25 @@ export default function Formulador({
   pesoObjetivoKg, patologias = [], especiesExcluidas = [], nombresExcluidos = [],
   categoriasExcluidas = [], gramosIniciales = null, onGuardar = null, onVolver = () => {},
   firmante = null, onFirmar = null, onAbrirPanel = null, dietaActual = null,
+  // ─── LA SEMANA DEL PACIENTE ───────────────────────────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (11 septiembre): «puede haber mas de un menu semanal,
+  // cosa que, por cierto, un veterinario no puede hacer: solo puede generar un
+  // menu para la semana y tendria que poder elegir tambien si quiere generar
+  // mas de uno».
+  //
+  // Y lo que de verdad importaba de eso no era poder hacer varios: era que el
+  // PRESUPUESTO SEMANAL de seguridad crónica se repartiera entre ellos. El
+  // generador del tutor lo hace desde el 25 de agosto -- `/menu/semana` genera
+  // la semana entera en UNA llamada para que el servidor pueda ir restando y
+  // pasarlo al solver como restricción DURA -- y aquí no: cada ración se
+  // formulaba como si fuera la semana entera, así que quien firma tenía MENOS
+  // protección que el tutor justo en los cinco topes que son crónicos.
+  //
+  // Cada entrada es `{ nombre, gramos, dias }`. La cuenta la hace el SERVIDOR,
+  // no esta pantalla: dejarla aquí sería volver al aviso que se puede ignorar.
+  racionesDeLaSemana = [],
+  onGuardarEnLaSemana = null,
   // Abre la vista de impresión de la pauta que se acaba de firmar. La pinta
   // el padre (`pautaimprimible.jsx`), que es quien tiene los datos de la
   // clínica: no son parte del documento firmado a propósito -- ver su
@@ -172,6 +191,13 @@ export default function Formulador({
       else fuera[clave] = n;
       return fuera;
     });
+
+  // Cuántos días de la semana cubre la ración que se está montando ahora.
+  // Por defecto 1: quien no toque nada recibe exactamente lo de antes.
+  const [diasDeEstaRacion, setDiasDeEstaRacion] = useState(1);
+  const diasYaPuestos = (racionesDeLaSemana || [])
+    .reduce((n, r) => n + Math.max(1, Number(r?.dias) || 1), 0);
+  const diasQueQuedan = Math.max(0, 7 - diasYaPuestos);
 
   const [categoriaAbierta, setCategoriaAbierta] = useState(null);
   const [especieAbierta, setEspecieAbierta] = useState(null);
@@ -259,9 +285,17 @@ export default function Formulador({
     // mandarlo desde un solo sitio es lo que impide que autocompletar
     // formule en un peldaño y la pantalla enseñe otro.
     peldano,
+    // ⚠️ LA SEMANA, Y LA RESTA LA HACE EL SERVIDOR. Se le mandan las raciones
+    // que el profesional YA ha decidido, con sus días, y él va restando del
+    // presupuesto semanal de seguridad crónica antes de llamar al solver. Sin
+    // esto, la protección está construida en el motor y no se está usando.
+    dias_de_esta_racion: diasDeEstaRacion,
+    raciones_ya_puestas: (racionesDeLaSemana || []).length
+      ? racionesDeLaSemana.map((r) => ({ gramos: r.gramos || {}, dias: Math.max(1, Number(r.dias) || 1) }))
+      : undefined,
   }), [derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg, pesoObjetivoKg,
       patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas, peldano,
-      fueraDeLaPrueba, objetivos]);
+      fueraDeLaPrueba, objetivos, diasDeEstaRacion, racionesDeLaSemana]);
 
   // El catálogo, una vez. Es la misma lista que usa el analizador.
   useEffect(() => {
@@ -828,6 +862,56 @@ export default function Formulador({
               <Plus size={15} /> Añadir alimento
             </button>
           )}
+
+          {/* ─── LA SEMANA DE ESTE PACIENTE ───────────────────────────────
+              ⚠️ NO ES UN CONTADOR BONITO: es lo que hace que el presupuesto
+              semanal de seguridad crónica llegue al solver. Mientras esta
+              pantalla no dijera cuántos días cubre cada ración, el motor
+              formulaba cada una como si fuera la semana entera, y quien firma
+              tenía MENOS protección que el tutor justo en los cinco topes que
+              son crónicos (vitamina D, yodo, selenio, mercurio, tiaminasa).
+              La resta la hace el SERVIDOR; aquí solo se declara. */}
+          <div className="mt-3 rounded-xl" style={{ background: PAPEL, border: "1px solid #E3DAF0" }}>
+            <div className="px-3 py-2.5">
+              <span className="block text-[10px] tracking-[0.1em] uppercase"
+                    style={{ color: MALVA, fontFamily: "monospace" }}>
+                La semana
+              </span>
+              <div className="flex items-center gap-2 mt-1.5">
+                <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
+                  Esta ración cubre
+                </span>
+                <input type="number" min={1} max={7} value={diasDeEstaRacion}
+                  aria-label="Días que cubre esta ración"
+                  onChange={(e) => setDiasDeEstaRacion(
+                    Math.min(7, Math.max(1, Number(e.target.value) || 1)))}
+                  className="w-14 px-2 py-1 rounded-lg text-center"
+                  style={{ border: "1.5px solid #E3DAF0", fontFamily: "monospace",
+                           fontSize: 13, color: TINTA }} />
+                <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
+                  {diasDeEstaRacion === 1 ? "día" : "días"}
+                </span>
+              </div>
+              <p className="text-[11px] leading-snug mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                {diasYaPuestos > 0 ? (
+                  <>
+                    Ya hay <b>{diasYaPuestos}</b> {diasYaPuestos === 1 ? "día puesto" : "días puestos"} en
+                    esta semana{diasQueQuedan > 0 ? <>, quedan <b>{diasQueQuedan}</b></> : null}. Lo que
+                    esas raciones ya se han llevado del <b>presupuesto semanal de seguridad crónica</b>
+                    {" "}se resta en el servidor antes de formular esta, así que puede salir más
+                    apretada que si fuera sola. Si no sale, es que la semana ya está gastada.
+                  </>
+                ) : (
+                  <>
+                    Puedes hacer <b>varias raciones distintas</b> para la misma semana. Di cuántos días
+                    cubre cada una y el servidor irá restando del presupuesto semanal de seguridad
+                    crónica, igual que en el generador del tutor. Con una sola ración de un día no
+                    cambia nada.
+                  </>
+                )}
+              </p>
+            </div>
+          </div>
 
           {/* ─── LOS OBJETIVOS QUE PONE ÉL ────────────────────────────────
               En la misma unidad que el resto de la pantalla: g o mg por 1000
