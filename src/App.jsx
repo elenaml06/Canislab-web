@@ -764,6 +764,66 @@ function nivelesDeActividad(vocab, modo) {
   }));
 }
 
+// ─── LOS PREMIOS ────────────────────────────────────────────────────────────
+//
+// ⚠️ POR QUE SE PREGUNTA (11 de septiembre de 2026). Cuatro fuentes dicen lo
+// mismo y una trae el mecanismo: «Los alimentos y premios desequilibrados no se
+// deben proporcionar en mas de un 10 % de la ingesta calorica diaria total.
+// Cuando se agregan alimentos desequilibrados a una dieta completa y
+// equilibrada, SE PRODUCE UNA DILUCION DE NUTRIENTES, y los nutrientes
+// esenciales pueden quedar POR DEBAJO DE LOS REQUERIMIENTOS MINIMOS» (Ettinger
+// 8a ed. cap. 192; repetido en el cap. 175 y en Fascetti & Delaney 2a ed.
+// cap. 7).
+//
+// O sea que un dueño que sigue el menu al gramo y luego da premios NO esta
+// dando el menu que le calculamos. El motor ya lo sabe hacer: formula la racion
+// con las kcal que quedan y le sigue exigiendo el dia entero de nutrientes. Lo
+// unico que falta es preguntarlo, y eso es esto.
+//
+// ⚠️ Y SE PREGUNTA EN PORCENTAJE, NO EN KCAL, a proposito: nadie sabe las
+// calorias de la galleta que le da a su perro, y la fuente habla justo en esa
+// unidad. Es el motor quien convierte, con el DER de ESTE perro.
+//
+// Esta lista es un RESPALDO, como las de actividad: la verdad es
+// `GET /vocabulario`, que sirve las cuatro claves con sus DOS registros y con
+// la marca de cual de las cifras es de la fuente (solo el 10 %) y cual la
+// ponemos nosotros (el 5 % y el 20 %).
+const PREMIOS_RESPALDO = [
+  { clave: "ninguno", label: "Ninguno", detalle: "Solo come su ración, nada más" },
+  { clave: "alguno", label: "Alguno suelto", detalle: "Un premio de vez en cuando, para entrenar o por el gusto" },
+  { clave: "hasta_el_maximo", label: "Bastantes, pero no me paso", detalle: "Premios a diario, o algo de la comida de casa, sin que sea la mitad de lo que come" },
+  { clave: "mas_del_maximo", label: "Muchos", detalle: "Premios todos los días y sobras de la mesa: una parte buena de lo que come viene de fuera de su ración" },
+];
+
+const PREMIOS_CLINICOS_RESPALDO = [
+  { clave: "ninguno", label: "Sin aporte extraración", detalle: "0 % de la ingesta calórica diaria" },
+  { clave: "alguno", label: "Aporte extraración bajo", detalle: "Se calcula con un 5 % de las kcal del día" },
+  { clave: "hasta_el_maximo", label: "Aporte extraración en el techo recomendado", detalle: "10 % de las kcal del día (Ettinger caps. 175 y 192; Fascetti cap. 7)" },
+  { clave: "mas_del_maximo", label: "Aporte extraración por encima del techo", detalle: "Se calcula con un 20 % de las kcal del día" },
+];
+
+const PREGUNTA_PREMIOS_RESPALDO = {
+  dueno: "¿Le das premios, chuches o algo de tu comida, además de su ración?",
+  veterinario: "Aporte calórico extraración (premios, sobras de mesa, suplementos no formulados): ¿qué fracción de la ingesta diaria representa?",
+};
+
+/** Las respuestas que hay que pintar, en el registro que toque. */
+function nivelesDePremios(vocab, modo) {
+  const respaldo = modo === "veterinario" ? PREMIOS_CLINICOS_RESPALDO : PREMIOS_RESPALDO;
+  const servidos = vocab?.premios?.niveles;
+  if (!Array.isArray(servidos) || servidos.length === 0) return respaldo;
+  return servidos.map((n, i) => ({
+    clave: n?.clave ?? respaldo[i]?.clave,
+    label: n?.[modo]?.titulo ?? respaldo[i]?.label ?? n?.clave,
+    detalle: n?.[modo]?.detalle ?? respaldo[i]?.detalle ?? "",
+    pct: n?.pct_del_dia,
+  }));
+}
+
+function preguntaDePremios(vocab, modo) {
+  return vocab?.premios?.pregunta?.[modo] || PREGUNTA_PREMIOS_RESPALDO[modo];
+}
+
 const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"];
 
 function claveDeActividad(perfil) {
@@ -2243,6 +2303,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         body: JSON.stringify({
           der_objetivo: menu.kcal,
           actividad: claveDeActividad(perfil),
+          premios_nivel: perfil?.premiosNivel || null,
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
           nombres_excluidos: Array.from(alimentosEvitados || []),
@@ -4626,6 +4687,11 @@ function perfilDesdeSupabase(p) {
       ? ["baja", "media", "alta", "muy_alta", "trabajo"].indexOf(p.actividad)
       : 1,
     actividadTocado: true,
+    // Puede no venir: las fichas anteriores al 11 de septiembre no lo tienen, y
+    // tampoco viene si la columna aun no existe en Supabase. En los dos casos
+    // vuelve como null y la pantalla vuelve a preguntarlo -- que es lo correcto:
+    // mejor preguntar otra vez que dar por hecho que no le da ninguno.
+    premiosNivel: p.premios_nivel ?? null,
     esterilizado: p.castrado ? "si" : "no",
     // ⚠️ LOS CUATRO «SI/NO» SE LEEN NORMALIZADOS (11 de septiembre de 2026).
     //
@@ -4741,6 +4807,7 @@ function cuerpoApiDeUnPerro(perfil) {
     restringir_especie: null,
     der_objetivo: d.derReal,
     actividad: claveDeActividad(perfil),
+    premios_nivel: perfil?.premiosNivel || null,
     etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
     especies_excluidas: Array.from(d.especiesExcluidas),
     evitar_especies: [],
@@ -5081,6 +5148,12 @@ function RawkuOnboardingInterna({
       pesoObjetivoKg: null,
       actividadIdx: 1,
       actividadTocado: true,
+      // ⚠️ ARRANCA SIN CONTESTAR, no en «ninguno» (11 de septiembre). Poner un
+      // valor por defecto seria contestar por el dueño una pregunta que decide
+      // cuanta comida le toca a su perro: quien no la vea pasaria por ella con
+      // un «no le doy premios» que no ha dicho. Con null, la pantalla no deja
+      // continuar hasta que elige.
+      premiosNivel: null,
       esterilizado: null,
       alergiaSi: null,
       alergias: [],
@@ -7763,6 +7836,7 @@ function RawkuOnboardingInterna({
     const cuerpoBase = {
       der_objetivo: derReal,                       // el DER de AHORA
       actividad: claveDeActividad(perfil),
+      premios_nivel: perfil?.premiosNivel || null,
       etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
@@ -7923,6 +7997,7 @@ function RawkuOnboardingInterna({
           restringir_especie: restriccionesDeEspecie(modo, configDeEsteMenu),
           der_objetivo: derReal,
           actividad: claveDeActividad(perfil),
+          premios_nivel: perfil?.premiosNivel || null,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
           // (para dar variedad entre varios menús automáticos) se
@@ -8020,6 +8095,7 @@ function RawkuOnboardingInterna({
             restringir_especie: null,
             der_objetivo: derReal,
             actividad: claveDeActividad(perfil),
+            premios_nivel: perfil?.premiosNivel || null,
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
             especies_excluidas: Array.from(especiesExcluidas),
             evitar_especies: [],
@@ -8683,6 +8759,35 @@ function RawkuOnboardingInterna({
             </div>
           </BloqueFicha>
 
+          {/* ⚠️ EL APORTE EXTRARACIÓN (11 de septiembre de 2026). La misma
+              pregunta que al dueño, en la palabra de la fuente: el registro
+              «veterinario» de `GET /vocabulario`, que además dice cuál de las
+              cifras es de la fuente (el 10 %) y cuál la ponemos nosotros (el
+              5 % y el 20 %). Quien firma una pauta necesita poder distinguirlo. */}
+          <BloqueFicha titulo="Aporte calórico extraración">
+            <p className="text-xs mb-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              {preguntaDePremios(vocab, "veterinario")} El motor formula la ración con las kcal
+              que quedan y le sigue exigiendo el día entero de nutrientes.
+            </p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {nivelesDePremios(vocab, "veterinario").map((n) => {
+                const activo = perfil.premiosNivel === n.clave;
+                return (
+                  <button key={n.clave} onClick={() => set("premiosNivel", n.clave)}
+                    className="text-left px-3 py-2 rounded-lg flex items-center justify-between"
+                    style={{ background: activo ? "#F0EBF8" : PAPEL,
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                             cursor: "pointer" }}>
+                    <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>{n.label}</span>
+                    <span className="text-[11px] text-right ml-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                      {n.detalle}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </BloqueFicha>
+
           <BloqueFicha titulo="Alergias alimentarias confirmadas">
             <SelectorAlimentos
               lista={perfil.alergias}
@@ -9317,7 +9422,8 @@ function RawkuOnboardingInterna({
   }
 
   if (!enModoProfesional && paso === 5) {
-    const puedeContinuar = perfil.actividadTocado && perfil.esterilizado !== null;
+    const puedeContinuar = perfil.actividadTocado && perfil.esterilizado !== null
+                           && !!perfil.premiosNivel;
     const actual = nivelesDueno[perfil.actividadIdx] || nivelesDueno[0];
     const Icono = actual.Icono;
     return (
@@ -9354,6 +9460,40 @@ function RawkuOnboardingInterna({
                   style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
                   <Scissors size={20} strokeWidth={1.6} style={{ color: activo ? ROSA : "#C4B8DC" }} />
                   <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay }}>{op.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ⚠️ LOS PREMIOS (11 de septiembre de 2026). Ettinger 8a ed. cap. 192:
+              «Los alimentos y premios desequilibrados no se deben proporcionar
+              en mas de un 10 % de la ingesta calorica diaria total. Cuando se
+              agregan alimentos desequilibrados a una dieta completa y
+              equilibrada, SE PRODUCE UNA DILUCION DE NUTRIENTES, y los
+              nutrientes esenciales pueden quedar POR DEBAJO DE LOS
+              REQUERIMIENTOS MINIMOS.» Lo repiten el cap. 175 y Fascetti cap. 7.
+
+              O sea que un dueño que sigue el menu al gramo y luego da premios
+              NO esta dando el menu que le calculamos. El motor sabe contarlo
+              -- formula la racion con las kcal que quedan y le sigue exigiendo
+              el dia entero de nutrientes --, pero solo si se lo decimos.
+
+              Va en esta pantalla y no en una nueva a proposito: es una
+              pregunta de «como vive este perro», igual que la actividad y la
+              esterilizacion, y una pantalla mas es un paso mas que abandonar. */}
+          <Etiqueta>{preguntaDePremios(vocab, "dueno")}</Etiqueta>
+          <p className="text-xs mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
+            Nos hace falta para calcular su ración: lo que come fuera de ella también cuenta
+          </p>
+          <div className="grid grid-cols-1 gap-2 mb-2">
+            {nivelesDePremios(vocab, "dueno").map((op) => {
+              const activo = perfil.premiosNivel === op.clave;
+              return (
+                <button key={op.clave} onClick={() => set("premiosNivel", op.clave)}
+                  className="text-left px-4 py-3 rounded-2xl transition-all"
+                  style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
+                  <span className="block" style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{op.label}</span>
+                  <span className="block text-xs mt-0.5" style={{ color: activo ? "#F3E9FB" : MALVA, fontFamily: fontBody }}>{op.detalle}</span>
                 </button>
               );
             })}

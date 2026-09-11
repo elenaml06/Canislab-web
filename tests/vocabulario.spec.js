@@ -75,6 +75,21 @@ const COND_DUENO = {
 const TAMANOS_CLAVES = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
 const RANGO_INVENTADO = { peso_min: 111, peso_max: 222 };
 
+// Los premios. Las CLAVES no se pueden inventar -- son las que el motor sabe
+// recibir, y con otra devuelve un 422 --, así que lo distintivo son las
+// etiquetas y la pregunta. Si alguna sale en pantalla, ha salido de aquí.
+const PREMIOS_CLAVES = ["ninguno", "alguno", "hasta_el_maximo", "mas_del_maximo"];
+const PREMIOS_DUENO = [
+  "Nada-de-nada-del-motor", "Alguna-cosita-del-motor",
+  "Bastantes-del-motor", "Un-monton-del-motor",
+];
+const PREMIOS_VET = [
+  "VET-extraracion-cero", "VET-extraracion-baja",
+  "VET-extraracion-en-el-techo", "VET-extraracion-pasada",
+];
+const PREGUNTA_PREMIOS_DUENO = "PREGUNTA-DEL-MOTOR: ¿le das cosas fuera de su racion?";
+const PREGUNTA_PREMIOS_VET = "PREGUNTA-VET-DEL-MOTOR: aporte calorico extraracion?";
+
 // Y la pregunta que el motor dice que la app NO hace. Inventada, por lo mismo.
 const PREGUNTA_RENAL =
   "PREGUNTA-DEL-MOTOR: ¿en que estadio IRIS esta, o cual fue la ultima creatinina?";
@@ -125,6 +140,23 @@ const VOCABULARIO_INVENTADO = {
         veterinario: { titulo: `BCS ${bcs}/9 del motor`, detalle: `clinico ${bcs}` },
       };
     }),
+  },
+  premios: {
+    de_donde: "inventado por tests/vocabulario.spec.js",
+    techo_recomendado_pct: 10,
+    pregunta: {
+      dueno: PREGUNTA_PREMIOS_DUENO,
+      veterinario: PREGUNTA_PREMIOS_VET,
+    },
+    cuantos: PREMIOS_CLAVES.length,
+    niveles: PREMIOS_CLAVES.map((clave, i) => ({
+      clave,
+      fraccion_del_dia: [0, 0.05, 0.1, 0.2][i],
+      pct_del_dia: [0, 5, 10, 20][i],
+      de_la_fuente: i === 0 || i === 2,
+      dueno: { titulo: PREMIOS_DUENO[i], detalle: `detalle de premios ${i}` },
+      veterinario: { titulo: PREMIOS_VET[i], detalle: `clinico de premios ${i}` },
+    })),
   },
   niveles_de_actividad: {
     de_donde: "inventado por tests/vocabulario.spec.js",
@@ -218,6 +250,97 @@ test.describe("las palabras que se ven salen del motor", () => {
   // 5, 7 y 9, los MISMOS que pone el veterinario. Si cada pantalla tuviera la
   // suya, el mismo perro tendria dos pesos objetivo segun quien abriera la
   // ficha. El perro de prueba tiene `condicion_idx: 2`, o sea el BCS 5.
+  // ⚠️ LOS PREMIOS (11 de septiembre de 2026). La pregunta que Elena pidió el
+  // mismo día: «ahora hay que hacer preguntas sobre eso y marcar unas
+  // respuestas que el usuario pueda seleccionar o el veterinario». Se vigila
+  // igual que la actividad y por lo mismo: las cuatro respuestas y la propia
+  // pregunta salen del motor, no de una copia en la app, y cada registro se
+  // queda en su pantalla.
+  test("la pregunta de los premios y sus respuestas salen del motor",
+    async ({ page, request }) => {
+      await configurar(request, {
+        perros: [], menus: [], premium: true,
+        vocabulario: VOCABULARIO_INVENTADO,
+      });
+      await entrar(page);
+
+      // El asistente de 6 pasos hasta el 5, que es donde vive la pregunta.
+      await page.getByText("1 / 6").waitFor({ timeout: 30000 });
+      await page.getByPlaceholder("Nombre de tu perro").fill("Duna");
+      await page.getByRole("button", { name: "Hembra", exact: true }).click();
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await page.getByText("2 / 6").waitFor();
+      await page.getByRole("button", { name: /Es mestizo/ }).click();
+      await page.getByRole("button", { name: /^Mediano/ }).click();
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await page.getByText("3 / 6").waitFor();
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await page.getByText("4 / 6").waitFor();
+      await page.getByPlaceholder("0").fill("20");
+      await page.getByRole("button", { name: "Continuar" }).click();
+      await page.getByText("5 / 6").waitFor();
+
+      await expect(page.getByText(PREGUNTA_PREMIOS_DUENO),
+        "la pregunta de los premios no es la que sirve el motor. Si dice la de la app, el " +
+        "respaldo está tapando la petición a /vocabulario -- y en pantalla se ve idéntico")
+        .toHaveCount(1);
+
+      for (const titulo of PREMIOS_DUENO) {
+        await expect(page.getByText(titulo),
+          `falta la respuesta «${titulo}». Si no está ninguna, la app sigue con ` +
+          `PREMIOS_RESPALDO; si faltan solo algunas, el motor y la app ofrecen distinto ` +
+          `número de respuestas y el usuario no puede contestar lo que el motor sabe recibir`)
+          .toHaveCount(1);
+      }
+
+      // Y el registro del veterinario no entra aquí.
+      for (const tecnica of PREMIOS_VET) {
+        await expect(page.getByText(tecnica),
+          `«${tecnica}» es del registro del veterinario y está saliendo en la app del dueño`)
+          .toHaveCount(0);
+      }
+
+      // Sin contestarla no se puede seguir: es una pregunta que decide cuánta
+      // comida le toca al perro, así que no se contesta sola.
+      await page.getByRole("button", { name: "No", exact: true }).click();
+      await expect(page.getByRole("button", { name: "Continuar" }),
+        "el paso 5 deja continuar sin contestar los premios. Con un valor por defecto, quien " +
+        "no vea la pregunta pasaría por ella con un «no le doy ninguno» que no ha dicho -- y " +
+        "eso decide cuánta comida le toca a su perro")
+        .toBeDisabled();
+
+      // Y en cuanto se contesta, sí deja.
+      await page.getByText(PREMIOS_DUENO[2]).click();
+      await expect(page.getByRole("button", { name: "Continuar" })).toBeEnabled();
+    });
+
+  test("en la ficha clínica, los premios salen en la palabra de la fuente",
+    async ({ page, request }) => {
+      await configurar(request, {
+        rolProfesional: true, rolVerificado: true,
+        perros: [PERRO_DE_PRUEBA],
+        accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
+        menus: [], vocabulario: VOCABULARIO_INVENTADO,
+      });
+      await entrar(page);
+      await esperarElPaciente(page);
+
+      await expect(page.getByText(PREGUNTA_PREMIOS_VET),
+        "la ficha clínica no pinta la pregunta en registro técnico. Quien firma una pauta " +
+        "necesita la palabra de la fuente, no «¿le das chuches?»")
+        .toHaveCount(1);
+      for (const titulo of PREMIOS_VET) {
+        await expect(page.getByText(titulo),
+          `falta la respuesta «${titulo}» en la ficha del paciente`)
+          .toHaveCount(1);
+      }
+      for (const llano of PREMIOS_DUENO) {
+        await expect(page.getByText(llano),
+          `«${llano}» es del registro del dueño y está saliendo en la ficha del veterinario`)
+          .toHaveCount(0);
+      }
+    });
+
   test("la condicion corporal se pinta con las palabras del motor", async ({ page, request }) => {
     await configurar(request, {
       perros: [PERRO_DE_PRUEBA], menus: [], premium: true,
@@ -441,6 +564,41 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
       "ACTIVIDAD_API ya no dice las mismas claves que BASE_ACTIVIDAD, o no en el mismo orden. " +
       "El motor tira una clave que no reconoce sin decir nada")
       .toEqual(claves);
+  });
+
+  // ⚠️ Y LOS PREMIOS, IGUAL (11 de septiembre de 2026). Aquí lo que viaja no es
+  // el índice sino la CLAVE, así que una clave de más o de menos no manda el
+  // nivel de al lado: manda algo que el motor no conoce y devuelve un 422. Un
+  // usuario sin menú y sin entender por qué.
+  test("los dos respaldos de premios tienen las claves del motor", () => {
+    const MAIN = path.resolve(AQUI, "../../Canislab-api/main.py");
+    if (!fs.existsSync(MAIN)) {
+      throw new Error(
+        "No se encuentra main.py del motor en " + MAIN + ".\n" +
+        "Los dos repos tienen que estar clonados uno al lado del otro.\n" +
+        "Esta prueba NO se salta: compara las respuestas que ofrece la app con las que el " +
+        "motor sabe recibir, y no poder comprobarlo no es lo mismo que que esté bien.");
+    }
+    const py = fs.readFileSync(MAIN, "utf-8");
+    const i = py.indexOf("NIVELES_DE_PREMIOS = {");
+    expect(i, "main.py ya no tiene NIVELES_DE_PREMIOS. Si se ha renombrado hay que actualizar " +
+              "esta prueba, no borrarla").toBeGreaterThan(-1);
+    const delMotor = [...py.slice(i, py.indexOf("\n}", i))
+      .matchAll(/"([a-z_]+)":\s*[\d.A-Z_]/g)].map((m) => m[1]);
+    expect(delMotor.length, "no se han leído las claves de premios del motor").toBeGreaterThan(1);
+
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    for (const nombre of ["PREMIOS_RESPALDO", "PREMIOS_CLINICOS_RESPALDO"]) {
+      const j = app.indexOf(`const ${nombre} = [`);
+      expect(j, `App.jsx ya no tiene ${nombre}`).toBeGreaterThan(-1);
+      const bloque = app.slice(j, app.indexOf("\n];", j));
+      const deLaApp = [...bloque.matchAll(/clave:\s*"([a-z_]+)"/g)].map((m) => m[1]);
+      expect(deLaApp,
+        `${nombre} no ofrece las mismas respuestas que NIVELES_DE_PREMIOS del motor, o no en ` +
+        `el mismo orden. Una clave que el motor no conoce se rechaza con un 422 y el usuario ` +
+        `se queda sin menú`)
+        .toEqual(delMotor);
+    }
   });
 
   // ⚠️ Y QUE NO HAYA UNA QUINTA COPIA (11 septiembre).

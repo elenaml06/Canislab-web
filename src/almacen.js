@@ -360,6 +360,11 @@ export async function migrarLocalACuenta(userId) {
       categoriasExcluidas: p.categorias_excluidas,
       patologiaSi: p.patologia_si,
       patologias: p.patologias,
+      // ⚠️ Sin esta línea, el perro al que su dueño le da premios subiría a la
+      // cuenta como si no tomara ninguno, y su ración se recalcularía con el
+      // día entero de calorías -- comiendo de más, en silencio, justo en el
+      // salto. Lo cazó `tests/sin-cuenta.spec.js` el día que se añadió el campo.
+      premiosNivel: p.premios_nivel,
     }, {
       etapa: p.etapa,
       pesoAdultoEsperado: p.peso_adulto_esperado,

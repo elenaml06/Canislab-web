@@ -80,6 +80,12 @@ const FICHA_COMPLETA = {
   categorias_excluidas: ["Hueso carnoso"],
   patologia_si: "no",
   patologias: [],
+  // ⚠️ «mas_del_maximo» Y NO «ninguno» (11 septiembre), por la misma lección
+  // que la actividad: `ninguno` es la primera opción y la que más se parece al
+  // vacío, así que con ella la prueba pasaría aunque el campo se perdiera. Este
+  // es el extremo, y es el que cambia más la ración -- un 20 % de las kcal del
+  // día formuladas con el día entero de nutrientes.
+  premios_nivel: "mas_del_maximo",
 };
 
 // Qué tiene que volver EXACTAMENTE igual, y por qué importa. El porqué no es
@@ -106,6 +112,7 @@ const CAMPOS = [
   ["categorias_excluidas",    "un perro sin dientes no puede masticar hueso"],
   ["patologia_si",            "cambia los límites de seguridad"],
   ["patologias",              "cambia los límites de seguridad"],
+  ["premios_nivel",           "lo que come fuera de la ración diluye la ración: el motor la formula con las kcal que quedan y le exige igual el día entero de nutrientes"],
 ];
 
 test.describe("la ficha del perro sobrevive a guardar y volver", () => {
