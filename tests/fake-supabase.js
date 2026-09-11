@@ -905,10 +905,26 @@ export function crearFakeSupabase(opciones = {}) {
       if (!estado.vocabulario) return responder(404, { detail: "sin vocabulario sembrado" });
       return responder(200, estado.vocabulario);
     }
+    // ⚠️ CON `especie`, COMO EL DE VERDAD (11 septiembre). Aquí faltaba ese
+    // campo, y el selector del veterinario lo usa para agrupar los alimentos
+    // por especie dentro de cada categoría: sin él, una prueba del árbol
+    // pasaría contra una forma que la API no devuelve. Es el mismo fallo que
+    // las razas con la tilde cambiada. `especie: null` es legítimo y lo
+    // devuelve la API de verdad para la verdura y los suplementos, así que hay
+    // de los dos.
     if (ruta === "/alimentos") {
       return responder(200, {
-        "Carne muscular": [{ nombre: "Carne muscular de pollo", kcal_100g: 110 }],
-        "Hueso carnoso": [{ nombre: "Hueso carnoso de pollo", kcal_100g: 150 }],
+        "Carne muscular": [
+          { nombre: "Carne muscular de pollo", kcal_100g: 110, especie: "Pollo" },
+          { nombre: "Muslo de pollo sin piel", kcal_100g: 120, especie: "Pollo" },
+          { nombre: "Carne muscular de vaca", kcal_100g: 130, especie: "Vaca" },
+        ],
+        "Hueso carnoso": [
+          { nombre: "Hueso carnoso de pollo", kcal_100g: 150, especie: "Pollo" },
+        ],
+        "Verduras y frutas": [
+          { nombre: "Zanahoria", kcal_100g: 35, especie: null },
+        ],
       });
     }
     // ── LA ESCALERA DE RELAJACIÓN ───────────────────────────────────────

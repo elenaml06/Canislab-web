@@ -67,6 +67,97 @@ async function irAlFormulador(page) {
   await expect(page.getByText("Formular la ración")).toBeVisible();
 }
 
+// ─── EL SELECTOR: POR CATEGORÍAS, Y SE EXCLUYE SIN SALIR ────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (11 septiembre), las dos mitades:
+//
+//   «la lista de ingredientes a seleccionar no está dividida por categorias
+//    /carne muscular /verduras /vísceras... y debería, para que no aparezca
+//    una lista infinita, y dentro de eso pues que aparezca por ejemplo pollo,
+//    se entre dentro de pollo y aparezca todo lo que sea de pollo»
+//
+//   «lo de excluir un alimento o un grupo de alimentos se tiene que poder
+//    hacer desde el mismo generador de menú, porque igual quiere hacer pruebas
+//    y tener que salir y volver a entrar es un coñazo»
+//
+// Antes esto era SOLO un buscador: sin escribir no se veía nada, así que para
+// encontrar un alimento había que saber ya cómo se llama. Son 163 en 14
+// categorías.
+test("el selector se navega por categoría y por especie, sin escribir nada", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+
+  // Las categorías, sin buscar nada.
+  const carne = page.getByRole("button", { name: /^Carne muscular/ });
+  await expect(carne, "sin escribir no se ve ninguna categoría: el selector sigue siendo solo " +
+                      "un buscador, y para encontrar algo hay que saber ya cómo se llama")
+    .toBeVisible();
+  // Y lo de dentro, plegado.
+  await expect(page.getByRole("button", { name: /^Carne muscular de pollo/ })).toHaveCount(0);
+
+  await carne.click();
+  // Dentro, las ESPECIES, no la lista entera.
+  await expect(page.getByRole("button", { name: /^Pollo/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Vaca/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Carne muscular de pollo/ }),
+    "al abrir la categoría salen ya todos los alimentos: falta el nivel de especie")
+    .toHaveCount(0);
+
+  await page.getByRole("button", { name: /^Pollo/ }).click();
+  await expect(page.getByRole("button", { name: /^Carne muscular de pollo/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Muslo de pollo sin piel/ })).toBeVisible();
+  // Y lo de la otra especie sigue sin salir.
+  await expect(page.getByRole("button", { name: /^Carne muscular de vaca/ })).toHaveCount(0);
+});
+
+test("una categoría sin especie no mete un nivel de más", async ({ page, request }) => {
+  // La verdura y los suplementos vienen con `especie: null` de la API de
+  // verdad. Meterles un escalón que dice «null» sería peor que no tenerlo.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByRole("button", { name: /^Verduras y frutas/ }).click();
+  await expect(page.getByRole("button", { name: /^Zanahoria/ })).toBeVisible();
+});
+
+test("se deja fuera una categoría entera sin salir del generador", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByRole("button", { name: "Dejar fuera Hueso carnoso" }).click();
+
+  // Se ve que está fuera, y se puede volver a meter. Un filtro que no se ve es
+  // un filtro que explica por qué no sale el menú sin que nadie pueda saberlo.
+  await expect(page.getByText("Fuera de esta prueba", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Volver a meter Hueso carnoso" }).first())
+    .toBeVisible();
+
+  // Y viaja al motor en la siguiente llamada.
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const ultima = peticionesFormular[peticionesFormular.length - 1];
+    return (ultima?.categorias_excluidas || []).includes("Hueso carnoso");
+  }, { message: "la categoría que el veterinario ha dejado fuera no viaja al motor: la " +
+                "excluye en la pantalla y el motor se la sigue metiendo" })
+    .toBe(true);
+});
+
+test("lo excluido en la ficha del paciente no se puede quitar desde aquí", async ({ page, request }) => {
+  // ⚠️ Regla 4 del proyecto: «las alergias y las categorías excluidas a mano
+  // no se tocan jamás, pueden ser médicas». Quitar desde un generador la
+  // exclusión que alguien anotó en la ficha es exactamente lo que esa regla
+  // previene -- y ahora que desde aquí se puede excluir, hay que comprobar que
+  // NO se puede desexcluir lo de la ficha.
+  await comoVeterinario(page, request, {
+    perros: [{ ...PERRO_DE_PRUEBA, categorias_excluidas_si: "si",
+               categorias_excluidas: ["Hueso carnoso"] }],
+  });
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await expect(page.getByText("fuera por su ficha")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Volver a meter Hueso carnoso" }),
+    "se puede quitar desde el generador una exclusión de la ficha, que puede ser médica")
+    .toHaveCount(0);
+});
+
 test("un veterinario formula: no hay automático ni personalizar", async ({ page, request }) => {
   await comoVeterinario(page, request);
   await expect(page.getByRole("button", { name: /^Automático/ })).toHaveCount(0);

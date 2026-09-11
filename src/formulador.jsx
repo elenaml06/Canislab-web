@@ -20,7 +20,7 @@
 // diría una cosa y el motor comprobaría otra, y no saltaría ningún error.
 // Esta pantalla solo pinta y ordena.
 import { useState, useEffect, useRef, useMemo } from "react";
-import { AlertCircle, Check, ChevronDown, Menu, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
+import { AlertCircle, Ban, Check, ChevronDown, Menu, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
 import { API_BASE, fetchConTimeout } from "./api.js";
 import { agruparNutrientes, resumenDeLaFicha, nombreLegible } from "./nutrientes.js";
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
@@ -56,6 +56,31 @@ const ESPERA_MS = 450;
 const COLOR_ESTADO = { se_pasa: ROSA, falta: "#C77700", dentro: VERDE };
 const ETIQUETA_ESTADO = { se_pasa: "Se pasa", falta: "Falta", dentro: "Dentro" };
 
+// Una fila de alimento dentro del árbol: ponerlo, o dejarlo fuera de la
+// prueba. Las dos cosas a un toque, que es lo que se pidió -- salir de la
+// pantalla para excluir algo y volver a entrar era el coñazo.
+function BotonAlimento({ a, puesto, onPoner, onFuera }) {
+  return (
+    <div className="flex items-center gap-1">
+      <button onClick={onPoner} disabled={puesto}
+        className="flex-1 text-left px-3 py-2 rounded-lg flex items-center justify-between"
+        style={{ background: puesto ? "#F3EDFB" : PAPEL, border: "1.5px solid #E3DAF0",
+                 opacity: puesto ? 0.6 : 1, cursor: puesto ? "default" : "pointer" }}>
+        <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>{a.nombre}</span>
+        <span className="text-[11px]" style={{ color: MALVA, fontFamily: "monospace" }}>
+          {puesto ? "ya está" : `${Math.round(a.kcal_100g)} kcal/100 g`}
+        </span>
+      </button>
+      <button onClick={onFuera} aria-label={`Dejar fuera ${a.nombre}`}
+        title="Dejar fuera de esta prueba"
+        className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
+        style={{ background: PAPEL, border: "1.5px solid #E3DAF0", cursor: "pointer" }}>
+        <Ban size={13} style={{ color: MALVA }} />
+      </button>
+    </div>
+  );
+}
+
 export default function Formulador({
   perfil, derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg,
   pesoObjetivoKg, patologias = [], especiesExcluidas = [], nombresExcluidos = [],
@@ -77,6 +102,30 @@ export default function Formulador({
   const [avisoAuto, setAvisoAuto] = useState(null);
   const [alternativa, setAlternativa] = useState(null);
   const [error, setError] = useState(null);
+  // ─── DEJAR FUERA COSAS SIN SALIR DE AQUÍ ──────────────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (11 septiembre): «lo de excluir un alimento o un grupo
+  // de alimentos se tiene que poder hacer desde el mismo generador de menú,
+  // porque igual quiere hacer pruebas y tener que salir y volver a entrar es
+  // un coñazo».
+  //
+  // ⚠️ Y SON APARTE DE LAS DE LA FICHA, A PROPÓSITO. Las de la ficha
+  // (`especiesExcluidas`, `nombresExcluidos`, `categoriasExcluidas`) llegan
+  // como props y NO se tocan desde aquí: la regla 4 del proyecto es explícita
+  // -- «las alergias y las categorías excluidas a mano no se tocan jamás,
+  // pueden ser médicas». Quitar desde un generador la alergia que alguien
+  // anotó en la ficha es exactamente el fallo que esa regla previene.
+  //
+  // Lo de aquí SUMA: es para probar. Se ve siempre, se quita de una en una, y
+  // no se guarda en la ficha del paciente.
+  const [fueraDeLaPrueba, setFueraDeLaPrueba] = useState({ nombres: [], categorias: [] });
+  const [categoriaAbierta, setCategoriaAbierta] = useState(null);
+  const [especieAbierta, setEspecieAbierta] = useState(null);
+  const dejarFuera = (que, cual) =>
+    setFueraDeLaPrueba((f) => (f[que].includes(cual) ? f
+      : { ...f, [que]: [...f[que], cual] }));
+  const volverAMeter = (que, cual) =>
+    setFueraDeLaPrueba((f) => ({ ...f, [que]: f[que].filter((x) => x !== cual) }));
   // ─── FIRMAR ES UN ACTO: HAY QUE PULSAR ────────────────────────────────
   // El modo profesional NO firma solo. Si firmara por el hecho de estar
   // encendido, el veterinario acabaría con veinte pautas firmadas de las
@@ -144,15 +193,18 @@ export default function Formulador({
     peso_objetivo_kg: pesoObjetivoKg ?? null,
     patologias: patologias || [],
     especies_excluidas: especiesExcluidas || [],
-    nombres_excluidos: nombresExcluidos || [],
-    categorias_excluidas: categoriasExcluidas || [],
+    // Las de la ficha MÁS las de esta prueba. Se suman y no se sustituyen:
+    // lo de la ficha puede ser médico y no se toca desde aquí.
+    nombres_excluidos: [...(nombresExcluidos || []), ...fueraDeLaPrueba.nombres],
+    categorias_excluidas: [...(categoriasExcluidas || []), ...fueraDeLaPrueba.categorias],
     // El peldaño viaja en TODAS las llamadas y no solo en autocompletar:
     // `/formular/estado` lo ignora (solo mide lo que hay puesto), pero
     // mandarlo desde un solo sitio es lo que impide que autocompletar
     // formule en un peldaño y la pantalla enseñe otro.
     peldano,
   }), [derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg, pesoObjetivoKg,
-      patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas, peldano]);
+      patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas, peldano,
+      fueraDeLaPrueba]);
 
   // El catálogo, una vez. Es la misma lista que usa el analizador.
   useEffect(() => {
@@ -384,18 +436,63 @@ export default function Formulador({
   const resultados = useMemo(() => {
     if (!catalogo || !busqueda.trim()) return [];
     const q = busqueda.trim().toLowerCase();
-    const fuera = new Set(categoriasExcluidas || []);
+    const fuera = new Set([...(categoriasExcluidas || []), ...fueraDeLaPrueba.categorias]);
+    const fueraNombres = new Set([...(nombresExcluidos || []), ...fueraDeLaPrueba.nombres]);
     const salida = [];
     for (const [cat, lista] of Object.entries(catalogo)) {
       if (fuera.has(cat)) continue;
       for (const a of lista) {
-        if (a.nombre.toLowerCase().includes(q) && !(a.nombre in gramos)) {
+        if (a.nombre.toLowerCase().includes(q) && !(a.nombre in gramos)
+            && !fueraNombres.has(a.nombre)) {
           salida.push({ ...a, categoria: cat });
         }
       }
     }
     return salida.slice(0, 12);
-  }, [catalogo, busqueda, gramos, categoriasExcluidas]);
+  }, [catalogo, busqueda, gramos, categoriasExcluidas, nombresExcluidos, fueraDeLaPrueba]);
+
+  // ─── EL ÁRBOL: CATEGORÍA → ESPECIE → ALIMENTO ─────────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (11 septiembre): «la lista de ingredientes a seleccionar
+  // no está dividida por categorías /carne muscular /verduras /vísceras... y
+  // debería, para que no aparezca una lista infinita, y dentro de eso pues que
+  // aparezca por ejemplo pollo, se entre dentro de pollo y aparezca todo lo
+  // que sea de pollo de esa categoría».
+  //
+  // Hasta hoy este selector era SOLO un buscador: sin escribir no se veía
+  // nada, así que para encontrar algo había que saber ya cómo se llama. Son
+  // 163 alimentos en 14 categorías.
+  //
+  // ⚠️ La especie NO se adivina del nombre: la sirve el motor en `/alimentos`
+  // (`especie`), que la saca de `especies.py`. Deducirla aquí partiendo el
+  // nombre sería inventarse la taxonomía en la pantalla, y además fallaría en
+  // los mismos sitios donde falla excluir por nombre -- «pollo» y «gallina»
+  // son la misma especie y no se parecen.
+  const arbol = useMemo(() => {
+    if (!catalogo) return [];
+    const fuera = new Set([...(categoriasExcluidas || []), ...fueraDeLaPrueba.categorias]);
+    const fueraNombres = new Set([...(nombresExcluidos || []), ...fueraDeLaPrueba.nombres]);
+    return Object.entries(catalogo).map(([cat, lista]) => {
+      const porEspecie = new Map();
+      for (const a of lista) {
+        if (fueraNombres.has(a.nombre)) continue;
+        // Sin especie (los suplementos, la verdura) van juntos bajo la
+        // categoría, sin un nivel de más que no dice nada.
+        const clave = a.especie || null;
+        if (!porEspecie.has(clave)) porEspecie.set(clave, []);
+        porEspecie.get(clave).push(a);
+      }
+      return {
+        categoria: cat,
+        excluida: fuera.has(cat),
+        deLaFicha: (categoriasExcluidas || []).includes(cat),
+        cuantos: [...porEspecie.values()].reduce((n, v) => n + v.length, 0),
+        especies: [...porEspecie.entries()]
+          .sort((a, b) => (a[0] || "").localeCompare(b[0] || ""))
+          .map(([especie, items]) => ({ especie, items })),
+      };
+    });
+  }, [catalogo, categoriasExcluidas, nombresExcluidos, fueraDeLaPrueba]);
 
   return (
     <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -516,6 +613,16 @@ export default function Formulador({
                       style={{ background: "transparent", border: "none", cursor: "pointer" }}>
                 <Trash2 size={15} style={{ color: MALVA }} />
               </button>
+              {/* Quitar lo saca de ESTA ración; dejarlo fuera impide además que
+                  autocompletar lo vuelva a meter. Son dos cosas distintas y
+                  antes solo estaba la primera: se quitaba el salmón, se pulsaba
+                  autocompletar y volvía. */}
+              <button onClick={() => { quitar(nombre); dejarFuera("nombres", nombre); }}
+                      aria-label={`Dejar fuera ${nombre}`}
+                      title="Dejar fuera de esta prueba"
+                      style={{ background: "transparent", border: "none", cursor: "pointer" }}>
+                <Ban size={15} style={{ color: MALVA }} />
+              </button>
             </div>
           ))}
 
@@ -537,7 +644,7 @@ export default function Formulador({
                   <X size={16} style={{ color: MALVA }} />
                 </button>
               </div>
-              {resultados.map((a) => (
+              {busqueda.trim() ? resultados.map((a) => (
                 <button key={a.nombre}
                   onClick={() => { ponerGramos(a.nombre, "100"); setBusqueda(""); setBuscando(false); }}
                   className="w-full text-left px-3 py-2 rounded-lg flex items-center justify-between mb-1"
@@ -547,7 +654,112 @@ export default function Formulador({
                     {a.categoria} · {Math.round(a.kcal_100g)} kcal/100 g
                   </span>
                 </button>
-              ))}
+              )) : (
+                /* Sin escribir nada, el árbol. Antes aquí no había nada: para
+                   encontrar un alimento había que saber ya cómo se llama. */
+                <div className="flex flex-col gap-1">
+                  {arbol.map((c) => {
+                    const abierta = categoriaAbierta === c.categoria;
+                    return (
+                      <div key={c.categoria}>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => { setCategoriaAbierta(abierta ? null : c.categoria);
+                                             setEspecieAbierta(null); }}
+                            aria-expanded={abierta}
+                            disabled={c.excluida}
+                            className="flex-1 flex items-center justify-between px-3 py-2 rounded-lg text-left"
+                            style={{ background: c.excluida ? "#FBF7FC" : PAPEL,
+                                     border: "1.5px solid #E3DAF0",
+                                     opacity: c.excluida ? 0.55 : 1,
+                                     cursor: c.excluida ? "default" : "pointer" }}>
+                            <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>
+                              {c.categoria}
+                              <span className="text-[11px] ml-2" style={{ color: MALVA, fontFamily: "monospace" }}>
+                                {c.excluida
+                                  ? (c.deLaFicha ? "fuera por su ficha" : "fuera de esta prueba")
+                                  : c.cuantos}
+                              </span>
+                            </span>
+                            {!c.excluida && (
+                              <ChevronDown size={15} style={{ color: MALVA,
+                                transform: abierta ? "rotate(180deg)" : "none" }} />
+                            )}
+                          </button>
+                          {/* Dejar fuera la categoría entera. Las que vienen de
+                              la ficha no se tocan desde aquí: regla 4. */}
+                          {!c.deLaFicha && (
+                            <button
+                              onClick={() => (c.excluida
+                                ? volverAMeter("categorias", c.categoria)
+                                : dejarFuera("categorias", c.categoria))}
+                              aria-label={c.excluida
+                                ? `Volver a meter ${c.categoria}`
+                                : `Dejar fuera ${c.categoria}`}
+                              className="shrink-0 w-9 h-9 rounded-lg flex items-center justify-center"
+                              style={{ background: PAPEL, border: "1.5px solid #E3DAF0",
+                                       cursor: "pointer" }}>
+                              {c.excluida ? <Plus size={14} style={{ color: MALVA }} />
+                                          : <Ban size={14} style={{ color: MALVA }} />}
+                            </button>
+                          )}
+                        </div>
+
+                        {abierta && !c.excluida && (
+                          <div className="pl-3 mt-1 flex flex-col gap-1">
+                            {c.especies.map(({ especie, items }) => {
+                              // Sin especie (verdura, suplementos) no se mete un
+                              // nivel de más: se listan directamente.
+                              if (!especie) {
+                                return items.map((a) => (
+                                  <BotonAlimento key={a.nombre} a={a}
+                                    puesto={a.nombre in gramos}
+                                    onPoner={() => { ponerGramos(a.nombre, "100");
+                                                     setBuscando(false); }}
+                                    onFuera={() => dejarFuera("nombres", a.nombre)} />
+                                ));
+                              }
+                              const ab = especieAbierta === `${c.categoria}/${especie}`;
+                              return (
+                                <div key={especie}>
+                                  <button
+                                    onClick={() => setEspecieAbierta(
+                                      ab ? null : `${c.categoria}/${especie}`)}
+                                    aria-expanded={ab}
+                                    className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-left"
+                                    style={{ background: "#FFFFFF", border: "1px solid #E3DAF0",
+                                             cursor: "pointer" }}>
+                                    <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
+                                      {especie}
+                                      <span className="text-[11px] ml-2"
+                                            style={{ color: MALVA, fontFamily: "monospace" }}>
+                                        {items.length}
+                                      </span>
+                                    </span>
+                                    <ChevronDown size={14} style={{ color: MALVA,
+                                      transform: ab ? "rotate(180deg)" : "none" }} />
+                                  </button>
+                                  {ab && (
+                                    <div className="pl-3 mt-1 flex flex-col gap-1">
+                                      {items.map((a) => (
+                                        <BotonAlimento key={a.nombre} a={a}
+                                          puesto={a.nombre in gramos}
+                                          onPoner={() => { ponerGramos(a.nombre, "100");
+                                                           setBuscando(false); }}
+                                          onFuera={() => dejarFuera("nombres", a.nombre)} />
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           ) : (
             <button onClick={() => setBuscando(true)}
@@ -556,6 +768,42 @@ export default function Formulador({
                        fontFamily: fontBody, fontSize: 14, cursor: "pointer" }}>
               <Plus size={15} /> Añadir alimento
             </button>
+          )}
+
+          {/* ─── LO QUE ESTÁ FUERA DE ESTA PRUEBA ─────────────────────────
+              Se ve siempre que haya algo, y se quita de uno en uno. Un filtro
+              que no se ve es un filtro que explica por qué no sale el menú sin
+              que nadie pueda saberlo. */}
+          {(fueraDeLaPrueba.nombres.length > 0 || fueraDeLaPrueba.categorias.length > 0) && (
+            <div className="mt-3 rounded-xl px-3 py-2.5"
+                 style={{ background: "#FFF4F6", border: "1px solid #F3D7DE" }}>
+              <p className="text-[10px] tracking-[0.1em] uppercase mb-1.5"
+                 style={{ color: ROSA, fontFamily: "monospace" }}>Fuera de esta prueba</p>
+              <div className="flex flex-wrap gap-1.5">
+                {fueraDeLaPrueba.categorias.map((c) => (
+                  <button key={`c-${c}`} onClick={() => volverAMeter("categorias", c)}
+                    aria-label={`Volver a meter ${c}`}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg"
+                    style={{ background: "#FFFFFF", border: "1px solid #F3D7DE", color: TINTA,
+                             fontFamily: fontBody, fontSize: 12, cursor: "pointer" }}>
+                    {c} <X size={12} style={{ color: MALVA }} />
+                  </button>
+                ))}
+                {fueraDeLaPrueba.nombres.map((n) => (
+                  <button key={`n-${n}`} onClick={() => volverAMeter("nombres", n)}
+                    aria-label={`Volver a meter ${n}`}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg"
+                    style={{ background: "#FFFFFF", border: "1px solid #F3D7DE", color: TINTA,
+                             fontFamily: fontBody, fontSize: 12, cursor: "pointer" }}>
+                    {n} <X size={12} style={{ color: MALVA }} />
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] leading-snug mt-1.5" style={{ color: MALVA, fontFamily: fontBody }}>
+                Solo para esta formulación: no se guarda en la ficha del paciente. Las alergias y
+                exclusiones de su ficha siguen puestas y no se quitan desde aquí.
+              </p>
+            </div>
           )}
 
           <button onClick={autocompletar} disabled={autocompletando}
