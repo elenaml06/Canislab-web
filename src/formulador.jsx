@@ -56,6 +56,32 @@ const ESPERA_MS = 450;
 const COLOR_ESTADO = { se_pasa: ROSA, falta: "#C77700", dentro: VERDE };
 const ETIQUETA_ESTADO = { se_pasa: "Se pasa", falta: "Falta", dentro: "Dentro" };
 
+// ⚠️ LOS NUTRIENTES QUE SE OFRECEN PARA FIJAR (11 de septiembre de 2026).
+//
+// Elena: «el veterinario debe poder decidir en qué porcentaje quiere dejar la
+// grasa, la proteína, LO QUE SEA». El motor acepta cualquiera de los 43 -- la
+// clave viaja tal cual y `_objetivos_dentro_de_fediaf` la busca en el MAPA --,
+// así que esto no es una limitación del motor: es qué se pinta.
+//
+// Se ofrecen los ocho que las fuentes de patología tocan de verdad, que son los
+// que un clínico va a querer mover. Si hiciera falta otro, se añade aquí y el
+// motor ya lo sabe aplicar: no hay nada más que tocar.
+//
+// La clave es la del MOTOR (`verificar.MAPA`), no la del texto. Escribirla mal
+// haría que el objetivo se mandara y el motor lo ignorara diciendo «no es un
+// requisito», que es mejor que aplicarlo al nutriente equivocado pero sigue
+// siendo un objetivo que no hace nada.
+const OBJETIVOS_QUE_SE_OFRECEN = [
+  { clave: "proteina", label: "Proteína (g)" },
+  { clave: "grasa", label: "Grasa (g)" },
+  { clave: "fosforo", label: "Fósforo (mg)" },
+  { clave: "calcio", label: "Calcio (mg)" },
+  { clave: "sodio", label: "Sodio (mg)" },
+  { clave: "potasio", label: "Potasio (mg)" },
+  { clave: "cobre", label: "Cobre (mg)" },
+  { clave: "fibra", label: "Fibra (g)" },
+];
+
 // Una fila de alimento dentro del árbol: ponerlo, o dejarlo fuera de la
 // prueba. Las dos cosas a un toque, que es lo que se pidió -- salir de la
 // pantalla para excluir algo y volver a entrar era el coñazo.
@@ -119,6 +145,34 @@ export default function Formulador({
   // Lo de aquí SUMA: es para probar. Se ve siempre, se quita de una en una, y
   // no se guarda en la ficha del paciente.
   const [fueraDeLaPrueba, setFueraDeLaPrueba] = useState({ nombres: [], categorias: [] });
+  // ─── LOS OBJETIVOS QUE PONE ÉL ────────────────────────────────────────
+  //
+  // ⚠️ PEDIDO EXPRESO (11 septiembre): «el veterinario debe poder decidir en
+  // qué porcentaje quiere dejar la grasa, la proteína, lo que sea... y no solo
+  // para patologías, igual en un menú normal el veterinario quiere tener
+  // control sobre eso».
+  //
+  // Van en la MISMA unidad que todo lo demás de esta pantalla y que
+  // `GET /patologias` -- g o mg por 1000 kcal --, no en porcentaje: dos
+  // unidades en la pantalla de quien firma es cómo se lee un número por otro.
+  //
+  // ⚠️ Y SOLO PUEDEN APRETAR. Lo recorta el motor contra FEDIAF y lo DICE en
+  // `objetivos_ajustados`; aquí se pinta lo que haya dicho. Elena: «los
+  // requisitos se respetan SIEMPRE, eso no se negocia».
+  const [objetivos, setObjetivos] = useState({});
+  const [objetivosAbiertos, setObjetivosAbiertos] = useState(false);
+  const [ajustes, setAjustes] = useState([]);
+  const ponerObjetivo = (clave, lado, valor) =>
+    setObjetivos((o) => {
+      const n = { ...(o[clave] || {}) };
+      if (valor === "" || valor == null) delete n[lado];
+      else n[lado] = Number(valor);
+      const fuera = { ...o };
+      if (Object.keys(n).length === 0) delete fuera[clave];
+      else fuera[clave] = n;
+      return fuera;
+    });
+
   const [categoriaAbierta, setCategoriaAbierta] = useState(null);
   const [especieAbierta, setEspecieAbierta] = useState(null);
   const dejarFuera = (que, cual) =>
@@ -197,6 +251,9 @@ export default function Formulador({
     // lo de la ficha puede ser médico y no se toca desde aquí.
     nombres_excluidos: [...(nombresExcluidos || []), ...fueraDeLaPrueba.nombres],
     categorias_excluidas: [...(categoriasExcluidas || []), ...fueraDeLaPrueba.categorias],
+    // Los objetivos que ha puesto él. `/formular/estado` los ignora (solo mide
+    // lo que hay), pero van desde el mismo sitio por lo mismo que el peldaño.
+    objetivos_del_profesional: Object.keys(objetivos).length ? objetivos : undefined,
     // El peldaño viaja en TODAS las llamadas y no solo en autocompletar:
     // `/formular/estado` lo ignora (solo mide lo que hay puesto), pero
     // mandarlo desde un solo sitio es lo que impide que autocompletar
@@ -204,7 +261,7 @@ export default function Formulador({
     peldano,
   }), [derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg, pesoObjetivoKg,
       patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas, peldano,
-      fueraDeLaPrueba]);
+      fueraDeLaPrueba, objetivos]);
 
   // El catálogo, una vez. Es la misma lista que usa el analizador.
   useEffect(() => {
@@ -328,6 +385,7 @@ export default function Formulador({
         setGramos(Object.fromEntries(
           Object.entries(d.menu).map(([k, v]) => [k, redondea(v)])));
         if (d.estado) setEstado(d.estado);
+        setAjustes(d.objetivos_ajustados || []);
         // ⚠️ Y SI HA HABIDO QUE BAJAR DE PELDAÑO, SE DICE (11 septiembre).
         // Desde hoy autocompletar recorre la escalera, así que puede salir
         // con proporciones más sueltas que las que el veterinario tenía
@@ -358,6 +416,7 @@ export default function Formulador({
               ? ` Es con «${usado.titulo}», el último peldaño: no queda forma que soltar.`
               : "";
         setAvisoAuto((d?.motivo || "No se ha podido completar la ración.") + cola);
+        setAjustes(d?.objetivos_ajustados || []);
         // La alternativa se OFRECE, no se aplica: cambiarle las cantidades
         // sin decírselo sería justo lo que el endpoint promete no hacer.
         if (d?.alternativa) setAlternativa(d.alternativa);
@@ -768,6 +827,84 @@ export default function Formulador({
                        fontFamily: fontBody, fontSize: 14, cursor: "pointer" }}>
               <Plus size={15} /> Añadir alimento
             </button>
+          )}
+
+          {/* ─── LOS OBJETIVOS QUE PONE ÉL ────────────────────────────────
+              En la misma unidad que el resto de la pantalla: g o mg por 1000
+              kcal. Plegado por defecto, como las proporciones -- en la mayoría
+              de las raciones no hay nada que fijar. */}
+          <div className="mt-3 rounded-xl" style={{ background: PAPEL, border: "1px solid #E3DAF0" }}>
+            <button onClick={() => setObjetivosAbiertos((v) => !v)}
+              aria-expanded={objetivosAbiertos}
+              className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+              style={{ background: "none", border: "none", cursor: "pointer" }}>
+              <span>
+                <span className="block text-[10px] tracking-[0.1em] uppercase"
+                      style={{ color: MALVA, fontFamily: "monospace" }}>
+                  Tus objetivos
+                </span>
+                <span className="block" style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
+                  {Object.keys(objetivos).length
+                    ? `${Object.keys(objetivos).length} fijado${Object.keys(objetivos).length === 1 ? "" : "s"}`
+                    : "Ninguno: manda lo de FEDIAF y la patología"}
+                </span>
+              </span>
+              <ChevronDown size={16}
+                style={{ color: MALVA, transform: objetivosAbiertos ? "rotate(180deg)" : "none" }} />
+            </button>
+            {objetivosAbiertos && (
+              <div className="px-3 pb-3">
+                <p className="text-[11px] leading-snug mb-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                  En <b>g o mg por 1000 kcal</b>, la misma unidad que los topes de patología. Solo
+                  pueden <b>apretar</b>: un techo tuyo por encima del máximo de FEDIAF no hace
+                  nada, y un suelo por debajo del mínimo se sube al de FEDIAF. Los requisitos no se
+                  negocian.
+                </p>
+                <div className="flex flex-col gap-1.5">
+                  {OBJETIVOS_QUE_SE_OFRECEN.map(({ clave, label }) => (
+                    <div key={clave} className="flex items-center gap-2">
+                      <span className="flex-1" style={{ color: TINTA, fontFamily: fontBody, fontSize: 13 }}>
+                        {label}
+                      </span>
+                      <input type="number" inputMode="decimal"
+                        value={objetivos[clave]?.min ?? ""}
+                        onChange={(e) => ponerObjetivo(clave, "min", e.target.value)}
+                        aria-label={`Mínimo de ${label}`} placeholder="mín"
+                        className="w-20 py-1.5 px-2 rounded-lg outline-none text-right"
+                        style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
+                                 color: TINTA, fontFamily: fontBody, fontSize: 13 }} />
+                      <input type="number" inputMode="decimal"
+                        value={objetivos[clave]?.max ?? ""}
+                        onChange={(e) => ponerObjetivo(clave, "max", e.target.value)}
+                        aria-label={`Máximo de ${label}`} placeholder="máx"
+                        className="w-20 py-1.5 px-2 rounded-lg outline-none text-right"
+                        style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
+                                 color: TINTA, fontFamily: fontBody, fontSize: 13 }} />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ⚠️ LO QUE EL MOTOR HA RECORTADO, SIEMPRE VISIBLE. Aplicar el
+              número de FEDIAF en lugar del suyo sin decirlo le dejaría firmando
+              algo que no es lo que escribió. */}
+          {ajustes.length > 0 && (
+            <div className="mt-2 rounded-xl px-3 py-2.5"
+                 style={{ background: "#FFF7E8", border: "1px solid #F5DFA8" }}>
+              <p className="text-[10px] tracking-[0.1em] uppercase mb-1"
+                 style={{ color: "#B37A00", fontFamily: "monospace" }}>
+                Lo que no se ha podido aplicar tal cual
+              </p>
+              {ajustes.map((a) => (
+                <p key={`${a.nutriente}-${a.que_ha_pasado}`}
+                   className="text-[11px] leading-snug mb-1 last:mb-0"
+                   style={{ color: TINTA, fontFamily: fontBody }}>
+                  <b>{nombreLegible(a.nutriente)}</b>: {a.explicacion}
+                </p>
+              ))}
+            </div>
           )}
 
           {/* ─── LO QUE ESTÁ FUERA DE ESTA PRUEBA ─────────────────────────

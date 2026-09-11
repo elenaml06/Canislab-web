@@ -158,6 +158,61 @@ test("lo excluido en la ficha del paciente no se puede quitar desde aquí", asyn
     .toHaveCount(0);
 });
 
+// ─── LOS OBJETIVOS QUE PONE EL VETERINARIO ──────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (11 septiembre): «para ciertas patologias el veterinario
+// debe poder decidir en que porcentaje quiere dejar la grasa, la proteina, lo
+// que sea... y eso hay que aplicarlo tambien».
+//
+// Y la regla que los limita, suya del mismo dia: «los requisitos se respetan
+// SIEMPRE, eso no se negocia». Lo que recorta es el motor; lo que se comprueba
+// aqui es que el numero VIAJA y que lo recortado SE VE.
+test("lo que fija el veterinario viaja al motor", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+  await page.getByLabel("Máximo de Grasa (g)").fill("30");
+  await page.getByLabel("Mínimo de Proteína (g)").fill("80");
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.objetivos_del_profesional || null;
+  }, { message: "el objetivo que escribe el veterinario no llega al motor: lo teclea, lo ve en " +
+                "pantalla y el menú sale igual que sin él" })
+    .toEqual({ grasa: { max: 30 }, proteina: { min: 80 } });
+});
+
+test("lo que el motor recorta contra FEDIAF se ve", async ({ page, request }) => {
+  // ⚠️ Esto es lo que impide el fallo de verdad: aplicar el número de FEDIAF en
+  // lugar del suyo EN SILENCIO le deja firmando algo que no escribió, con su
+  // nombre y su número de colegiado debajo.
+  await comoVeterinario(page, request, {
+    objetivosAjustados: [{
+      nutriente: "Proteína_total", que_ha_pasado: "suelo_subido", tuyo: 5.0, de_fediaf: 52.1,
+      explicacion: "Tu suelo de 5.0 queda por debajo del minimo de FEDIAF (52.1), asi que manda " +
+                   "FEDIAF. Los requisitos no se negocian.",
+    }],
+  });
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect(page.getByText("Lo que no se ha podido aplicar tal cual")).toBeVisible();
+  await expect(page.getByText(/queda por debajo del minimo de FEDIAF/),
+    "el motor dice que ha recortado el objetivo y la pantalla no lo enseña: el veterinario firma " +
+    "una ración creyendo que lleva el número que él escribió")
+    .toBeVisible();
+});
+
+test("sin objetivos, no se manda el campo", async ({ page, request }) => {
+  // Un campo vacío que viaja igual es ruido que un día se lee como un cero.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u ? ("objetivos_del_profesional" in u) : null;
+  }).toBe(false);
+});
+
 test("un veterinario formula: no hay automático ni personalizar", async ({ page, request }) => {
   await comoVeterinario(page, request);
   await expect(page.getByRole("button", { name: /^Automático/ })).toHaveCount(0);

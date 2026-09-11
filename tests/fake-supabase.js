@@ -178,6 +178,12 @@ export function crearFakeSupabase(opciones = {}) {
     // Y el caso de "con esas cantidades no cuadra", que es donde se ofrece
     // una alternativa sin aplicarla.
     formularNoCuadra: false,
+    // ⚠️ AÑADIDO (11 septiembre) — lo que el motor dice haber RECORTADO de los
+    // objetivos que puso el veterinario. Se siembra desde la prueba, con la
+    // forma exacta de la API: aplicar el numero de FEDIAF en lugar del suyo sin
+    // decirlo le dejaria firmando algo que no escribio, asi que que se PINTE es
+    // parte del trato y hay que poder comprobarlo.
+    objetivosAjustados: [],
     // Si es true, /menu/v2 y /menu/semana NO responden nunca: simula la
     // API dormida en Render, que es lo que dejaba el "Calculando..."
     // colgado para siempre.
@@ -338,6 +344,8 @@ export function crearFakeSupabase(opciones = {}) {
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
       // No pegajoso, como los demás interruptores que cambian una respuesta.
       estado.formularNoCuadra = cfg.formularNoCuadra === true;
+      estado.objetivosAjustados = Array.isArray(cfg.objetivosAjustados)
+        ? cfg.objetivosAjustados.slice() : [];
       estado.pautaNoSeFirma = cfg.pautaNoSeFirma === true;
       if (cfg.olvidarFormular) {
         estado.peticionesFormular = [];
@@ -1032,6 +1040,7 @@ export function crearFakeSupabase(opciones = {}) {
                            "Carne muscular de pollo": Number(gramos["Carne muscular de pollo"]) || 400 };
       return responder(200, { factible: true, menu: completado, gramos_fijos_movidos: [],
                               peldano: peticion.peldano || "estricto",
+                              objetivos_ajustados: estado.objetivosAjustados,
                               estado: haceEstado(completado) });
     }
 
