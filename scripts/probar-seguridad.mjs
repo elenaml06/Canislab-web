@@ -322,6 +322,74 @@ async function main() {
       losVe ? 'LA CUENTA A VE MENÚS DE LA CUENTA B.' : null)
   }
 
+  // ── PAUTAS FIRMADAS ───────────────────────────────────────────────────────
+  //
+  // ⚠️ AÑADIDAS EL 11 DE SEPTIEMBRE, Y ERAN EL HUECO MÁS GORDO QUE QUEDABA.
+  // Este script comprobaba `profiles`, `perros`, `menus` y `accesos`. La app
+  // usa una quinta tabla, `pautas_firmadas`, y NADIE la miraba -- justo la que
+  // guarda el dato más sensible del proyecto: el documento firmado entero, con
+  // el animal, sus patologías, y el nombre y el número de colegiado de quien
+  // lo firma.
+  //
+  // Las políticas de `migracion-pautas-firmadas.sql` se leen bien: insertar
+  // solo si eres el profesional Y estás acreditado, leer solo lo tuyo o lo de
+  // tu perro. Pero «se lee bien» es exactamente lo que este script existe para
+  // no creerse: las políticas viven en el panel de Supabase, ninguna prueba del
+  // repo las ve, y desde el SQL Editor se saltan a propósito.
+
+  {
+    // ⚠️ LA QUE MÁS IMPORTA. Las dos cuentas de prueba son tutores, no
+    // veterinarios acreditados. Si A puede INSERTAR una pauta, cualquiera se
+    // fabrica una prescripción firmada con el nombre y el número de colegiado
+    // que quiera, y la guarda en la base como si fuera de verdad.
+    //
+    // Y no es lo mismo que el sello de la API: el sello prueba que un documento
+    // no ha cambiado desde que la API lo firmó. Esto es la puerta de al lado --
+    // meter en la tabla una fila que la API nunca firmó.
+    const { error } = await a.cliente.from('pautas_firmadas').insert({
+      profesional: a.userId,
+      nombre_firmante: 'Nombre Inventado',
+      num_colegiado: 'COL-000000',
+      documento: { inventado: true },
+      sello: '0000000000000000',
+    })
+    apuntar(Boolean(error), 'Una cuenta sin acreditar no puede firmar una pauta',
+      error ? null : 'HA FIRMADO. Cualquiera puede meter una prescripción con el ' +
+                     'número de colegiado que quiera.')
+  }
+
+  {
+    // Y suplantando: decir que la firma OTRA persona. La política pide
+    // `auth.uid() = profesional`, así que esto tiene que rebotar aunque algún
+    // día A sí esté acreditada.
+    const { error } = await a.cliente.from('pautas_firmadas').insert({
+      profesional: b.userId,
+      nombre_firmante: 'La veterinaria B',
+      num_colegiado: 'COL-111111',
+      documento: { suplantada: true },
+      sello: '1111111111111111',
+    })
+    apuntar(Boolean(error), 'Una cuenta no puede firmar en nombre de otra',
+      error ? null : 'HA FIRMADO COMO OTRA PERSONA.')
+  }
+
+  {
+    // Leer. La cuenta A es nueva y no tiene ninguna pauta, ni suya ni de su
+    // perro, así que CUALQUIER fila que vuelva aquí es de otra persona.
+    //
+    // ⚠️ Y si vuelven cero, esta comprobación NO demuestra que la política
+    // funcione: puede ser que la tabla esté vacía. Se dice, en vez de contarlo
+    // como un verde limpio -- un verde que puede significar dos cosas es la
+    // clase de cosa que deja de leerse.
+    const { data, error } = await a.cliente.from('pautas_firmadas').select('id')
+    const filas = (data || []).length
+    apuntar(filas === 0, 'Una cuenta no ve las pautas firmadas de otra',
+      filas > 0
+        ? `LA CUENTA A VE ${filas} PAUTA(S) QUE NO SON SUYAS.`
+        : (error ? `devuelve error (${error.message}), que también cierra`
+                 : 'cero filas — ojo: si la tabla está vacía esto no prueba nada todavía'))
+  }
+
   // ── LIMPIEZA ──────────────────────────────────────────────────────────────
   for (const { cliente, tabla, id } of aBorrar) {
     await cliente.from(tabla).delete().eq('id', id)
