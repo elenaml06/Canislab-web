@@ -24,7 +24,7 @@
 // `der_casos.json` A LOS DOS REPOS. Los dos commits, o ninguno.
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "fs";
-import { calcularDER } from "../src/der.js";
+import { calcularDER, pctPesoAdultoFediaf, pesoAdultoDesdeCurvaFediaf } from "../src/der.js";
 
 const ACTIVIDADES = ["sedentario", "normal", "activo", "muy_activo", "trabajo"];
 const contrato = JSON.parse(readFileSync(new URL("../der_casos.json", import.meta.url)));
@@ -89,19 +89,56 @@ contrato.casos.forEach((caso, i) => {
 // puppies should be 3 x RER from weaning until four months of age. At four
 // months of age energy intake should be reduced to 2 x RER until the puppy
 // reaches adult size.» 3 x RER = 210 · 2 x RER = 140, y cortan por EDAD.
-test.describe("el respaldo de crecimiento, cuando no se sabe el peso adulto", () => {
+// ⚠️ Y EL 11 DE SEPTIEMBRE ESO DEJÓ DE SER EL PRIMER RECURSO. «FEDIAF no cubre
+// este caso» era FALSO: su Tabla VII-8a publica la curva de crecimiento como
+// cinco ecuaciones por banda de peso adulto, válidas de las 8 semanas al año.
+// Con la edad y el peso de hoy se despeja el peso adulto y se usa la ecuación
+// de Klein, que es la que ya recibían todos los cachorros de raza. El respaldo
+// de SACN5 se queda SOLO para lo que FEDIAF no cubre: <8 semanas y >1 año.
+test.describe("el crecimiento sin peso adulto: primero FEDIAF, y SACN5 solo fuera de su rango", () => {
   const kcal = (coef, peso) => Math.round(coef * Math.pow(peso, 0.75));
+  const klein = (actual, adulto) =>
+    Math.round(Math.max((1.063 - 0.565 * Math.min(actual / adulto, 1)) * 239, 98) *
+               Math.pow(actual, 0.75));
 
-  test("un cachorro de menos de 4 meses recibe los 3 x RER de SACN5", () => {
-    const got = calcularDER(5, "cachorro_joven", 1, false, { mesesEdad: 2 });
+  test("dentro del rango de FEDIAF se despeja el peso adulto y manda Klein", () => {
+    // 5 kg a los 6 meses: la banda ≤7 kg da 36,92·Ln(26,1) − 43,57 = 76,8 %,
+    // así que el peso adulto esperado sale ~6,5 kg.
+    const got = calcularDER(5, "cachorro_crecimiento", 1, false, { mesesEdad: 6 });
+    expect(got, "con edad dentro del rango NO se usa el respaldo de SACN5"
+    ).not.toBe(kcal(140, 5));
+    const adulto = pesoAdultoDesdeCurvaFediaf(5, 6);
+    expect(adulto, "la Tabla VII-8a tiene que dar un peso adulto").toBeGreaterThan(5);
+    expect(got).toBe(klein(5, adulto));
+  });
+
+  test("el cachorro MESTIZO recibe ya lo mismo que el de raza, que es el arreglo", () => {
+    // Es el motivo del cambio: hasta hoy el de raza iba por Klein y el mestizo
+    // por un escalón plano, y un cachorro de 10 kg a los 4 meses recibía 1125
+    // o 787 según si su raza estaba en la lista.
+    const conRaza = calcularDER(10, "cachorro_crecimiento", 1, false,
+                                { pesoAdultoKg: 25, mesesEdad: 4 });
+    const mestizo = calcularDER(10, "cachorro_crecimiento", 1, false, { mesesEdad: 4 });
+    expect(Math.abs(mestizo - conRaza) / conRaza,
+      "el mestizo ya no puede quedarse a un tercio del de raza"
+    ).toBeLessThan(0.15);
+    expect(mestizo, "y desde luego ya no es el escalón plano de 2 x RER"
+    ).not.toBe(kcal(140, 10));
+  });
+
+  test("por DEBAJO de las 8 semanas, que FEDIAF no cubre, manda SACN5 con 3 x RER", () => {
+    const got = calcularDER(5, "cachorro_joven", 1, false, { mesesEdad: 1.5 });
+    expect(pesoAdultoDesdeCurvaFediaf(5, 1.5),
+      "la Tabla VII-8a vale «from weaning age (8 weeks)», no antes").toBe(null);
     expect(got, "SACN5 da 3 x RER (210 kcal/kg^0,75) hasta los cuatro meses"
     ).toBe(kcal(210, 5));
   });
 
-  test("a partir de los 4 meses recibe los 2 x RER", () => {
-    const got = calcularDER(5, "cachorro_crecimiento", 1, false, { mesesEdad: 6 });
-    expect(got, "SACN5 baja a 2 x RER (140 kcal/kg^0,75) a los cuatro meses"
-    ).toBe(kcal(140, 5));
+  test("por ENCIMA del año, que FEDIAF tampoco cubre, manda SACN5 con 2 x RER", () => {
+    const got = calcularDER(5, "cachorro_crecimiento", 1, false, { mesesEdad: 14 });
+    expect(pesoAdultoDesdeCurvaFediaf(5, 14),
+      "la Tabla VII-8a vale «to 1 year», no más").toBe(null);
+    expect(got).toBe(kcal(140, 5));
   });
 
   test("sin edad ni peso adulto se queda en el lado prudente", () => {
@@ -109,15 +146,31 @@ test.describe("el respaldo de crecimiento, cuando no se sabe el peso adulto", ()
     expect(got).toBe(kcal(140, 5));
   });
 
-  test("con peso adulto conocido manda la ecuación de FEDIAF, no el respaldo", () => {
+  test("con peso adulto declarado manda ese, no el despejado de la curva", () => {
     // FEDIAF VII-8b: [254,1 − 135,0 × (actual/adulto)] × kg^0,75. Un cachorro
     // de 5 kg que va para 20 está al 25 %: 254,1 − 33,75 = 220,4.
     const got = calcularDER(5, "cachorro_crecimiento", 1, false,
                             { pesoAdultoKg: 20, mesesEdad: 6 });
-    expect(got, "con el peso adulto en la mano no se usa el respaldo de SACN5"
-    ).not.toBe(kcal(140, 5));
-    expect(Math.abs(got - (1.063 - 0.565 * 0.25) * 239 * Math.pow(5, 0.75))
-    ).toBeLessThanOrEqual(1);
+    expect(got, "con el peso adulto en la mano no se despeja nada"
+    ).toBe(klein(5, 20));
+  });
+
+  // ⚠️ LA TRAMPA DE LA TABLA VII-8a, sembrada aquí porque es donde muerde: en
+  // el texto extraído del PDF sus cinco bandas y sus cinco ecuaciones salen en
+  // dos columnas cruzadas, y el término independiente NO es monótono. Quien las
+  // empareje «de menor a mayor» las cruza, y el resultado sigue teniendo forma
+  // de dato bueno. Esto lo mismo que el BLOQUE 96 del repo del motor.
+  test("las cinco ecuaciones de la Tabla VII-8a están en su banda", () => {
+    const esperado = [
+      [4.0, 3, 0.5125], [8.0, 4, 0.5705], [20.0, 9, 0.8554],
+      [35.0, 6, 0.6437], [55.0, 6, 0.5701],
+    ];
+    for (const [adulto, meses, pct] of esperado) {
+      expect(Math.abs(pctPesoAdultoFediaf(meses, adulto) - pct),
+        `banda de ${adulto} kg a los ${meses} meses: si falla, las cinco ecuaciones ` +
+        `están emparejadas con la banda equivocada (>15-27,5 lleva −60,70 y ` +
+        `>27,5-47,5 lleva −56,18: NO es monótono)`).toBeLessThan(0.0005);
+    }
   });
 });
 

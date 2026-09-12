@@ -59,14 +59,52 @@ test("la tabla VII-2 de FEDIAF, fila a fila", () => {
   ];
   const PESO = 20;
   for (const [bcs, desvio, rango, cita] of TABLA) {
-    // Hacia arriba la corrección va topada al 20 %, que es criterio nuestro y
-    // no de FEDIAF: un perro muy delgado suele estarlo por una enfermedad.
-    let esperado = PESO / (1 + desvio);
-    if (esperado > PESO * 1.20) esperado = PESO * 1.20;
+    // ⚠️ 11-sep-2026: EL DESVÍO DE LA TABLA SIGUE MIDIÉNDOSE CONTRA EL BCS 5
+    // --lo dice su propia cabecera, «% BW below or above BCS 5»-- pero el
+    // DESTINO ya no es siempre el 5. FEDIAF dice dos veces que el ideal es una
+    // BANDA, 4 a 5 (§7.1.3 y §7.2.4.1, las dos sobre Kealy 2002), así que:
+    //   · dentro de la banda no se corrige nada,
+    //   · y por debajo el objetivo es el borde más cercano, que es el BCS 4.
+    let esperado;
+    if (bcs >= 4 && bcs <= 5) {
+      esperado = PESO;                       // ya está en la banda ideal
+    } else {
+      const pesoEnBcs5 = PESO / (1 + desvio);
+      esperado = pesoEnBcs5 * (bcs < 4 ? 0.90 : 1.0);
+      // Hacia arriba la corrección va topada al 20 %, que es criterio nuestro y
+      // no de FEDIAF: un perro muy delgado suele estarlo por una enfermedad.
+      if (esperado > PESO * 1.20) esperado = PESO * 1.20;
+    }
     expect(pesoIdealDesdeBcs(PESO, bcs),
            `BCS ${bcs} (FEDIAF Tabla VII-2: «${rango}», ${cita})`)
       .toBeCloseTo(esperado, 2);
   }
+});
+
+test("el ideal de FEDIAF es una BANDA, 4 a 5, y no un punto", () => {
+  // ⚠️ CASO REAL: hasta el 11 de septiembre de 2026 el 5 era el único ideal, así
+  // que a un perro en BCS 4 se le SUBÍA el peso objetivo un 11 % y con él las
+  // kcal. FEDIAF lo dice dos veces y en dos sitios distintos de la guía:
+  //   §7.1.3   «The ideal BCS should therefore be between 4/9 and 5/9.»
+  //   §7.2.4.1 «dogs should be fed to maintain a body condition score (BCS)
+  //             between 4 and 5 on the 9-point BCS.»
+  // Las dos sobre Kealy RD et al. (2002), catorce años de labradores en los que
+  // la restricción alargó la vida, con los perros restringidos en 4/9 a 5/9.
+  for (const peso of [1.5, 6, 17.4, 25, 40, 62.3]) {
+    expect(pesoIdealDesdeBcs(peso, 4),
+      "un perro en BCS 4 ya está en la banda ideal: no se le engorda"
+    ).toBe(Math.round(peso * 100) / 100);
+    expect(pesoIdealDesdeBcs(peso, 5)).toBe(Math.round(peso * 100) / 100);
+    // Y por debajo, el objetivo es el BCS 4, no el 5: es el borde de la banda
+    // que le queda más cerca y es el lado prudente.
+    expect(pesoIdealDesdeBcs(peso, 3),
+      "un perro en BCS 3 apunta al BCS 4 (x1,125), no al BCS 5 (x1,25)"
+    ).toBeCloseTo(peso * 1.125, 2);
+  }
+  // Con el fallo puesto (volver a tomar el 5 como único ideal) el BCS 4 daría
+  // un 11 % más y el BCS 3 se iría al tope del 20 %.
+  expect(pesoIdealDesdeBcs(20, 4)).not.toBeCloseTo(20 / 0.9, 2);
+  expect(pesoIdealDesdeBcs(20, 3)).not.toBeCloseTo(20 * 1.20, 2);
 });
 
 test("y si el BCS 9 volviera a la recta, se vería", () => {
@@ -93,6 +131,14 @@ test("la escala del dueño es la correspondencia que publica FEDIAF, y solo movi
   //   escalón 1: BCS 4 daba x1,111 y BCS 3 da x1,25, que se topa en x1,20.
   //              Es el único que se mueve: +8 % de ración para un perro delgado.
   //   escalones 2, 3 y 4: la correspondencia ya coincidía.
+  //
+  // ⚠️ Y EL 11 DE SEPTIEMBRE SE MOVIÓ OTRA VEZ, EL MISMO ESCALÓN Y HACIA ABAJO.
+  // El ideal de FEDIAF es una BANDA (4 a 5), así que un perro por debajo apunta
+  // al BCS 4 y no al 5. El escalón «Delgado» es un BCS 3: pasa de x1,25 topado
+  // en x1,20 a x1,125, que ya no toca el tope. MEDIDO: −6,25 % de peso objetivo,
+  // y con él menos kcal, que es el lado prudente y el que dice Kealy 2002.
+  // Los otros cuatro escalones NO se mueven: el 0 (BCS 1) sigue topado en x1,20,
+  // y el 2, el 3 y el 4 (BCS 5, 7 y 9) están dentro o por encima de la banda.
   const VIEJA_BCS = { 0: 2, 1: 4, 2: 5, 3: 7, 4: 9 };
   const objetivo = (peso, bcs) => {
     const desvio = bcs >= 9 ? 0.45 : (bcs - 5) * 0.10;
@@ -107,11 +153,13 @@ test("la escala del dueño es la correspondencia que publica FEDIAF, y solo movi
              `peso ${peso}, escalón ${idx}: no debería haberse movido`)
         .toBe(objetivo(peso, VIEJA_BCS[idx]));
     }
-    // Y el que sí, con su cuenta: era x1,111 y ahora es x1,20.
+    // Y el que sí, con su cuenta de hoy: BCS 3 apuntando al BCS 4 es x1,125.
     expect(pesoIdealDesdeBcs(peso, bcsDesdeCondicion(1)),
-           `peso ${peso}, escalón «delgado»`).toBe(Math.round(peso * 1.20 * 100) / 100);
+           `peso ${peso}, escalón «delgado»`).toBeCloseTo(peso * 1.125, 2);
+    // Y que se haya movido HACIA ABAJO respecto al x1,20 del 9 de septiembre,
+    // que es lo que hay que poder afirmar: el cambio da menos kcal, no más.
     expect(pesoIdealDesdeBcs(peso, bcsDesdeCondicion(1)))
-      .toBeGreaterThan(objetivo(peso, VIEJA_BCS[1]) - 1e-9);
+      .toBeLessThan(Math.round(peso * 1.20 * 100) / 100);
   }
 });
 

@@ -165,6 +165,120 @@ const CRECIMIENTO_SACN5_MESES = 4.0;
 const CRECIMIENTO_ANTES_4M = 210.0;   // 3 x RER
 const CRECIMIENTO_DESDE_4M = 140.0;   // 2 x RER
 
+// ⚠️ Y LO DE ARRIBA DEJA DE SER LO PRIMERO QUE SE INTENTA (11 de septiembre de
+//     2026, releyendo FEDIAF entera). «FEDIAF no cubre este caso» era falso.
+//
+// Su Tabla VII-8a publica la curva de crecimiento como CINCO ECUACIONES, por
+// banda de peso adulto esperado y válidas «from weaning age (8 weeks) to 1
+// year»:
+//
+//     % del peso adulto esperado = a x Ln(edad en semanas) − b
+//
+//     ≤ 7 kg        36,92 · Ln(semanas) − 43,57
+//     > 7 - 15      36,86 · Ln(semanas) − 48,22
+//     > 15 - 27,5   39,88 · Ln(semanas) − 60,70
+//     > 27,5 - 47,5 36,96 · Ln(semanas) − 56,18
+//     > 47,5        36,61 · Ln(semanas) − 62,39
+//
+// Eso da justo el dato que faltaba: con la edad y el peso de hoy se despeja el
+// peso adulto esperado, y con él ya se puede usar la ecuación de Klein, que es
+// la que usan todos los demás cachorros. Los dos escalones de SACN5 se quedan
+// SOLO para lo que FEDIAF no cubre: por debajo de las 8 semanas y por encima
+// del año, donde su ecuación pasa del 100 %.
+//
+// A quién afecta: al cachorro MESTIZO, que es el que llega sin peso adulto (los
+// de raza lo traen de la tabla de razas). Hasta hoy recibía 3 x RER o 2 x RER
+// según un único corte a los cuatro meses, que es mucho más grueso.
+//
+// ⚠️ ESTA TABLA HAY QUE LEERLA DEL PDF, NO DEL TEXTO EXTRAÍDO: sus cinco bandas
+// y sus cinco ecuaciones salen en dos columnas cruzadas y el término
+// independiente NO es monótono (>15-27,5 lleva −60,70 y >27,5-47,5 lleva
+// −56,18), así que emparejarlas «de menor a mayor» las cruza. Las cinco de
+// arriba están leídas del PDF por coordenadas.
+//
+// ⚠️ TIENE QUE SEGUIR SIENDO IDÉNTICO A `CURVA_FEDIAF_VII_8A` de `der.py`, y
+// lo vigila el BLOQUE 96 allí y `der-contrato.spec.js` aquí.
+const CURVA_FEDIAF_VII_8A = [
+  [7.0, 36.92, 43.57],
+  [15.0, 36.86, 48.22],
+  [27.5, 39.88, 60.70],
+  [47.5, 36.96, 56.18],
+  [Infinity, 36.61, 62.39],
+];
+const CURVA_FEDIAF_MESES_MIN = 2.0;    // 8 semanas = 1,84 meses
+const CURVA_FEDIAF_MESES_MAX = 12.0;   // «to 1 year», lo dice la propia tabla
+const SEMANAS_POR_MES = 365.25 / 12.0 / 7.0;
+
+// % del peso adulto que le toca a esa edad, o null fuera del rango de validez
+// que la propia FEDIAF declara.
+export function pctPesoAdultoFediaf(meses, pesoAdultoEstimado) {
+  const m = Number(meses);
+  if (!Number.isFinite(m) || m < CURVA_FEDIAF_MESES_MIN || m > CURVA_FEDIAF_MESES_MAX) return null;
+  let a = 0, b = 0;
+  for (const [tope, aa, bb] of CURVA_FEDIAF_VII_8A) {
+    a = aa; b = bb;
+    if (pesoAdultoEstimado <= tope) break;
+  }
+  const pct = (a * Math.log(m * SEMANAS_POR_MES) - b) / 100.0;
+  // La ecuación es un ajuste: a los 12 meses un perro pequeño ya pasa del
+  // 100 %. Nunca puede decir que pesa más de lo que va a pesar de adulto.
+  return Math.min(Math.max(pct, 0.01), 1.0);
+}
+
+// Despeja el peso adulto esperado desde lo que el perro pesa HOY y su edad. Se
+// itera porque la banda de la tabla depende del peso adulto, que es justo lo
+// que se busca: se parte de la media de la raza (o del doble del peso actual) y
+// converge en dos o tres vueltas. Mismo método que `peso_adulto_desde_curva` en
+// `der.py`.
+//
+// ⚠️ Y ESTA ES LA ÚNICA COPIA QUE QUEDA EN LA APP (11 de septiembre de 2026).
+// Hasta hoy `App.jsx` tenía LA SUYA, con la tabla WALTHAM copiada «letra por
+// letra» de la que había en `der.py` -- y era la que de verdad corría, porque
+// App.jsx calcula `pesoAdultoEsperado` antes de llamar a `calcularDER` y se lo
+// pasa ya hecho. O sea que aplicar la Tabla VII-8a solo aquí no habría cambiado
+// NADA en la app: la habría dejado como código que parece aplicado y no lo
+// está, que es la familia de fallos de siempre. Se vio probándolo dentro de la
+// app con la cuenta de prueba, no leyendo el código.
+//
+// Fuera del rango de FEDIAF (8 semanas a 1 año) devuelve el peso de la raza si
+// lo hay, y si no null: no se inventa nada.
+export function pesoAdultoDesdeCurvaFediaf(pesoActualKg, meses,
+                                           pesoMedioRaza = null,
+                                           pesoMinRaza = null, pesoMaxRaza = null) {
+  const p = Number(pesoActualKg);
+  if (!p || p <= 0 || !meses) return pesoMedioRaza ?? null;
+
+  // ⚠️ NO SE ITERA, y esa es la corrección de la noche del 11 de septiembre.
+  // La Tabla VII-8a es una función A TROZOS, así que un bucle que parta de una
+  // semilla puede tener MÁS DE UN PUNTO FIJO. Medido probándolo dentro de la
+  // app con la cuenta de prueba: un mestizo de 30 kg a los 6 meses converge en
+  // 52,6 kg partiendo del doble de su peso y en 46,6 partiendo de la media de
+  // su tamaño. Los dos son autoconsistentes, así que `der.py` y la app daban
+  // pesos adultos distintos para el mismo perro -- 209 kcal/día -- y cada lado
+  // era coherente consigo mismo, que es por lo que ninguna prueba lo veía.
+  //
+  // Ahora se recorren las cinco bandas en orden y se coge la primera cuyo
+  // resultado cae DENTRO de su propia banda: determinista, sin semilla, y es
+  // la solución más pequeña, que es el lado prudente (menos peso adulto es más
+  // fracción recorrida, y en Klein eso son menos kcal).
+  let estimado = null, suelo = 0, candidato = null;
+  for (const [tope] of CURVA_FEDIAF_VII_8A) {
+    const pct = pctPesoAdultoFediaf(meses, tope);
+    if (pct === null || pct <= 0) return pesoMedioRaza ?? null;
+    candidato = p / pct;
+    if (candidato > suelo && candidato <= tope) { estimado = candidato; break; }
+    suelo = tope;
+  }
+  // Ninguna banda autoconsistente (el cachorro ya pesa más de lo que su curva
+  // predice): se usa la última, la de los gigantes, y el recorte de la raza la
+  // acota si se sabe.
+  if (estimado === null) estimado = candidato;
+  // No salirse de lo que la raza puede pesar: la estimación es una estimación.
+  if (pesoMinRaza) estimado = Math.max(estimado, pesoMinRaza);
+  if (pesoMaxRaza) estimado = Math.min(estimado, pesoMaxRaza);
+  return Math.round(estimado * 10) / 10;
+}
+
 function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones = {}) {
   if (!pesoActualKg || pesoActualKg <= 0) return null;
   const { pesoAdultoKg, pesoIdealKg, raza, nCachorros, semanaLactancia = 3,
@@ -182,8 +296,16 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
   let der;
   if (enCrecimiento) {
     let coef;
-    if (pesoAdultoKg > 0) {
-      const frac = Math.min(pesoActualKg / pesoAdultoKg, 1.0);
+    // Si no viene el peso adulto (el cachorro MESTIZO), se despeja con la
+    // Tabla VII-8a de FEDIAF y se usa la ecuación de Klein como todos los
+    // demás. Los dos escalones de SACN5 quedan solo para lo que FEDIAF no
+    // cubre: <8 semanas y >1 año. Ver `CURVA_FEDIAF_VII_8A`.
+    let pAdulto = pesoAdultoKg;
+    if (!(pAdulto > 0) && mesesEdad != null) {
+      pAdulto = pesoAdultoDesdeCurvaFediaf(pesoActualKg, mesesEdad);
+    }
+    if (pAdulto > 0) {
+      const frac = Math.min(pesoActualKg / pAdulto, 1.0);
       coef = Math.max((KLEIN_A - KLEIN_B * frac) * MJ_A_KCAL, 98.0);
     } else if (mesesEdad != null && mesesEdad < CRECIMIENTO_SACN5_MESES) {
       coef = CRECIMIENTO_ANTES_4M;

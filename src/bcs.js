@@ -65,6 +65,41 @@ export const BCS_ESCALA_SATURADA = 9;
 // objetivo de las fichas que ya están guardadas.
 export const TOPE_SUBIDA = 1.20;
 
+// ⚠️ EL IDEAL DE FEDIAF ES UNA BANDA, 4 A 5, Y NO UN PUNTO (11 de septiembre
+//     de 2026, releyendo FEDIAF entera).
+//
+// Hasta hoy el 5 era el único ideal, así que a un perro en BCS 4 se le SUBÍA el
+// peso objetivo un 11 % -- y con él las kcal. FEDIAF dice dos veces lo
+// contrario, en dos sitios distintos de la guía:
+//
+//   §7.1.3:   «The ideal BCS should therefore be between 4/9 and 5/9.»
+//   §7.2.4.1: «it is recommended that dogs should be fed to maintain a body
+//              condition score (BCS) between 4 and 5 on the 9-point BCS.»
+//
+// Y no es una frase suelta: las dos se apoyan en Kealy RD et al. (2002), el
+// estudio de CATORCE años con labradores en el que la restricción alargó la
+// vida mediana y retrasó la enfermedad crónica, con los perros restringidos
+// «had a BCS of 4/9 to 5/9». Engordar a un perro que está en 4 va contra lo
+// único que hay medido a catorce años.
+//
+// QUÉ CAMBIA:
+//   · BCS 4 y 5  -> no se corrige nada. Ya está en la banda.
+//   · BCS 6 a 9  -> igual que antes: el objetivo es el BCS 5.
+//   · BCS 1 a 3  -> el objetivo pasa a ser el BCS **4**, no el 5: es el borde
+//                   de la banda que le queda más cerca, y es el lado prudente
+//                   (§7.2.3.2: «it may be better to start from a lower
+//                   calculated MER and add as needed»).
+//
+// ⚠️ LO QUE **NO** CAMBIA es la Tabla VII-2: sus desvíos siguen midiéndose
+// contra el BCS 5, que es lo que dice su propia cabecera. El 5 sigue siendo el
+// cero de la regla; lo que deja de ser es el único destino.
+//
+// ⚠️ Y ESTO CAMBIA EL PESO OBJETIVO DE FICHAS YA GUARDADAS, a propósito y al
+// lado seguro (menos kcal): un perro de 20 kg en BCS 3 pasa de 24,0 a 22,5 kg
+// de objetivo, y uno en BCS 4 deja de tener corrección. Lo mismo se hizo el
+// mismo día en las dos copias de la API (`verificar.BCS_IDEAL_MIN` y `der.py`).
+export const BCS_IDEAL_MIN = 4;
+
 // ⚠️ EL OTRO EXTREMO DE LA ESCALA, Y ES DE FEDIAF (9 de septiembre de 2026,
 //     leyendo entera la §7.1.3, que estaba sin leer).
 //
@@ -126,8 +161,11 @@ export const ESCALA_BCS = [
     detalle: "Costillas visibles sin grasa palpable. Prominencias óseas marcadas. Pérdida leve de masa muscular." },
   { n: 3, titulo: "Delgado",
     detalle: "Costillas palpables y visibles sin grasa que las cubra. Lumbares visibles. Cintura muy marcada." },
-  { n: 4, titulo: "Por debajo del ideal",
-    detalle: "Costillas palpables con mínima grasa. Cintura evidente desde arriba y retracción abdominal marcada." },
+  // ⚠️ El 4 es IDEAL también: FEDIAF §7.1.3 y §7.2.4.1. Aquí ponía «Por debajo
+  // del ideal», que es lo que decía la Tabla VII-2 midiendo contra el BCS 5 --
+  // y eso sigue siendo verdad como desvío, pero no como juicio.
+  { n: 4, titulo: "Ideal (extremo delgado)",
+    detalle: "Costillas palpables con mínima grasa. Cintura evidente desde arriba y retracción abdominal marcada. Dentro de la banda ideal de FEDIAF, que es 4 a 5." },
   { n: 5, titulo: "Ideal",
     detalle: "Costillas palpables sin exceso de grasa. Cintura visible desde arriba. Abdomen retraído de perfil." },
   { n: 6, titulo: "Por encima del ideal",
@@ -205,10 +243,19 @@ export function pesoIdealDesdeBcs(pesoActualKg, bcs) {
   // El 9 va aparte: FEDIAF dice «>45 %» y la recta se queda en 40. Y sigue
   // siendo una COTA INFERIOR -- Broome et al. (2023) ven perros que «exceed the
   // description for score 9» --, no un número exacto.
+  // Dentro de la banda ideal de FEDIAF (4 a 5) no hay nada que corregir, y
+  // corregirlo sería moverlo de donde la fuente lo quiere. Ver `BCS_IDEAL_MIN`.
+  if (b >= BCS_IDEAL_MIN && b <= BCS_NEUTRO) return Math.round(peso * 100) / 100;
   const desvio = b >= BCS_ESCALA_SATURADA
     ? EXCESO_BCS_9
     : (b - BCS_NEUTRO) * PCT_POR_PUNTO_BCS;
-  let ideal = peso / (1 + desvio);
+  // Esto da el peso que tendría en BCS 5, que es contra lo que la Tabla VII-2
+  // mide todos sus desvíos.
+  const pesoEnBcs5 = peso / (1 + desvio);
+  // Y de ahí al BORDE de la banda ideal que le queda más cerca: el 5 si está
+  // por encima, el 4 si está por debajo.
+  const bcsObjetivo = b < BCS_IDEAL_MIN ? BCS_IDEAL_MIN : BCS_NEUTRO;
+  let ideal = pesoEnBcs5 * (1 + (bcsObjetivo - BCS_NEUTRO) * PCT_POR_PUNTO_BCS);
   if (ideal > peso * TOPE_SUBIDA) ideal = peso * TOPE_SUBIDA;
   return Math.round(ideal * 100) / 100;
 }

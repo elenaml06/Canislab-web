@@ -91,7 +91,8 @@ import { capturarError, migaDePan, identificarUsuarioEnSentry } from "./sentry.j
 // Las kcal del día viven aparte desde el 26 de agosto: es lógica pura, y
 // además está duplicada en der.py de la API. Ver la cabecera de der.js.
 import { finCrecimientoMeses, inicioSeniorAnios, pesoEsperado,
-         determinarEtapa, calcularDER, ACTIVIDAD_KEY } from "./der.js";
+         determinarEtapa, calcularDER, ACTIVIDAD_KEY,
+         pesoAdultoDesdeCurvaFediaf } from "./der.js";
 
 // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: "pantalla en blanco al
 // tocar el menú" reportado varias veces sin conseguir localizar la
@@ -1815,52 +1816,23 @@ let RANGO_PESO_POR_TAMANO = RANGO_PESO_POR_TAMANO_RESPALDO;
 // a los 26kg de la media de su raza -- 192 kcal/día de diferencia,
 // confirmado. Esto es la MISMA tabla y misma lógica que CURVA_CRECIMIENTO
 // y peso_adulto_desde_curva() en der.py, letra por letra.
-const CURVA_CRECIMIENTO = {
-  2: [0.35, 0.30, 0.25, 0.20, 0.15],
-  3: [0.50, 0.45, 0.40, 0.32, 0.25],
-  4: [0.65, 0.58, 0.52, 0.44, 0.35],
-  5: [0.75, 0.68, 0.60, 0.50, 0.40],
-  6: [0.80, 0.75, 0.65, 0.55, 0.45],
-  7: [0.85, 0.80, 0.72, 0.62, 0.52],
-  8: [0.90, 0.85, 0.78, 0.68, 0.58],
-  9: [0.94, 0.90, 0.84, 0.74, 0.64],
-  10: [0.97, 0.93, 0.88, 0.80, 0.70],
-  11: [0.99, 0.96, 0.92, 0.85, 0.75],
-  12: [1.00, 0.98, 0.95, 0.89, 0.80],
-  15: [1.00, 1.00, 0.99, 0.95, 0.88],
-  18: [1.00, 1.00, 1.00, 0.99, 0.94],
-  24: [1.00, 1.00, 1.00, 1.00, 1.00],
-};
-function columnaTamano(pesoAdultoEstimado) {
-  if (pesoAdultoEstimado < 5) return 0;
-  if (pesoAdultoEstimado < 10) return 1;
-  if (pesoAdultoEstimado < 25) return 2;
-  if (pesoAdultoEstimado < 45) return 3;
-  return 4;
-}
-function pesoAdultoDesdeCurva(pesoActualKg, meses, pesoMedioRaza, pesoMinRaza, pesoMaxRaza) {
-  if (!pesoActualKg || pesoActualKg <= 0 || !meses) return pesoMedioRaza;
-  if (meses >= 24) return pesoActualKg; // ya es adulto
+// ⚠️ Y EL 11 DE SEPTIEMBRE ESA TABLA SE FUE ENTERA, A `der.js` Y CON OTRA
+// FUENTE. Aquí vivía `CURVA_CRECIMIENTO`, copiada «letra por letra» de la que
+// había en `der.py`, y las dos venían de reproducciones divulgativas de las
+// curvas WALTHAM y NO del texto del estudio. FEDIAF publica esa misma curva
+// como CINCO ECUACIONES en su Tabla VII-8a, válidas de las 8 semanas al año, y
+// en este repo manda FEDIAF.
+//
+// ⚠️ Y ESTA ERA LA COPIA QUE DE VERDAD CORRÍA: App.jsx calcula
+// `pesoAdultoEsperado` con ella ANTES de llamar a `calcularDER` y se lo pasa ya
+// hecho, así que cambiar solo `der.js` y `der.py` no habría movido ni una kcal
+// en la app. Se vio probándolo dentro de la app con la cuenta de prueba.
+//
+// Ahora hay UNA sola implementación, en `der.js`, y las tres pantallas la
+// importan. Medido: un cachorro mestizo de 30 kg a los 6 meses pasa de estimar
+// 66,7 kg de adulto a 52,6, y su ración de 2478 a 2269 kcal.
+const pesoAdultoDesdeCurva = pesoAdultoDesdeCurvaFediaf;
 
-  const edades = Object.keys(CURVA_CRECIMIENTO).map(Number).sort((a, b) => a - b);
-  let estimado = pesoMedioRaza || pesoActualKg * 2;
-
-  for (let i = 0; i < 4; i++) {
-    const col = columnaTamano(estimado);
-    const antes = Math.max(...edades.filter((e) => e <= meses), edades[0]);
-    const despues = Math.min(...edades.filter((e) => e >= meses), edades[edades.length - 1]);
-    const p1 = CURVA_CRECIMIENTO[antes][col];
-    const p2 = CURVA_CRECIMIENTO[despues][col];
-    const pct = despues === antes ? p1 : p1 + (p2 - p1) * (meses - antes) / (despues - antes);
-    if (pct <= 0) return estimado;
-    const nuevo = pesoActualKg / pct;
-    if (Math.abs(nuevo - estimado) < 0.2) { estimado = nuevo; break; }
-    estimado = nuevo;
-  }
-  if (pesoMinRaza) estimado = Math.max(estimado, pesoMinRaza);
-  if (pesoMaxRaza) estimado = Math.min(estimado, pesoMaxRaza);
-  return Math.round(estimado * 10) / 10;
-}
 
 
 // ⚠️ LA FÓRMULA SE FUE A `bcs.js` (29 agosto), entera y sin cambiarla. Los
