@@ -22,13 +22,15 @@
 // condición corporal cambia el peso objetivo un 10 %, y de ahí salen las
 // kcal. En una ficha clínica eso no vale.
 
-export const BCS_NEUTRO = 5;          // el ideal: ni sobra ni falta
+import { alLlegarVocabulario } from "./vocabulario.js";
+
+export let BCS_NEUTRO = 5;          // el ideal: ni sobra ni falta
 export const BCS_MINIMO = 1;
 export const BCS_MAXIMO = 9;
 // Cada punto por encima del ideal es aproximadamente un 10 % de peso de
 // más. Es el mismo número que usa el motor en `verificar.peso_objetivo_
 // desde_bcs`, y el mismo que ya usaba la app para los cinco escalones.
-export const PCT_POR_PUNTO_BCS = 0.10;
+export let PCT_POR_PUNTO_BCS = 0.10;
 // ⚠️ Y EL 9 VA APARTE, PORQUE LA RECTA SE QUEDA CORTA JUSTO AHÍ (9 de
 // septiembre de 2026, y es la tercera copia de esta regla: las otras dos son
 // `verificar.peso_objetivo_desde_bcs` y `der.peso_ideal_desde_condicion`, en la
@@ -58,12 +60,12 @@ export const PCT_POR_PUNTO_BCS = 0.10;
 // 21,43 a 20,69 kg de objetivo. Se acepta porque el número de antes no tenía
 // fuente y este la tiene, y porque va al lado seguro (menos kcal para un perro
 // obeso). Lo mismo se hizo el mismo día en las dos copias de la API.
-export const EXCESO_BCS_9 = 0.45;   // FEDIAF 2025, Anexo 7.1, Tabla VII-2, «9. Grossly Obese»
-export const BCS_ESCALA_SATURADA = 9;
+export let EXCESO_BCS_9 = 0.45;   // FEDIAF 2025, Anexo 7.1, Tabla VII-2, «9. Grossly Obese»
+export let BCS_ESCALA_SATURADA = 9;
 // Un perro por debajo del ideal no se "sube" sin freno: el tope existe
 // desde antes del BCS y se conserva tal cual para no cambiar en silencio el
 // objetivo de las fichas que ya están guardadas.
-export const TOPE_SUBIDA = 1.20;
+export let TOPE_SUBIDA = 1.20;
 
 // ⚠️ EL IDEAL DE FEDIAF ES UNA BANDA, 4 A 5, Y NO UN PUNTO (11 de septiembre
 //     de 2026, releyendo FEDIAF entera).
@@ -98,7 +100,46 @@ export const TOPE_SUBIDA = 1.20;
 // lado seguro (menos kcal): un perro de 20 kg en BCS 3 pasa de 24,0 a 22,5 kg
 // de objetivo, y uno en BCS 4 deja de tener corrección. Lo mismo se hizo el
 // mismo día en las dos copias de la API (`verificar.BCS_IDEAL_MIN` y `der.py`).
-export const BCS_IDEAL_MIN = 4;
+export let BCS_IDEAL_MIN = 4;
+
+// ─── Y LAS SEIS LAS MANDA EL MOTOR ───────────────────────────────────────────
+//
+// ⚠️ AÑADIDO EL 12 DE SEPTIEMBRE DE 2026, y no es orden: es un fallo que ya
+// había pasado. Elena:
+//
+//     «te dije que la app no puede tener datos sueltos, todo le tiene que
+//      llegar del motor»
+//
+// Las seis de arriba estaban escritas aquí y escritas en el motor, y las dos
+// copias YA se habían separado: la prueba de punta a punta esperaba 21,43 kg
+// para un perro de 30 kg con BCS 9 —la recta del 10 % por punto, 30/1,40— y el
+// motor devuelve 20,69, que es el «>45 %» de la Tabla VII-2 de FEDIAF. El motor
+// tenía razón; lo que se había quedado atrás era la copia. No se vio en tres
+// días porque la única prueba que mira la costura app↔motor estaba en rojo por
+// otra cosa (el CORS).
+//
+// Es el mismo fallo que las categorías, los niveles de actividad y los 46
+// nutrientes del formulador. La cadena es FUENTE manda → MOTOR la implementa →
+// APP la ofrece, y aquí faltaba el último tramo.
+//
+// LOS VALORES DE ARRIBA SE QUEDAN, pero como RESPALDO y no como verdad: la API
+// de Render duerme a los 15 minutos, y quedarse sin poder estimar un peso
+// porque el servidor tarda en despertar sería peor. En cuanto llega
+// `/vocabulario`, mandan sus cifras. Que el respaldo no esté TAPANDO la
+// petición lo comprueba `tests/bcs-del-motor.spec.js` sembrando valores
+// inventados: con las cifras de verdad, leerlas del motor y pintarlas de
+// memoria se ven exactamente igual.
+alLlegarVocabulario((vocabulario) => {
+  const cc = vocabulario?.condicion_corporal;
+  if (!cc) return;
+  const num = (x) => (typeof x === "number" && Number.isFinite(x) ? x : null);
+  if (num(cc.ideal) !== null) BCS_NEUTRO = cc.ideal;
+  if (num(cc.ideal_min) !== null) BCS_IDEAL_MIN = cc.ideal_min;
+  if (num(cc.pct_por_punto) !== null) PCT_POR_PUNTO_BCS = cc.pct_por_punto;
+  if (num(cc.escala_saturada) !== null) BCS_ESCALA_SATURADA = cc.escala_saturada;
+  if (num(cc.exceso_en_escala_saturada) !== null) EXCESO_BCS_9 = cc.exceso_en_escala_saturada;
+  if (num(cc.tope_correccion_al_alza) !== null) TOPE_SUBIDA = cc.tope_correccion_al_alza;
+});
 
 // ⚠️ EL OTRO EXTREMO DE LA ESCALA, Y ES DE FEDIAF (9 de septiembre de 2026,
 //     leyendo entera la §7.1.3, que estaba sin leer).

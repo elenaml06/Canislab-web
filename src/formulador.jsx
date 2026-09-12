@@ -20,6 +20,7 @@
 // diría una cosa y el motor comprobaría otra, y no saltaría ningún error.
 // Esta pantalla solo pinta y ordena.
 import { useState, useEffect, useRef, useMemo } from "react";
+import { contiene } from "./texto.js";
 import { AlertCircle, Ban, Check, ChevronDown, Menu, Plus, Printer, Search, Sparkles, Trash2, X } from "lucide-react";
 import { API_BASE, fetchConTimeout } from "./api.js";
 // La clave de actividad que entiende el motor. Vive en `vocabulario.js` y no en
@@ -219,10 +220,12 @@ export default function Formulador({
   const objetivosQueSeOfrecen = useMemo(
     () => objetivosDelVocabulario(vocab) || OBJETIVOS_DE_RESPALDO, [vocab]);
   const objetivosVisibles = useMemo(() => {
-    const q = buscaObjetivo.trim().toLowerCase();
+    // Lo mismo aquí: «fosforo» tiene que encontrar «Fósforo», y «linolenico»
+    // el ácido linolénico. Son 46 nutrientes y casi la mitad llevan tilde.
+    const q = buscaObjetivo.trim();
     if (!q) return objetivosQueSeOfrecen;
     return objetivosQueSeOfrecen.filter(
-      (o) => o.label.toLowerCase().includes(q) || o.clave.toLowerCase().includes(q));
+      (o) => contiene(o.label, q) || contiene(o.clave, q));
   }, [objetivosQueSeOfrecen, buscaObjetivo]);
   const [ajustes, setAjustes] = useState([]);
   const ponerObjetivo = (clave, lado, valor) =>
@@ -245,11 +248,18 @@ export default function Formulador({
 
   const [categoriaAbierta, setCategoriaAbierta] = useState(null);
   const [especieAbierta, setEspecieAbierta] = useState(null);
+  // ⚠️ ACEPTAN UNO O VARIOS (12 de septiembre): «Suplementos» no es una
+  // categoría del catálogo, es el GRUPO de siete que el motor trata como
+  // producto comercial. Dejarlo fuera tiene que dejar fuera las siete.
   const dejarFuera = (que, cual) =>
-    setFueraDeLaPrueba((f) => (f[que].includes(cual) ? f
-      : { ...f, [que]: [...f[que], cual] }));
-  const volverAMeter = (que, cual) =>
-    setFueraDeLaPrueba((f) => ({ ...f, [que]: f[que].filter((x) => x !== cual) }));
+    setFueraDeLaPrueba((f) => {
+      const nuevos = [].concat(cual).filter((c) => !f[que].includes(c));
+      return nuevos.length ? { ...f, [que]: [...f[que], ...nuevos] } : f;
+    });
+  const volverAMeter = (que, cual) => {
+    const quitar = new Set([].concat(cual));
+    setFueraDeLaPrueba((f) => ({ ...f, [que]: f[que].filter((x) => !quitar.has(x)) }));
+  };
   // ─── FIRMAR ES UN ACTO: HAY QUE PULSAR ────────────────────────────────
   // El modo profesional NO firma solo. Si firmara por el hecho de estar
   // encendido, el veterinario acabaría con veinte pautas firmadas de las
@@ -601,14 +611,21 @@ export default function Formulador({
 
   const resultados = useMemo(() => {
     if (!catalogo || !busqueda.trim()) return [];
-    const q = busqueda.trim().toLowerCase();
+    // ⚠️ `contiene` Y NO `toLowerCase().includes` (12 de septiembre). Elena:
+    // «si se busca higado no aparece porque lleva tilde y no lo encuentra».
+    // El ayudante existe desde el 29 de agosto —`src/texto.js`, escrito por
+    // este mismo fallo en la app del dueño— y esta pantalla, que nació
+    // después, no lo estaba usando. No hacía falta escribir nada: hacía falta
+    // usar lo que ya había. Compara sin tildes por los dos lados y respeta la
+    // eñe, para que «riñon» encuentre «Riñón» sin que «año» y «ano» se mezclen.
+    const q = busqueda.trim();
     const fuera = new Set([...(categoriasExcluidas || []), ...fueraDeLaPrueba.categorias]);
     const fueraNombres = new Set([...(nombresExcluidos || []), ...fueraDeLaPrueba.nombres]);
     const salida = [];
     for (const [cat, lista] of Object.entries(catalogo)) {
       if (fuera.has(cat)) continue;
       for (const a of lista) {
-        if (a.nombre.toLowerCase().includes(q) && !(a.nombre in gramos)
+        if (contiene(a.nombre, q) && !(a.nombre in gramos)
             && !fueraNombres.has(a.nombre)) {
           salida.push({ ...a, categoria: cat });
         }
@@ -634,11 +651,40 @@ export default function Formulador({
   // nombre sería inventarse la taxonomía en la pantalla, y además fallaría en
   // los mismos sitios donde falla excluir por nombre -- «pollo» y «gallina»
   // son la misma especie y no se parecen.
+  // Los grupos de categorías, tal y como los manda el motor. Si no ha
+  // contestado todavía, `null` y el árbol se pinta plano: plano es peor, pero
+  // es cierto — inventarse aquí qué es suplemento sería la copia otra vez.
+  const vocabDelSelector = useVocabulario();
+  const gruposDelMotor = vocabDelSelector?.categorias_del_catalogo?.grupos || null;
+
+  // ⚠️ Y LOS SUPLEMENTOS VAN JUNTOS, NO SUELTOS (12 de septiembre). Elena,
+  // mirando esta pantalla: «en la lista de alimentos de los veterinarios todos
+  // los suplementos están sueltos, tienen que estar dentro de la categoría
+  // suplementos y luego dentro de subcategorías, ya tenemos una lista de eso
+  // solo tienes que reusarla».
+  //
+  // La lista es `constructor.CAT_SUPLEMENTO` —las siete categorías que el motor
+  // trata como producto comercial con dosis de etiqueta: Multivitamínico,
+  // Omega-3, Yodo, Fibra, Calcio, Hierro y Vitamina B— y hasta hoy llegaban a
+  // la app EN PLANO, al mismo nivel que «Carne muscular». Eran siete entradas
+  // de catorce para cosas que no son comida.
+  //
+  // ⚠️ Y LA AGRUPACIÓN LA MANDA EL MOTOR, no se escribe aquí: viene en
+  // `categorias_del_catalogo.grupos` de `GET /vocabulario`. Escribir las siete
+  // en esta pantalla sería otra copia que se separa, que es el fallo del BCS
+  // del mismo día. Si el motor no ha contestado todavía, se pinta como antes:
+  // plano es peor, pero es cierto.
+  //
+  // No hace falta un nivel nuevo en la pantalla: el árbol ya es
+  // CATEGORÍA → ESPECIE → ALIMENTO, y aquí el grupo entra como categoría y las
+  // siete como «especies». Eso es exactamente «dentro de suplementos y luego
+  // dentro de subcategorías», sin tocar el render.
   const arbol = useMemo(() => {
     if (!catalogo) return [];
     const fuera = new Set([...(categoriasExcluidas || []), ...fueraDeLaPrueba.categorias]);
     const fueraNombres = new Set([...(nombresExcluidos || []), ...fueraDeLaPrueba.nombres]);
-    return Object.entries(catalogo).map(([cat, lista]) => {
+
+    const deUnaCategoria = (lista) => {
       const porEspecie = new Map();
       for (const a of lista) {
         if (fueraNombres.has(a.nombre)) continue;
@@ -648,17 +694,52 @@ export default function Formulador({
         if (!porEspecie.has(clave)) porEspecie.set(clave, []);
         porEspecie.get(clave).push(a);
       }
-      return {
-        categoria: cat,
-        excluida: fuera.has(cat),
-        deLaFicha: (categoriasExcluidas || []).includes(cat),
-        cuantos: [...porEspecie.values()].reduce((n, v) => n + v.length, 0),
-        especies: [...porEspecie.entries()]
-          .sort((a, b) => (a[0] || "").localeCompare(b[0] || ""))
-          .map(([especie, items]) => ({ especie, items })),
-      };
+      return porEspecie;
+    };
+    const nodo = (cat, porEspecie) => ({
+      categoria: cat,
+      categoriasReales: [cat],
+      excluida: fuera.has(cat),
+      deLaFicha: (categoriasExcluidas || []).includes(cat),
+      cuantos: [...porEspecie.values()].reduce((n, v) => n + v.length, 0),
+      especies: [...porEspecie.entries()]
+        .sort((a, b) => (a[0] || "").localeCompare(b[0] || ""))
+        .map(([especie, items]) => ({ especie, items })),
     });
-  }, [catalogo, categoriasExcluidas, nombresExcluidos, fueraDeLaPrueba]);
+
+    const grupoSuplementos = (gruposDelMotor || [])
+      .find((g) => g.clave === "suplementos");
+    const deSuplemento = new Set(grupoSuplementos?.categorias || []);
+
+    const salida = [];
+    const dentroDelGrupo = [];
+    for (const [cat, lista] of Object.entries(catalogo)) {
+      if (deSuplemento.has(cat)) { dentroDelGrupo.push([cat, lista]); continue; }
+      salida.push(nodo(cat, deUnaCategoria(lista)));
+    }
+    if (dentroDelGrupo.length) {
+      const reales = dentroDelGrupo.map(([cat]) => cat).sort();
+      // Cada categoría de suplemento pasa a ser una «especie» del grupo, y se
+      // queda fuera entera si está excluida — igual que antes, pero un nivel
+      // más adentro.
+      const especies = dentroDelGrupo
+        .filter(([cat]) => !fuera.has(cat))
+        .map(([cat, lista]) => ({
+          especie: cat,
+          items: lista.filter((a) => !fueraNombres.has(a.nombre)),
+        }))
+        .sort((a, b) => a.especie.localeCompare(b.especie));
+      salida.push({
+        categoria: grupoSuplementos?.veterinario?.titulo || "Suplementos",
+        categoriasReales: reales,
+        excluida: reales.every((c) => fuera.has(c)),
+        deLaFicha: reales.every((c) => (categoriasExcluidas || []).includes(c)),
+        cuantos: especies.reduce((n, e) => n + e.items.length, 0),
+        especies,
+      });
+    }
+    return salida;
+  }, [catalogo, categoriasExcluidas, nombresExcluidos, fueraDeLaPrueba, gruposDelMotor]);
 
   return (
     <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -857,8 +938,8 @@ export default function Formulador({
                           {!c.deLaFicha && (
                             <button
                               onClick={() => (c.excluida
-                                ? volverAMeter("categorias", c.categoria)
-                                : dejarFuera("categorias", c.categoria))}
+                                ? volverAMeter("categorias", c.categoriasReales)
+                                : dejarFuera("categorias", c.categoriasReales))}
                               aria-label={c.excluida
                                 ? `Volver a meter ${c.categoria}`
                                 : `Dejar fuera ${c.categoria}`}

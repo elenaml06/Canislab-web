@@ -7824,7 +7824,10 @@ function RawkuOnboardingInterna({
   const resultadosRaza = useMemo(() => {
     if (!busqueda.trim()) return [];
     const q = busqueda.trim().toLowerCase();
-    return RAZAS.filter((r) => r.nombre.toLowerCase().includes(q)).slice(0, 12);
+    // ⚠️ `contiene` tambien aqui (12 de septiembre): «aleman» tiene que encontrar
+    // «Pastor Alemán» y «bichon» el «Bichón Frisé». De las 255 razas, 41 llevan
+    // tilde, y el nombre de la raza decide las kcal de dos de ellas.
+    return RAZAS.filter((r) => contiene(r.nombre, q)).slice(0, 12);
   }, [busqueda]);
 
   // ⚠️ MOVIDO FUERA DEL COMPONENTE (21 agosto) — estos cálculos (edad,
@@ -7836,9 +7839,20 @@ function RawkuOnboardingInterna({
   // fórmula no se ha tocado. Copiarla habría sido asegurarse de que
   // algún día las dos versiones dieran kcal distintas para el mismo
   // perro, y nadie sabría cuál mira la app.
+  // ⚠️ Y EL VOCABULARIO ENTRA EN LAS DEPENDENCIAS (12 de septiembre), porque
+  // sin él este cálculo se queda con el RESPALDO para siempre. Las cifras que
+  // deciden el peso objetivo —el exceso del BCS 9 entre ellas— son variables de
+  // módulo que `bcs.js` sustituye cuando llega `GET /vocabulario`, igual que
+  // las razas y los tamaños. Pero reasignar una variable de módulo NO vuelve a
+  // renderizar React ni recalcula un `useMemo`: este se quedaba con el número
+  // de antes, y el perro salía con el peso objetivo del respaldo aunque el
+  // motor hubiera dicho otro. Medido con cifras sembradas: mandaba 20,69 kg
+  // donde el motor pedía 16,67. `useVocabulario` sí es estado, así que
+  // ponerlo aquí es lo que hace que el cálculo se rehaga cuando llega.
+  const vocabularioParaElObjetivo = useVocabulario();
   const { edad, especiesExcluidas, alimentosEvitados, pesoAdultoEsperado,
           etapaCalculada, etapaLabel, derReal, objetivo } = useMemo(
-    () => datosDeUnPerro(perfil), [perfil]);
+    () => datosDeUnPerro(perfil), [perfil, vocabularioParaElObjetivo]);
   // El peso sobre el que se miden las kcal, y por tanto sobre el que hay que
   // medir la densidad de nutrientes. Ver la nota de `peso_objetivo_kg`.
   const pesoObjetivoKg = objetivo?.kg || null;
