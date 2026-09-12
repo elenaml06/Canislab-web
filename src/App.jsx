@@ -1830,7 +1830,7 @@ let RANGO_PESO_POR_TAMANO = RANGO_PESO_POR_TAMANO_RESPALDO;
 //
 // Ahora hay UNA sola implementación, en `der.js`, y las tres pantallas la
 // importan. Medido: un cachorro mestizo de 30 kg a los 6 meses pasa de estimar
-// 66,7 kg de adulto a 52,6, y su ración de 2478 a 2269 kcal.
+// 66,7 kg de adulto a 46,6, y su ración de 2478 a 2142 kcal.
 const pesoAdultoDesdeCurva = pesoAdultoDesdeCurvaFediaf;
 
 
