@@ -755,6 +755,15 @@ function instalarVocabulario(vocab) {
     rehacerIndicesDeFamilia();
   }
 
+  // Las patologías: la lista, sus dos etiquetas y sus nueve aparatos. Igual que
+  // las demás, o entera o ninguna.
+  const pat = patologiasDelVocabulario(vocab);
+  if (pat) {
+    TODAS_LAS_PATOLOGIAS = pat.todas;
+    PATOLOGIAS = pat.casillas;
+    rehacerGruposDePatologia(pat.grupos);
+  }
+
   return vocab;
 }
 
@@ -1132,7 +1141,7 @@ const CATEGORIAS_ALIMENTO = {
 // un perro renal, y a la primera que guardara la ficha la patologia se
 // perderia EN SILENCIO y le cambiaria el menu. Eso es exactamente la familia
 // de fallos del `guardarPerro` de agosto.
-const PATOLOGIAS = [
+const PATOLOGIAS_RESPALDO = [
   { key: "renal", soloVeterinario: true, label: "Insuficiencia renal crónica", segura: true },
   { key: "renal_proteinuria", soloVeterinario: true, label: "Proteinuria renal (UPC > 0,5)", segura: true },
   { key: "pancreatitis", soloVeterinario: true, label: "Pancreatitis", segura: true },
@@ -1236,6 +1245,32 @@ const PATOLOGIAS = [
     aviso: "Esta condición no está entre las que este sistema sabe ajustar automáticamente todavía, así que no generamos un menú que podría no estar realmente adaptado a lo que necesita: mejor que un veterinario valore su caso en concreto y paute la dieta." },
 ];
 
+// ⚠️ LA LISTA LA SIRVE EL MOTOR (12 de septiembre de 2026). Elena: «COMPRUEBA
+// TODO PARA QUE NINGUN DATO LO MANDE LA APP, TODO TIENE QUE VENIR DEL MOTOR».
+//
+// Lo de arriba es el RESPALDO, para cuando Render duerme. Las 47 patologías,
+// sus dos etiquetas y sus nueve aparatos llegan por `GET /vocabulario`, y cada
+// campo sale de donde ya vivía en el motor: el nombre técnico y el `formulable`
+// de `patologias.json`, quién puede marcarla de
+// `quien_formula_cada_patologia.json`, el aviso de `avisos.general`. Lo único
+// nuevo allí es cómo se le dice al dueño y en qué aparato va
+// (`patologias_como_se_presentan.json`).
+//
+// Escritas aquí eran la copia de siempre: una patología nueva en el motor no
+// aparecía en ninguna pantalla y no saltaba nada -- el mismo fallo que las seis
+// categorías de Personalizar y que los cinco niveles de actividad contra los
+// tres de la base de datos. Lo vigila el BLOQUE 98 de la batería del motor y
+// `tests/patologias-del-motor.spec.js` aquí, sembrando etiquetas INVENTADAS:
+// con las de verdad, «la app lo ha leído» y «la app pinta su respaldo» se ven
+// exactamente igual.
+let PATOLOGIAS = PATOLOGIAS_RESPALDO;
+
+// Las 47, no solo las casillas: las doce que se eligen dentro de la pregunta de
+// otra (los cinco estadios ACVIM, la renal avanzada, los cuatro urolitos que no
+// son estruvita, la predisposición al cobre y la encefalopatía) tienen que
+// poder resolver su etiqueta y su aviso igual que las demás.
+let TODAS_LAS_PATOLOGIAS = PATOLOGIAS_RESPALDO;
+
 // ─── LAS PATOLOGÍAS, POR APARATO ────────────────────────────────────────────
 //
 // ⚠️ PEDIDO EXPRESO (8 de septiembre): «la lista de patologías me parece un
@@ -1257,7 +1292,7 @@ const PATOLOGIAS = [
 // aquí las 27 otra vez sería la segunda copia, y el día que se añadiera una
 // patología nueva desaparecería de la pantalla sin que saltara nada -- que
 // es exactamente lo que pasó con las seis categorías de Personalizar.
-const APARATOS = [
+const APARATOS_RESPALDO = [
   { titulo: "Renal y urinario",
     claves: ["renal", "renal_proteinuria", "fracaso_renal_agudo", "oxalato",
              "estruvita", "urato", "cistina"] },
@@ -1289,17 +1324,76 @@ const APARATOS = [
 
 // Los grupos ya resueltos contra PATOLOGIAS, con las que no estén en ningún
 // aparato metidas en «Otras». Se calcula una vez, al cargar el módulo.
-const PATOLOGIAS_POR_APARATO = (() => {
-  const puestas = new Set(APARATOS.flatMap((g) => g.claves));
+let PATOLOGIAS_POR_APARATO = [];
+let PATOLOGIA_POR_CLAVE = {};
+
+// Se rehace entero cada vez que cambia de dónde salen las patologías: al cargar
+// el módulo con el respaldo, y otra vez cuando llega el vocabulario del motor.
+// Si se quedara con los grupos del respaldo, una patología nueva del motor
+// tendría casilla en el buscador y no estaría en ningún aparato -- visible
+// escribiendo su nombre e invisible abriendo el grupo que le toca.
+function rehacerGruposDePatologia(gruposServidos) {
+  PATOLOGIA_POR_CLAVE = Object.fromEntries(TODAS_LAS_PATOLOGIAS.map((p) => [p.key, p]));
+  if (gruposServidos) { PATOLOGIAS_POR_APARATO = gruposServidos; return; }
+  const puestas = new Set(APARATOS_RESPALDO.flatMap((g) => g.claves));
   const huerfanas = PATOLOGIAS.filter((p) => !puestas.has(p.key));
-  return APARATOS.map((g) => ({
+  PATOLOGIAS_POR_APARATO = APARATOS_RESPALDO.map((g) => ({
     titulo: g.titulo,
+    tituloVeterinario: g.titulo,
     patologias: [
       ...g.claves.map((k) => PATOLOGIAS.find((p) => p.key === k)).filter(Boolean),
       ...(g.titulo === "Otras" ? huerfanas : []),
     ],
   })).filter((g) => g.patologias.length > 0);
-})();
+}
+rehacerGruposDePatologia();
+
+// Las patologías tal y como las enumera el motor. Devuelve `null` si no vienen
+// completas: media lista aquí sería una patología que el perro tiene y que no
+// se puede marcar, y el menú saldría verde igual.
+function patologiasDelVocabulario(vocab) {
+  const servidas = vocab?.patologias?.lista;
+  const grupos = vocab?.patologias?.por_aparato;
+  if (!Array.isArray(servidas) || servidas.length === 0) return null;
+  if (!Array.isArray(grupos) || grupos.length === 0) return null;
+  const todas = servidas.map((p) => {
+    const dueno = p?.dueno?.titulo || p?.veterinario?.titulo || p.clave;
+    const vet = p?.veterinario?.titulo || dueno;
+    return {
+      key: p.clave,
+      // `label` es el registro del DUEÑO: es el que se lee en los resúmenes y
+      // en su ficha. La pantalla del veterinario pide `labelVeterinario`
+      // expresamente, porque quien firma necesita el nombre de la fuente
+      // («Cardiopatía, estadio ACVIM B2») y no el de andar por casa.
+      label: dueno,
+      labelDueno: dueno,
+      labelVeterinario: vet,
+      // ⚠️ `segura` ES EL `formulable` DEL MOTOR, no una tabla nuestra. Era el
+      // riesgo escrito aquí desde agosto, y ya se cumplió una vez.
+      segura: p.formulable !== false,
+      aviso: p.aviso || undefined,
+      soloVeterinario: p.quien_puede_marcarla === "solo_veterinario",
+      // Las que no tienen casilla propia porque se eligen dentro de la
+      // pregunta de otra. No lo decide la app: lo deriva el motor de las
+      // familias que sustituyen a su cabecera.
+      dentroDeLaPreguntaDe: p.dentro_de_la_pregunta_de || null,
+    };
+  });
+  const porClave = Object.fromEntries(todas.map((p) => [p.key, p]));
+  const casillas = todas.filter((p) => !p.dentroDeLaPreguntaDe);
+  const enGrupos = grupos.map((g) => ({
+    titulo: g?.dueno?.titulo || g?.veterinario?.titulo || g.clave,
+    tituloVeterinario: g?.veterinario?.titulo || g?.dueno?.titulo || g.clave,
+    patologias: (g.patologias || []).map((k) => porClave[k])
+      .filter((p) => p && !p.dentroDeLaPreguntaDe),
+  })).filter((g) => g.patologias.length > 0);
+  // Una patología en ningún grupo sería invisible abriendo aparatos y visible
+  // solo buscándola. Si el motor sirviera los grupos incompletos, se cae al
+  // respaldo entero antes que enseñar media pantalla.
+  const agrupadas = new Set(enGrupos.flatMap((g) => g.patologias.map((p) => p.key)));
+  if (casillas.some((p) => !agrupadas.has(p.key))) return null;
+  return { todas, casillas, grupos: enGrupos };
+}
 
 
 // ─── LAS PATOLOGÍAS QUE EN REALIDAD SON UNA FAMILIA ─────────────────────────
@@ -1466,7 +1560,7 @@ rehacerIndicesDeFamilia();
 // "encefalopatia_hepatica" no aparecían nunca como bloqueantes porque
 // `PATOLOGIAS.find` no las encontraba).
 function datosPatologia(key) {
-  return PATOLOGIAS.find((p) => p.key === key) || OPCIONES_DE_FAMILIA_POR_CLAVE[key] || null;
+  return PATOLOGIA_POR_CLAVE[key] || OPCIONES_DE_FAMILIA_POR_CLAVE[key] || null;
 }
 
 // ─── QUIEN PUEDE MARCAR CADA CASILLA ────────────────────────────────────────
@@ -9029,8 +9123,13 @@ function RawkuOnboardingInterna({
                       className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-left"
                       style={{ background: activo ? VIOLETA : PAPEL,
                                border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`, cursor: "pointer" }}>
+                      {/* ⚠️ EL REGISTRO DEL VETERINARIO, no el del dueño (12
+                          septiembre). Quien firma una pauta necesita el nombre
+                          de la fuente -- «Cardiopatía, estadio ACVIM B2
+                          (remodelado, sin síntomas)» -- y no «Problema de
+                          corazón». Los dos los sirve el motor. */}
                       <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontBody, fontSize: 14 }}>
-                        {pat.label}
+                        {pat.labelVeterinario || pat.label}
                       </span>
                       {activo && <Check size={15} style={{ color: ROSA }} />}
                     </button>
@@ -9044,7 +9143,11 @@ function RawkuOnboardingInterna({
               // aparato obligaría a abrir cajas para ver lo que acabas de
               // buscar, que es lo contrario de buscar.
               if (busquedaPatologia.trim()) {
-                const encontradas = PATOLOGIAS.filter((p) => contiene(p.label, busquedaPatologia));
+                // Se busca en LOS DOS registros: quien escribe «corazón»
+                // y quien escribe «ACVIM» tienen que encontrar lo mismo.
+                const encontradas = PATOLOGIAS.filter(
+                  (p) => contiene(p.labelVeterinario || p.label, busquedaPatologia)
+                      || contiene(p.labelDueno || p.label, busquedaPatologia));
                 if (encontradas.length === 0) {
                   return (
                     <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -9079,7 +9182,7 @@ function RawkuOnboardingInterna({
                                    border: `1.5px solid ${marcadas.length ? VIOLETA : "#E3DAF0"}`,
                                    cursor: "pointer" }}>
                           <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>
-                            {grupo.titulo}
+                            {grupo.tituloVeterinario || grupo.titulo}
                             {marcadas.length > 0 && (
                               <span style={{ color: ROSA, fontWeight: 700 }}> · {marcadas.length}</span>
                             )}
