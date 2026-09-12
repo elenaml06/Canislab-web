@@ -685,11 +685,26 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
       `el motor conoce no se puede elegir`)
       .toBe(delMotor.length);
 
+    // ⚠️ SE COMPARAN LOS CINCO CAMPOS QUE LA APP USA, no la fila entera
+    // (12 septiembre). Desde hoy el motor guarda ademas la PROCEDENCIA de las
+    // razas españolas -- su `fuente` (el Real Decreto 558/2001) y la `cita`
+    // literal de su prototipo racial --, y eso es dato del motor: la app no lo
+    // pinta. Copiar la cita del BOE dentro de `App.jsx` seria exactamente la
+    // segunda copia que este fichero existe para evitar.
+    //
+    // Lo que sigue siendo estricto es lo que importa: las MISMAS razas, ni una
+    // mas ni una menos, y los cinco numeros identicos.
+    const QUE_USA_LA_APP = ["nombre", "tamano", "pesoMin", "pesoMax", "pesoMedio"];
+    const soloLoQueUsa = (r) => Object.fromEntries(QUE_USA_LA_APP.map((k) => [k, r[k]]));
     const porNombre = new Map(delMotor.map((r) => [r.nombre, r]));
     for (const r of delaApp) {
       const m = porNombre.get(r.nombre);
       expect(m, `«${r.nombre}» esta en la app y no en razas.json del motor`).toBeTruthy();
-      expect(m, `«${r.nombre}» dice cosas distintas en la app y en el motor`).toEqual(r);
+      expect(soloLoQueUsa(m), `«${r.nombre}» dice cosas distintas en la app y en el motor`)
+        .toEqual(soloLoQueUsa(r));
+      expect(Object.keys(r).sort(),
+        `«${r.nombre}» lleva en la app campos que el motor no le da`)
+        .toEqual(QUE_USA_LA_APP.slice().sort());
     }
   });
 
