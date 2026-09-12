@@ -7,12 +7,17 @@
 
 // Se puede apuntar a otro sitio por variable de entorno (los tests levantan
 // una API de mentira en local). Sin variable, la de producción de siempre.
-export const API_BASE = import.meta.env.VITE_API_BASE || "https://canislab-api.onrender.com";
+// ⚠️ `?.` Y NO `.` (12 de septiembre): `import.meta.env` solo existe cuando
+// quien ejecuta esto es Vite. Fuera de Vite -- las pruebas que importan un
+// módulo suelto para comprobar una cuenta, sin navegador -- es `undefined`, y
+// leerle una propiedad revienta el import entero. Pasó al hacer que `bcs.js`
+// leyera sus cifras del motor: `bcs.spec.js` importa `src/bcs.js` directo.
+export const API_BASE = import.meta.env?.VITE_API_BASE || "https://canislab-api.onrender.com";
 
 // 45 s es holgado a propósito: un arranque en frío de Render tarda cerca de
 // un minuto, y no queremos abortar una petición que iba a llegar. Los tests
 // lo bajan por variable de entorno para no tardar un minuto cada uno.
-export const TIEMPO_MAXIMO_PETICION_MS = Number(import.meta.env.VITE_TIMEOUT_API_MS) || 45000;
+export const TIEMPO_MAXIMO_PETICION_MS = Number(import.meta.env?.VITE_TIMEOUT_API_MS) || 45000;
 
 // fetch con límite de tiempo. Si el servidor no contesta, aborta y lanza un
 // error marcado con `esTimeout`, que es lo que permite distinguir "no

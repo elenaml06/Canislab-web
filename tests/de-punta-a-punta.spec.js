@@ -193,9 +193,24 @@ test.describe("de punta a punta contra la API de verdad", () => {
     const casos = [
       [{ ...base, peso_objetivo_kg: 25 }, "declarado", 25],
       [{ ...base, bcs: 7 },               "derivado_del_bcs", 25],
-      [{ ...base, bcs: 9 },               "derivado_del_bcs_cota_inferior", 21.43],
+      // ⚠️ 20,69 Y NO 21,43 (12 de septiembre). Este número se quedó en la recta
+      // del 10 % por punto —30/1,40— cuando el 9 de septiembre las dos copias
+      // de la regla pasaron al «>45 %» de la Tabla VII-2 de FEDIAF: 30/1,45.
+      // El motor ya devolvía 20,69 y esta expectativa se quedó atrás, y no se
+      // vio en tres días porque esta prueba llevaba desde el 11 sin poder
+      // hablar con la API (el CORS solo admitía los puertos 5173 y 3000, y
+      // esta levanta la app en el 5179). Comprobado contra el `main`
+      // desplegado, que también da 20,69.
+      [{ ...base, bcs: 9 },               "derivado_del_bcs_cota_inferior", 20.69],
       [{ ...base },                       "peso_real_sin_objetivo", 30],
-      [{ ...base, bcs: 4 },               "peso_real_sin_objetivo", 30],
+      // ⚠️ «ya_en_la_banda_ideal» Y NO «sin_objetivo» (12 de septiembre). El 11 el
+      // motor dejó de tratar el ideal como un punto: FEDIAF lo define como una
+      // BANDA de 4 a 5 (§7.1.3), y un BCS 4 está DENTRO, así que no se corrige
+      // el peso y se dice con su propia procedencia. Antes caía en el cajón
+      // genérico. El motor tiene razón y esta expectativa se había quedado
+      // atrás, igual que la del BCS 9 y por lo mismo: la prueba llevaba tres
+      // días sin poder hablar con la API.
+      [{ ...base, bcs: 4 },               "peso_real_ya_en_la_banda_ideal", 30],
     ];
     for (const [cuerpo, peldano, kg] of casos) {
       const res = await request.post(`${API_REAL}/menu/v2`, { data: cuerpo, timeout: 120000 });
