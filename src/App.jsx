@@ -327,11 +327,11 @@ const RAZAS_RESPALDO = [
   {"nombre": "Airedale Terrier", "tamano": "Mediano", "pesoMin": 19, "pesoMax": 25, "pesoMedio": 22},
   {"nombre": "Akita Americano", "tamano": "Gigante", "pesoMin": 32, "pesoMax": 59, "pesoMedio": 45.5},
   {"nombre": "Akita Inu", "tamano": "Grande", "pesoMin": 32, "pesoMax": 45, "pesoMedio": 38.5},
-  {"nombre": "Alano Español", "tamano": "Grande", "pesoMin": 33, "pesoMax": 45, "pesoMedio": 39},
+  {"nombre": "Alano Español", "tamano": "Grande", "pesoMin": 33, "pesoMax": 45, "pesoMedio": 39, "porSexo": {"macho": {"pesoMin": 38, "pesoMax": 45, "pesoMedio": 41.5}, "hembra": {"pesoMin": 33, "pesoMax": 38, "pesoMedio": 35.5}}},
   {"nombre": "Alaskan Malamute", "tamano": "Grande", "pesoMin": 34, "pesoMax": 39, "pesoMedio": 36.5},
   {"nombre": "American Pit Bull Terrier", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 27, "pesoMedio": 20.5},
   {"nombre": "American Staffordshire Terrier", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 34, "pesoMedio": 26},
-  {"nombre": "Azawakh", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 25, "pesoMedio": 20},
+  {"nombre": "Azawakh", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 25, "pesoMedio": 20, "porSexo": {"macho": {"pesoMin": 20, "pesoMax": 25, "pesoMedio": 22.5}, "hembra": {"pesoMin": 15, "pesoMax": 20, "pesoMedio": 17.5}}},
   {"nombre": "Barbet", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 28, "pesoMedio": 21},
   {"nombre": "Basenji", "tamano": "Pequeño", "pesoMin": 9.5, "pesoMax": 11, "pesoMedio": 10.2},
   {"nombre": "Basset Artesiano de Normandía", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 20, "pesoMedio": 17.5},
@@ -356,7 +356,7 @@ const RAZAS_RESPALDO = [
   {"nombre": "Boyero de Appenzell", "tamano": "Grande", "pesoMin": 22, "pesoMax": 32, "pesoMedio": 27},
   {"nombre": "Boyero de Berna", "tamano": "Grande", "pesoMin": 36, "pesoMax": 52, "pesoMedio": 44},
   {"nombre": "Boyero de Entlebuch", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 30, "pesoMedio": 25},
-  {"nombre": "Boyero de Flandes", "tamano": "Grande", "pesoMin": 27, "pesoMax": 40, "pesoMedio": 33.5},
+  {"nombre": "Boyero de Flandes", "tamano": "Grande", "pesoMin": 27, "pesoMax": 40, "pesoMedio": 33.5, "porSexo": {"macho": {"pesoMin": 30, "pesoMax": 40, "pesoMedio": 35}, "hembra": {"pesoMin": 27, "pesoMax": 35, "pesoMedio": 31}}},
   {"nombre": "Braco Alemán de Pelo Corto", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 32, "pesoMedio": 26},
   {"nombre": "Braco Alemán de Pelo Duro", "tamano": "Grande", "pesoMin": 20, "pesoMax": 32, "pesoMedio": 26},
   {"nombre": "Braco Húngaro (Vizsla)", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 29, "pesoMedio": 23.5},
@@ -364,21 +364,21 @@ const RAZAS_RESPALDO = [
   {"nombre": "Braco Italiano", "tamano": "Grande", "pesoMin": 25, "pesoMax": 40, "pesoMedio": 32.5},
   {"nombre": "Bretón", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 18, "pesoMedio": 16},
   {"nombre": "Briard (Pastor de Brie)", "tamano": "Grande", "pesoMin": 34, "pesoMax": 45, "pesoMedio": 39.5},
-  {"nombre": "Broholmer", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 70, "pesoMedio": 55},
+  {"nombre": "Broholmer", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 70, "pesoMedio": 55, "porSexo": {"macho": {"pesoMin": 50, "pesoMax": 70, "pesoMedio": 60}, "hembra": {"pesoMin": 40, "pesoMax": 60, "pesoMedio": 50}}},
   {"nombre": "Buhund Noruego", "tamano": "Pequeño", "pesoMin": 12, "pesoMax": 18, "pesoMedio": 15},
   {"nombre": "Bull Terrier", "tamano": "Grande", "pesoMin": 22, "pesoMax": 38, "pesoMedio": 30},
   {"nombre": "Bull Terrier Miniatura", "tamano": "Pequeño", "pesoMin": 5, "pesoMax": 18, "pesoMedio": 11.5},
   {"nombre": "Bulldog Francés", "tamano": "Pequeño", "pesoMin": 8, "pesoMax": 14, "pesoMedio": 11},
   {"nombre": "Bulldog Inglés", "tamano": "Mediano", "pesoMin": 23, "pesoMax": 25, "pesoMedio": 24},
-  {"nombre": "Bullmastiff", "tamano": "Gigante", "pesoMin": 41, "pesoMax": 59, "pesoMedio": 50},
-  {"nombre": "Ca Mè Mallorquí", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 23, "pesoMedio": 19},
-  {"nombre": "Ca Rater Mallorquí (Ratonero Mallorquín)", "tamano": "Toy", "pesoMin": 3, "pesoMax": 5, "pesoMedio": 4},
-  {"nombre": "Ca de Bestiar (Pastor Mallorquín)", "tamano": "Grande", "pesoMin": 25, "pesoMax": 50, "pesoMedio": 37.5},
-  {"nombre": "Ca de Bou (Dogo Mallorquín)", "tamano": "Grande", "pesoMin": 30, "pesoMax": 38, "pesoMedio": 34},
+  {"nombre": "Bullmastiff", "tamano": "Gigante", "pesoMin": 41, "pesoMax": 59, "pesoMedio": 50, "porSexo": {"macho": {"pesoMin": 50, "pesoMax": 59, "pesoMedio": 54.5}, "hembra": {"pesoMin": 41, "pesoMax": 50, "pesoMedio": 45.5}}},
+  {"nombre": "Ca Mè Mallorquí", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 23, "pesoMedio": 19, "porSexo": {"macho": {"pesoMin": 18, "pesoMax": 23, "pesoMedio": 20.5}, "hembra": {"pesoMin": 15, "pesoMax": 20, "pesoMedio": 17.5}}},
+  {"nombre": "Ca Rater Mallorquí (Ratonero Mallorquín)", "tamano": "Toy", "pesoMin": 3, "pesoMax": 5, "pesoMedio": 4, "porSexo": {"macho": {"pesoMin": 3.5, "pesoMax": 5, "pesoMedio": 4.25}, "hembra": {"pesoMin": 3, "pesoMax": 4, "pesoMedio": 3.5}}},
+  {"nombre": "Ca de Bestiar (Pastor Mallorquín)", "tamano": "Grande", "pesoMin": 25, "pesoMax": 50, "pesoMedio": 37.5, "porSexo": {"macho": {"pesoMin": 30, "pesoMax": 50, "pesoMedio": 40}, "hembra": {"pesoMin": 25, "pesoMax": 45, "pesoMedio": 35}}},
+  {"nombre": "Ca de Bou (Dogo Mallorquín)", "tamano": "Grande", "pesoMin": 30, "pesoMax": 38, "pesoMedio": 34, "porSexo": {"macho": {"pesoMin": 35, "pesoMax": 38, "pesoMedio": 36.5}, "hembra": {"pesoMin": 30, "pesoMax": 34, "pesoMedio": 32}}},
   {"nombre": "Cairn Terrier", "tamano": "Mini", "pesoMin": 6, "pesoMax": 7.5, "pesoMedio": 6.8},
-  {"nombre": "Can Guicho (Quisquelo)", "tamano": "Pequeño", "pesoMin": 6, "pesoMax": 12, "pesoMedio": 9},
+  {"nombre": "Can Guicho (Quisquelo)", "tamano": "Pequeño", "pesoMin": 6, "pesoMax": 12, "pesoMedio": 9, "porSexo": {"macho": {"pesoMin": 8, "pesoMax": 12, "pesoMedio": 10}, "hembra": {"pesoMin": 6, "pesoMax": 10, "pesoMedio": 8}}},
   {"nombre": "Can de Palleiro", "tamano": "Grande", "pesoMin": 25, "pesoMax": 38, "pesoMedio": 31.5},
-  {"nombre": "Cane Corso", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 50, "pesoMedio": 45},
+  {"nombre": "Cane Corso", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 50, "pesoMedio": 45, "porSexo": {"macho": {"pesoMin": 45, "pesoMax": 50, "pesoMedio": 47.5}, "hembra": {"pesoMin": 40, "pesoMax": 45, "pesoMedio": 42.5}}},
   {"nombre": "Caniche Enano", "tamano": "Mini", "pesoMin": 5, "pesoMax": 7, "pesoMedio": 6},
   {"nombre": "Caniche Grande", "tamano": "Grande", "pesoMin": 20, "pesoMax": 32, "pesoMedio": 26},
   {"nombre": "Caniche Mediano", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 13, "pesoMedio": 11},
@@ -386,21 +386,21 @@ const RAZAS_RESPALDO = [
   {"nombre": "Carlino (Pug)", "tamano": "Mini", "pesoMin": 6.3, "pesoMax": 8.1, "pesoMedio": 7.2},
   {"nombre": "Cavalier King Charles Spaniel", "tamano": "Mini", "pesoMin": 5.4, "pesoMax": 8.2, "pesoMedio": 6.8},
   {"nombre": "Cesky Terrier", "tamano": "Mini", "pesoMin": 6, "pesoMax": 10, "pesoMedio": 8},
-  {"nombre": "Chesapeake Bay Retriever", "tamano": "Grande", "pesoMin": 25, "pesoMax": 36.5, "pesoMedio": 30.75},
+  {"nombre": "Chesapeake Bay Retriever", "tamano": "Grande", "pesoMin": 25, "pesoMax": 36.5, "pesoMedio": 30.75, "porSexo": {"macho": {"pesoMin": 29.5, "pesoMax": 36.5, "pesoMedio": 33}, "hembra": {"pesoMin": 25, "pesoMax": 32, "pesoMedio": 28.5}}},
   {"nombre": "Chihuahua", "tamano": "Toy", "pesoMin": 1, "pesoMax": 3, "pesoMedio": 2},
   {"nombre": "Chin Japonés", "tamano": "Toy", "pesoMin": 1.8, "pesoMax": 3.5, "pesoMedio": 2.6},
   {"nombre": "Chow Chow", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 32, "pesoMedio": 26},
-  {"nombre": "Cirneco del Etna", "tamano": "Pequeño", "pesoMin": 8, "pesoMax": 13, "pesoMedio": 10.5},
+  {"nombre": "Cirneco del Etna", "tamano": "Pequeño", "pesoMin": 8, "pesoMax": 13, "pesoMedio": 10.5, "porSexo": {"macho": {"pesoMin": 10, "pesoMax": 13, "pesoMedio": 11.5}, "hembra": {"pesoMin": 8, "pesoMax": 11, "pesoMedio": 9.5}}},
   {"nombre": "Clumber Spaniel", "tamano": "Grande", "pesoMin": 25, "pesoMax": 39, "pesoMedio": 32},
   {"nombre": "Cocker Spaniel Americano", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 14, "pesoMedio": 12.5},
   {"nombre": "Cocker Spaniel Inglés", "tamano": "Pequeño", "pesoMin": 13, "pesoMax": 14.5, "pesoMedio": 13.75},
-  {"nombre": "Collie de Pelo Corto", "tamano": "Grande", "pesoMin": 18, "pesoMax": 29.5, "pesoMedio": 23.75},
+  {"nombre": "Collie de Pelo Corto", "tamano": "Grande", "pesoMin": 18, "pesoMax": 29.5, "pesoMedio": 23.75, "porSexo": {"macho": {"pesoMin": 20.5, "pesoMax": 29.5, "pesoMedio": 25}, "hembra": {"pesoMin": 18, "pesoMax": 25, "pesoMedio": 21.5}}},
   {"nombre": "Collie de Pelo Largo", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 30, "pesoMedio": 24},
   {"nombre": "Continental Bulldog", "tamano": "Mediano", "pesoMin": 22, "pesoMax": 30, "pesoMedio": 26},
   {"nombre": "Coonhound Negro y Fuego", "tamano": "Grande", "pesoMin": 25, "pesoMax": 36, "pesoMedio": 30.5},
   {"nombre": "Corgi Galés Cardigan", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 17, "pesoMedio": 14},
-  {"nombre": "Corgi Galés Pembroke", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 12, "pesoMedio": 10.5},
-  {"nombre": "Coton de Tuléar", "tamano": "Mini", "pesoMin": 3.5, "pesoMax": 6, "pesoMedio": 4.75},
+  {"nombre": "Corgi Galés Pembroke", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 12, "pesoMedio": 10.5, "porSexo": {"macho": {"pesoMin": 10, "pesoMax": 12, "pesoMedio": 11}, "hembra": {"pesoMin": 9, "pesoMax": 11, "pesoMedio": 10}}},
+  {"nombre": "Coton de Tuléar", "tamano": "Mini", "pesoMin": 3.5, "pesoMax": 6, "pesoMedio": 4.75, "porSexo": {"macho": {"pesoMin": 4, "pesoMax": 6, "pesoMedio": 5}, "hembra": {"pesoMin": 3.5, "pesoMax": 5, "pesoMedio": 4.25}}},
   {"nombre": "Dachshund Estándar", "tamano": "Pequeño", "pesoMin": 7, "pesoMax": 9, "pesoMedio": 8},
   {"nombre": "Dachshund Miniatura", "tamano": "Toy", "pesoMin": 4, "pesoMax": 5, "pesoMedio": 4.5},
   {"nombre": "Dandie Dinmont Terrier", "tamano": "Pequeño", "pesoMin": 8, "pesoMax": 11, "pesoMedio": 9.5},
@@ -408,14 +408,14 @@ const RAZAS_RESPALDO = [
   {"nombre": "Dogo Argentino", "tamano": "Grande", "pesoMin": 35, "pesoMax": 45, "pesoMedio": 40},
   {"nombre": "Dogo de Burdeos", "tamano": "Gigante", "pesoMin": 45, "pesoMax": 65, "pesoMedio": 55},
   {"nombre": "Dálmata", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 32, "pesoMedio": 23.5},
-  {"nombre": "Dóberman", "tamano": "Grande", "pesoMin": 32, "pesoMax": 45, "pesoMedio": 38.5},
-  {"nombre": "Eurasier", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 30, "pesoMedio": 24},
+  {"nombre": "Dóberman", "tamano": "Grande", "pesoMin": 32, "pesoMax": 45, "pesoMedio": 38.5, "porSexo": {"macho": {"pesoMin": 40, "pesoMax": 45, "pesoMedio": 42.5}, "hembra": {"pesoMin": 32, "pesoMax": 35, "pesoMedio": 33.5}}},
+  {"nombre": "Eurasier", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 30, "pesoMedio": 24, "porSexo": {"macho": {"pesoMin": 22, "pesoMax": 30, "pesoMedio": 26}, "hembra": {"pesoMin": 18, "pesoMax": 26, "pesoMedio": 22}}},
   {"nombre": "Faraón (Pharaoh Hound)", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 27, "pesoMedio": 22.5},
   {"nombre": "Field Spaniel", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 25, "pesoMedio": 21.5},
   {"nombre": "Fila Brasileño", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 82, "pesoMedio": 61},
-  {"nombre": "Flat Coated Retriever", "tamano": "Grande", "pesoMin": 25, "pesoMax": 36, "pesoMedio": 30.5},
+  {"nombre": "Flat Coated Retriever", "tamano": "Grande", "pesoMin": 25, "pesoMax": 36, "pesoMedio": 30.5, "porSexo": {"macho": {"pesoMin": 27, "pesoMax": 36, "pesoMedio": 31.5}, "hembra": {"pesoMin": 25, "pesoMax": 32, "pesoMedio": 28.5}}},
   {"nombre": "Fox Terrier de Pelo Duro", "tamano": "Pequeño", "pesoMin": 7, "pesoMax": 9, "pesoMedio": 8},
-  {"nombre": "Fox Terrier de Pelo Liso", "tamano": "Mini", "pesoMin": 7, "pesoMax": 8, "pesoMedio": 7.5},
+  {"nombre": "Fox Terrier de Pelo Liso", "tamano": "Mini", "pesoMin": 7, "pesoMax": 8, "pesoMedio": 7.5, "porSexo": {"macho": {"pesoMin": 7.5, "pesoMax": 8, "pesoMedio": 7.75}, "hembra": {"pesoMin": 7, "pesoMax": 7.5, "pesoMedio": 7.25}}},
   {"nombre": "Foxhound Americano", "tamano": "Grande", "pesoMin": 29, "pesoMax": 34, "pesoMedio": 31.5},
   {"nombre": "Foxhound Inglés", "tamano": "Grande", "pesoMin": 30, "pesoMax": 34, "pesoMedio": 32},
   {"nombre": "Galgo Afgano", "tamano": "Mediano", "pesoMin": 23, "pesoMax": 27, "pesoMedio": 25},
@@ -436,20 +436,20 @@ const RAZAS_RESPALDO = [
   {"nombre": "Harrier", "tamano": "Mediano", "pesoMin": 22, "pesoMax": 27, "pesoMedio": 24.5},
   {"nombre": "Hokkaido", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 30, "pesoMedio": 25},
   {"nombre": "Hovawart", "tamano": "Grande", "pesoMin": 25, "pesoMax": 40, "pesoMedio": 32.5},
-  {"nombre": "Husky Siberiano", "tamano": "Mediano", "pesoMin": 15.5, "pesoMax": 28, "pesoMedio": 21.75},
+  {"nombre": "Husky Siberiano", "tamano": "Mediano", "pesoMin": 15.5, "pesoMax": 28, "pesoMedio": 21.75, "porSexo": {"macho": {"pesoMin": 20.5, "pesoMax": 28, "pesoMedio": 24.25}, "hembra": {"pesoMin": 15.5, "pesoMax": 23, "pesoMedio": 19.25}}},
   {"nombre": "Irish Soft Coated Wheaten Terrier", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 20.5, "pesoMedio": 18.2},
   {"nombre": "Jack Russell Terrier", "tamano": "Mini", "pesoMin": 6, "pesoMax": 8, "pesoMedio": 7},
-  {"nombre": "Jindo Coreano", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 23, "pesoMedio": 19},
+  {"nombre": "Jindo Coreano", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 23, "pesoMedio": 19, "porSexo": {"macho": {"pesoMin": 18, "pesoMax": 23, "pesoMedio": 20.5}, "hembra": {"pesoMin": 15, "pesoMax": 19, "pesoMedio": 17}}},
   {"nombre": "Kai Ken", "tamano": "Mediano", "pesoMin": 11, "pesoMax": 25, "pesoMedio": 18},
   {"nombre": "Keeshond", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 18, "pesoMedio": 16},
   {"nombre": "Kelpie Australiano", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 20, "pesoMedio": 17},
   {"nombre": "Kerry Blue Terrier", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 18, "pesoMedio": 16.5},
   {"nombre": "King Charles Spaniel", "tamano": "Toy", "pesoMin": 3.6, "pesoMax": 6.3, "pesoMedio": 4.95},
   {"nombre": "Kishu Ken", "tamano": "Mediano", "pesoMin": 13, "pesoMax": 27, "pesoMedio": 20},
-  {"nombre": "Komondor", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 60, "pesoMedio": 50},
+  {"nombre": "Komondor", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 60, "pesoMedio": 50, "porSexo": {"macho": {"pesoMin": 50, "pesoMax": 60, "pesoMedio": 55}, "hembra": {"pesoMin": 40, "pesoMax": 50, "pesoMedio": 45}}},
   {"nombre": "Kooikerhondje", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 11, "pesoMedio": 10},
-  {"nombre": "Kromfohrländer", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 16, "pesoMedio": 12.5},
-  {"nombre": "Kuvasz", "tamano": "Grande", "pesoMin": 37, "pesoMax": 62, "pesoMedio": 49.5},
+  {"nombre": "Kromfohrländer", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 16, "pesoMedio": 12.5, "porSexo": {"macho": {"pesoMin": 11, "pesoMax": 16, "pesoMedio": 13.5}, "hembra": {"pesoMin": 9, "pesoMax": 14, "pesoMedio": 11.5}}},
+  {"nombre": "Kuvasz", "tamano": "Grande", "pesoMin": 37, "pesoMax": 62, "pesoMedio": 49.5, "porSexo": {"macho": {"pesoMin": 48, "pesoMax": 62, "pesoMedio": 55}, "hembra": {"pesoMin": 37, "pesoMax": 50, "pesoMedio": 43.5}}},
   {"nombre": "Labrador Retriever", "tamano": "Grande", "pesoMin": 25, "pesoMax": 36, "pesoMedio": 30.5},
   {"nombre": "Lagotto Romagnolo", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 16, "pesoMedio": 13.5},
   {"nombre": "Lakeland Terrier", "tamano": "Pequeño", "pesoMin": 7, "pesoMax": 8, "pesoMedio": 7.5},
@@ -460,7 +460,7 @@ const RAZAS_RESPALDO = [
   {"nombre": "Lhasa Apso", "tamano": "Mini", "pesoMin": 5.4, "pesoMax": 8.2, "pesoMedio": 6.8},
   {"nombre": "Lobero Irlandés", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 69, "pesoMedio": 54.5},
   {"nombre": "Löwchen (Pequeño Perro León)", "tamano": "Mini", "pesoMin": 4, "pesoMax": 8, "pesoMedio": 6},
-  {"nombre": "Majorero", "tamano": "Grande", "pesoMin": 25, "pesoMax": 45, "pesoMedio": 35},
+  {"nombre": "Majorero", "tamano": "Grande", "pesoMin": 25, "pesoMax": 45, "pesoMedio": 35, "porSexo": {"macho": {"pesoMin": 30, "pesoMax": 45, "pesoMedio": 37.5}, "hembra": {"pesoMin": 25, "pesoMax": 35, "pesoMedio": 30}}},
   {"nombre": "Manchester Terrier", "tamano": "Pequeño", "pesoMin": 5, "pesoMax": 10, "pesoMedio": 7.5},
   {"nombre": "Mastín Español", "tamano": "Gigante", "pesoMin": 52, "pesoMax": 100, "pesoMedio": 76},
   {"nombre": "Mastín Inglés", "tamano": "Gigante", "pesoMin": 68, "pesoMax": 110, "pesoMedio": 89},
@@ -473,13 +473,13 @@ const RAZAS_RESPALDO = [
   {"nombre": "Pachón Navarro", "tamano": "Grande", "pesoMin": 20, "pesoMax": 30, "pesoMedio": 25},
   {"nombre": "Papillón", "tamano": "Toy", "pesoMin": 3.5, "pesoMax": 4.5, "pesoMedio": 4},
   {"nombre": "Parson Russell Terrier", "tamano": "Mini", "pesoMin": 6, "pesoMax": 8, "pesoMedio": 7},
-  {"nombre": "Pastor Alemán", "tamano": "Grande", "pesoMin": 22, "pesoMax": 40, "pesoMedio": 31},
+  {"nombre": "Pastor Alemán", "tamano": "Grande", "pesoMin": 22, "pesoMax": 40, "pesoMedio": 31, "porSexo": {"macho": {"pesoMin": 30, "pesoMax": 40, "pesoMedio": 35}, "hembra": {"pesoMin": 22, "pesoMax": 32, "pesoMedio": 27}}},
   {"nombre": "Pastor Australiano", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 32, "pesoMedio": 24},
   {"nombre": "Pastor Belga Groenendael", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 30, "pesoMedio": 25},
   {"nombre": "Pastor Belga Malinois", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 30, "pesoMedio": 25},
-  {"nombre": "Pastor Blanco Suizo", "tamano": "Grande", "pesoMin": 25, "pesoMax": 40, "pesoMedio": 32.5},
+  {"nombre": "Pastor Blanco Suizo", "tamano": "Grande", "pesoMin": 25, "pesoMax": 40, "pesoMedio": 32.5, "porSexo": {"macho": {"pesoMin": 30, "pesoMax": 40, "pesoMedio": 35}, "hembra": {"pesoMin": 25, "pesoMax": 35, "pesoMedio": 30}}},
   {"nombre": "Pastor Catalán", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 22, "pesoMedio": 19},
-  {"nombre": "Pastor Garafiano", "tamano": "Grande", "pesoMin": 24, "pesoMax": 35, "pesoMedio": 29.5},
+  {"nombre": "Pastor Garafiano", "tamano": "Grande", "pesoMin": 24, "pesoMax": 35, "pesoMedio": 29.5, "porSexo": {"macho": {"pesoMin": 28, "pesoMax": 35, "pesoMedio": 31.5}, "hembra": {"pesoMin": 24, "pesoMax": 30, "pesoMedio": 27}}},
   {"nombre": "Pastor Maremmano-Abruzzés", "tamano": "Grande", "pesoMin": 30, "pesoMax": 45, "pesoMedio": 37.5},
   {"nombre": "Pastor Polaco de Podhale (Tatra)", "tamano": "Gigante", "pesoMin": 45, "pesoMax": 70, "pesoMedio": 57.5},
   {"nombre": "Pastor Polaco de Tierras Bajas", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 23, "pesoMedio": 18.5},
@@ -490,32 +490,32 @@ const RAZAS_RESPALDO = [
   {"nombre": "Pequeño Basset Grifón Vendeano", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 20, "pesoMedio": 15.5},
   {"nombre": "Pequeño Münsterländer", "tamano": "Mediano", "pesoMin": 17, "pesoMax": 26, "pesoMedio": 21.5},
   {"nombre": "Pequinés", "tamano": "Toy", "pesoMin": 3.2, "pesoMax": 6, "pesoMedio": 4.6},
-  {"nombre": "Perdiguero Portugués", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 27, "pesoMedio": 21.5},
+  {"nombre": "Perdiguero Portugués", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 27, "pesoMedio": 21.5, "porSexo": {"macho": {"pesoMin": 20, "pesoMax": 27, "pesoMedio": 23.5}, "hembra": {"pesoMin": 16, "pesoMax": 22, "pesoMedio": 19}}},
   {"nombre": "Perdiguero de Burgos", "tamano": "Grande", "pesoMin": 25, "pesoMax": 30, "pesoMedio": 27.5},
   {"nombre": "Perro Cazador de Alces Noruego", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 27, "pesoMedio": 23.5},
   {"nombre": "Perro Chino con Cresta", "tamano": "Toy", "pesoMin": 3, "pesoMax": 6, "pesoMedio": 4.5},
   {"nombre": "Perro Finlandés de Laponia", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 24, "pesoMedio": 19.5},
-  {"nombre": "Perro Leonés de Pastor", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 21, "pesoMedio": 18},
+  {"nombre": "Perro Leonés de Pastor", "tamano": "Mediano", "pesoMin": 15, "pesoMax": 21, "pesoMedio": 18, "porSexo": {"macho": {"pesoMin": 17, "pesoMax": 21, "pesoMedio": 19}, "hembra": {"pesoMin": 15, "pesoMax": 19, "pesoMedio": 17}}},
   {"nombre": "Perro Lobo Checoslovaco", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 26, "pesoMedio": 23},
   {"nombre": "Perro Lobo de Saarloos", "tamano": "Grande", "pesoMin": 36, "pesoMax": 41, "pesoMedio": 38.5},
-  {"nombre": "Perro Pastor de Kangal", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 60, "pesoMedio": 50},
+  {"nombre": "Perro Pastor de Kangal", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 60, "pesoMedio": 50, "porSexo": {"macho": {"pesoMin": 48, "pesoMax": 60, "pesoMedio": 54}, "hembra": {"pesoMin": 40, "pesoMax": 50, "pesoMedio": 45}}},
   {"nombre": "Perro de Agua Americano", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 20, "pesoMedio": 15.5},
-  {"nombre": "Perro de Agua Español", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 22, "pesoMedio": 18},
+  {"nombre": "Perro de Agua Español", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 22, "pesoMedio": 18, "porSexo": {"macho": {"pesoMin": 18, "pesoMax": 22, "pesoMedio": 20}, "hembra": {"pesoMin": 14, "pesoMax": 18, "pesoMedio": 16}}},
   {"nombre": "Perro de Agua Frisón", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 25, "pesoMedio": 21.5},
   {"nombre": "Perro de Agua Irlandés", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 29, "pesoMedio": 24.5},
-  {"nombre": "Perro de Agua Portugués", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 25, "pesoMedio": 20.5},
+  {"nombre": "Perro de Agua Portugués", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 25, "pesoMedio": 20.5, "porSexo": {"macho": {"pesoMin": 19, "pesoMax": 25, "pesoMedio": 22}, "hembra": {"pesoMin": 16, "pesoMax": 22, "pesoMedio": 19}}},
   {"nombre": "Perro de Canaan", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 25, "pesoMedio": 21.5},
   {"nombre": "Perro de Castro Laboreiro", "tamano": "Grande", "pesoMin": 20, "pesoMax": 40, "pesoMedio": 30},
   {"nombre": "Perro de Montaña de la Estrela", "tamano": "Gigante", "pesoMin": 30, "pesoMax": 50, "pesoMedio": 40},
   {"nombre": "Perro de Montaña de los Apeninos", "tamano": "Grande", "pesoMin": 30, "pesoMax": 45, "pesoMedio": 37.5},
   {"nombre": "Perro de Montaña de los Pirineos", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 60, "pesoMedio": 50},
-  {"nombre": "Perro de Pastor Bergamasco", "tamano": "Grande", "pesoMin": 26, "pesoMax": 38, "pesoMedio": 32},
+  {"nombre": "Perro de Pastor Bergamasco", "tamano": "Grande", "pesoMin": 26, "pesoMax": 38, "pesoMedio": 32, "porSexo": {"macho": {"pesoMin": 32, "pesoMax": 38, "pesoMedio": 35}, "hembra": {"pesoMin": 26, "pesoMax": 32, "pesoMedio": 29}}},
   {"nombre": "Perro de Pastor Islandés", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 20, "pesoMedio": 15.5},
   {"nombre": "Perro de Pastor Portugués", "tamano": "Mediano", "pesoMin": 17, "pesoMax": 27, "pesoMedio": 22},
-  {"nombre": "Perro de Pastor Vasco (Euskal Artzain Txakurra)", "tamano": "Grande", "pesoMin": 17, "pesoMax": 36, "pesoMedio": 26.5},
+  {"nombre": "Perro de Pastor Vasco (Euskal Artzain Txakurra)", "tamano": "Grande", "pesoMin": 17, "pesoMax": 36, "pesoMedio": 26.5, "porSexo": {"macho": {"pesoMin": 18, "pesoMax": 36, "pesoMedio": 27}, "hembra": {"pesoMin": 17, "pesoMax": 29, "pesoMedio": 23}}},
   {"nombre": "Perro de Pastor de Asia Central", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 79, "pesoMedio": 59.5},
   {"nombre": "Perro de Pastor de Charplanina", "tamano": "Grande", "pesoMin": 25, "pesoMax": 45, "pesoMedio": 35},
-  {"nombre": "Perro de Presa Canario", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 57, "pesoMedio": 48.5},
+  {"nombre": "Perro de Presa Canario", "tamano": "Gigante", "pesoMin": 40, "pesoMax": 57, "pesoMedio": 48.5, "porSexo": {"macho": {"pesoMin": 45, "pesoMax": 57, "pesoMedio": 51}, "hembra": {"pesoMin": 40, "pesoMax": 50, "pesoMedio": 45}}},
   {"nombre": "Petit Brabançon", "tamano": "Toy", "pesoMin": 3.5, "pesoMax": 6, "pesoMedio": 4.8},
   {"nombre": "Pinscher Alemán", "tamano": "Mediano", "pesoMin": 14, "pesoMax": 20, "pesoMedio": 17},
   {"nombre": "Pinscher Austríaco", "tamano": "Mediano", "pesoMin": 12, "pesoMax": 18, "pesoMedio": 15},
@@ -530,16 +530,16 @@ const RAZAS_RESPALDO = [
   {"nombre": "Pomerania", "tamano": "Toy", "pesoMin": 1.9, "pesoMax": 3.5, "pesoMedio": 2.7},
   {"nombre": "Prague Ratter", "tamano": "Toy", "pesoMin": 1.5, "pesoMax": 3.6, "pesoMedio": 2.5},
   {"nombre": "Pudelpointer", "tamano": "Grande", "pesoMin": 25, "pesoMax": 31, "pesoMedio": 28},
-  {"nombre": "Puli", "tamano": "Pequeño", "pesoMin": 10, "pesoMax": 15, "pesoMedio": 12.5},
-  {"nombre": "Pumi", "tamano": "Pequeño", "pesoMin": 8, "pesoMax": 15, "pesoMedio": 11.5},
-  {"nombre": "Rafeiro do Alentejo", "tamano": "Gigante", "pesoMin": 35, "pesoMax": 60, "pesoMedio": 47.5},
+  {"nombre": "Puli", "tamano": "Pequeño", "pesoMin": 10, "pesoMax": 15, "pesoMedio": 12.5, "porSexo": {"macho": {"pesoMin": 13, "pesoMax": 15, "pesoMedio": 14}, "hembra": {"pesoMin": 10, "pesoMax": 13, "pesoMedio": 11.5}}},
+  {"nombre": "Pumi", "tamano": "Pequeño", "pesoMin": 8, "pesoMax": 15, "pesoMedio": 11.5, "porSexo": {"macho": {"pesoMin": 10, "pesoMax": 15, "pesoMedio": 12.5}, "hembra": {"pesoMin": 8, "pesoMax": 13, "pesoMedio": 10.5}}},
+  {"nombre": "Rafeiro do Alentejo", "tamano": "Gigante", "pesoMin": 35, "pesoMax": 60, "pesoMedio": 47.5, "porSexo": {"macho": {"pesoMin": 45, "pesoMax": 60, "pesoMedio": 52.5}, "hembra": {"pesoMin": 35, "pesoMax": 50, "pesoMedio": 42.5}}},
   {"nombre": "Ratonero Bodeguero Andaluz", "tamano": "Mini", "pesoMin": 7, "pesoMax": 8, "pesoMedio": 7.5},
-  {"nombre": "Retriever de Nueva Escocia", "tamano": "Mediano", "pesoMin": 17, "pesoMax": 23, "pesoMedio": 20},
+  {"nombre": "Retriever de Nueva Escocia", "tamano": "Mediano", "pesoMin": 17, "pesoMax": 23, "pesoMedio": 20, "porSexo": {"macho": {"pesoMin": 20, "pesoMax": 23, "pesoMedio": 21.5}, "hembra": {"pesoMin": 17, "pesoMax": 20, "pesoMedio": 18.5}}},
   {"nombre": "Retriever de Pelo Rizado", "tamano": "Grande", "pesoMin": 32, "pesoMax": 45, "pesoMedio": 38.5},
   {"nombre": "Rhodesian Ridgeback", "tamano": "Grande", "pesoMin": 32, "pesoMax": 36, "pesoMedio": 34},
   {"nombre": "Rottweiler", "tamano": "Gigante", "pesoMin": 35, "pesoMax": 60, "pesoMedio": 47.5},
   {"nombre": "Sabueso Español", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 25, "pesoMedio": 22.5},
-  {"nombre": "Sabueso de San Huberto (Bloodhound)", "tamano": "Grande", "pesoMin": 40, "pesoMax": 54, "pesoMedio": 47},
+  {"nombre": "Sabueso de San Huberto (Bloodhound)", "tamano": "Grande", "pesoMin": 40, "pesoMax": 54, "pesoMedio": 47, "porSexo": {"macho": {"pesoMin": 46, "pesoMax": 54, "pesoMedio": 50}, "hembra": {"pesoMin": 40, "pesoMax": 48, "pesoMedio": 44}}},
   {"nombre": "Saluki", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 27, "pesoMedio": 22.5},
   {"nombre": "Samoyedo", "tamano": "Mediano", "pesoMin": 16, "pesoMax": 30, "pesoMedio": 23},
   {"nombre": "San Bernardo", "tamano": "Gigante", "pesoMin": 64, "pesoMax": 82, "pesoMedio": 73},
@@ -570,7 +570,7 @@ const RAZAS_RESPALDO = [
   {"nombre": "Spitz Japonés", "tamano": "Mini", "pesoMin": 5, "pesoMax": 10, "pesoMedio": 7.5},
   {"nombre": "Springer Spaniel Inglés", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 25, "pesoMedio": 21.5},
   {"nombre": "Stabyhoun", "tamano": "Mediano", "pesoMin": 18, "pesoMax": 27, "pesoMedio": 22.5},
-  {"nombre": "Staffordshire Bull Terrier", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 17, "pesoMedio": 14},
+  {"nombre": "Staffordshire Bull Terrier", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 17, "pesoMedio": 14, "porSexo": {"macho": {"pesoMin": 12.7, "pesoMax": 17, "pesoMedio": 14.85}, "hembra": {"pesoMin": 11, "pesoMax": 15.4, "pesoMedio": 13.2}}},
   {"nombre": "Sussex Spaniel", "tamano": "Mediano", "pesoMin": 20, "pesoMax": 23, "pesoMedio": 21.5},
   {"nombre": "Tchuvatch Eslovaco", "tamano": "Grande", "pesoMin": 31, "pesoMax": 44, "pesoMedio": 37.5},
   {"nombre": "Terranova", "tamano": "Gigante", "pesoMin": 45, "pesoMax": 68, "pesoMedio": 56.5},
@@ -578,7 +578,7 @@ const RAZAS_RESPALDO = [
   {"nombre": "Terrier Galés", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 10, "pesoMedio": 9.5},
   {"nombre": "Terrier Irlandés", "tamano": "Pequeño", "pesoMin": 11, "pesoMax": 12, "pesoMedio": 11.5},
   {"nombre": "Terrier Japonés", "tamano": "Mini", "pesoMin": 4, "pesoMax": 6, "pesoMedio": 5},
-  {"nombre": "Terrier Negro Ruso", "tamano": "Gigante", "pesoMin": 45, "pesoMax": 60, "pesoMedio": 52.5},
+  {"nombre": "Terrier Negro Ruso", "tamano": "Gigante", "pesoMin": 45, "pesoMax": 60, "pesoMedio": 52.5, "porSexo": {"macho": {"pesoMin": 50, "pesoMax": 60, "pesoMedio": 55}, "hembra": {"pesoMin": 45, "pesoMax": 50, "pesoMedio": 47.5}}},
   {"nombre": "Terrier Ruso", "tamano": "Toy", "pesoMin": 2, "pesoMax": 3, "pesoMedio": 2.5},
   {"nombre": "Terrier Tibetano", "tamano": "Pequeño", "pesoMin": 8, "pesoMax": 14, "pesoMedio": 11},
   {"nombre": "Terrier de Caza Alemán (Jagdterrier)", "tamano": "Pequeño", "pesoMin": 7.5, "pesoMax": 10, "pesoMedio": 8.8},
@@ -1941,6 +1941,30 @@ let RANGO_PESO_POR_TAMANO = RANGO_PESO_POR_TAMANO_RESPALDO;
 // importan. Medido: un cachorro mestizo de 30 kg a los 6 meses pasa de estimar
 // 66,7 kg de adulto a 46,6, y su ración de 2478 a 2142 kcal.
 const pesoAdultoDesdeCurva = pesoAdultoDesdeCurvaFediaf;
+
+// ⚠️ EL PESO DE UNA RAZA DEPENDE DEL SEXO, y hasta el 12 de septiembre por la
+// noche aquí se enseñaba la UNIÓN de los dos. El Kuvasz son 48-62 kg en machos
+// y 37-50 en hembras, y a la dueña de una Kuvasz hembra se le decía «37-62».
+//
+// La fuente los separa -- la FCI y el BOE dan machos y hembras en apartados
+// distintos -- y los dos referentes que se miraron antes de tocar esto hacen lo
+// mismo: MyVetDiet llama a los suyos «pesos indicativos diferenciados para
+// machos y hembras» y las curvas de WALTHAM son gráficas distintas por sexo.
+//
+// Lo trae el motor en `porSexo`, y solo en las 44 razas donde la fuente da un
+// INTERVALO de verdad para cada sexo: donde da un punto por sexo (el Setter
+// Gordon) o un suelo sin techo (el Fila Brasileño) no hay `porSexo`, porque de
+// un punto no se inventa una horquilla. Sin `porSexo` o sin sexo, la unión.
+function pesoDeRaza(raza, sexo) {
+  if (!raza) return null;
+  const s = raza.porSexo && sexo ? raza.porSexo[sexo] : null;
+  return {
+    pesoMin: s ? s.pesoMin : raza.pesoMin,
+    pesoMax: s ? s.pesoMax : raza.pesoMax,
+    pesoMedio: s ? s.pesoMedio : raza.pesoMedio,
+    esDeSuSexo: Boolean(s),
+  };
+}
 
 
 
@@ -5007,7 +5031,12 @@ function datosDeUnPerro(perfil) {
   // cachorro. Ahora, si hay edad y peso actual, se usa su propia
   // trayectoria (igual que ya hacía der.py en el servidor) -- la media
   // de la raza queda solo como último recurso, cuando faltan datos.
-  const pesoAdultoMedioRaza = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+  // ⚠️ CON EL SEXO (12 septiembre, noche): el respaldo de la raza -- el que se
+  // usa cuando no hay edad ni peso con los que calcular la curva -- es el de
+  // SU sexo si la fuente lo separa. En el Kuvasz son 55 kg en macho y 43,5 en
+  // hembra contra los 49,5 de la unión.
+  const pesoAdultoMedioRaza = pesoDeRaza(perfil.raza, perfil.sexo)?.pesoMedio
+    || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
   // ⚠️ SIN EL RANGO DE LA RAZA (12 de septiembre, noche): aquí se le pasaban
   // `pesoMin` y `pesoMax` para recortar la estimación, y ese recorte ya no
   // existe -- el peso adulto lo decide la curva del propio cachorro. La tabla
@@ -9455,7 +9484,12 @@ function RawkuOnboardingInterna({
                 </div>
                 <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
                   Tamaño <b style={{ color: "#FFFFFF" }}>{perfil.raza.tamano}</b> · peso adulto esperado{" "}
-                  <b style={{ color: "#FFFFFF" }}>{perfil.raza.pesoMin}–{perfil.raza.pesoMax}kg</b>
+                  <b style={{ color: "#FFFFFF" }}>
+                    {pesoDeRaza(perfil.raza, perfil.sexo).pesoMin}–{pesoDeRaza(perfil.raza, perfil.sexo).pesoMax}kg
+                  </b>
+                  {pesoDeRaza(perfil.raza, perfil.sexo).esDeSuSexo && (
+                    <span> en {perfil.sexo === "macho" ? "machos" : "hembras"}</span>
+                  )}
                 </p>
               </div>
               <button onClick={() => { set("raza", null); setBusqueda(""); }} className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>← Cambiar raza</button>
