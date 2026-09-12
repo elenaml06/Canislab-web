@@ -7824,7 +7824,10 @@ function RawkuOnboardingInterna({
   const resultadosRaza = useMemo(() => {
     if (!busqueda.trim()) return [];
     const q = busqueda.trim().toLowerCase();
-    return RAZAS.filter((r) => r.nombre.toLowerCase().includes(q)).slice(0, 12);
+    // ⚠️ `contiene` tambien aqui (12 de septiembre): «aleman» tiene que encontrar
+    // «Pastor Alemán» y «bichon» el «Bichón Frisé». De las 255 razas, 41 llevan
+    // tilde, y el nombre de la raza decide las kcal de dos de ellas.
+    return RAZAS.filter((r) => contiene(r.nombre, q)).slice(0, 12);
   }, [busqueda]);
 
   // ⚠️ MOVIDO FUERA DEL COMPONENTE (21 agosto) — estos cálculos (edad,

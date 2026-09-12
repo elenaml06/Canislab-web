@@ -232,6 +232,10 @@ export function crearFakeSupabase(opciones = {}) {
     // motor» de «la app está pintando su respaldo», que a simple vista se ven
     // igual.
     vocabulario: null,
+    // ⚠️ El catálogo de `/alimentos`, sembrable (12 de septiembre). El de
+    // abajo no trae ninguna categoría de SUPLEMENTO, así que ninguna prueba
+    // podía mirar cómo se agrupan — que es justo lo que se pidió arreglar.
+    catalogo: null,
     // Lo que la cuenta tenga guardado de su clínica (y de su nº de
     // colegiado, que se escribe por el mismo PATCH).
     clinica: {},
@@ -404,6 +408,8 @@ export function crearFakeSupabase(opciones = {}) {
       if (Object.keys(cfg).length > 0) {
         estado.vocabulario = cfg.vocabulario && typeof cfg.vocabulario === "object"
           ? JSON.parse(JSON.stringify(cfg.vocabulario)) : null;
+        estado.catalogo = cfg.catalogo && typeof cfg.catalogo === "object"
+          ? JSON.parse(JSON.stringify(cfg.catalogo)) : null;
       }
       estado.sinColumnasDeClinica = cfg.sinColumnasDeClinica === true;
       // ⚠️ LEER NO PUEDE BORRAR (8 septiembre). `leer()` hace un POST con el
@@ -971,6 +977,7 @@ export function crearFakeSupabase(opciones = {}) {
     // devuelve la API de verdad para la verdura y los suplementos, así que hay
     // de los dos.
     if (ruta === "/alimentos") {
+      if (estado.catalogo) return responder(200, estado.catalogo);
       return responder(200, {
         "Carne muscular": [
           { nombre: "Carne muscular de pollo", kcal_100g: 110, especie: "Pollo" },
