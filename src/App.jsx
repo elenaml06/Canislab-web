@@ -3320,7 +3320,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 No se pudo con todo lo elegido
               </p>
               <p className="text-xs text-center mb-2" style={{ color: TINTA, fontFamily: fontBody }}>
-                Con lo que elegiste a mano no había una combinación viable, así que este menú se ha calculado libremente para que sí cumpla los 30 requisitos. Puedes revisarlo y cambiar lo que quieras.
+                Con lo que elegiste a mano no había una combinación viable, así que este menú se ha calculado libremente para que sí cumpla los 43 requisitos. Puedes revisarlo y cambiar lo que quieras.
               </p>
               <button
                 onClick={() => setAvisoNoForzadoVisible(false)}
@@ -5495,6 +5495,7 @@ function RawkuOnboardingInterna({
   // cuántos se consiguieron, visible en la pantalla si no coinciden --
   // así la próxima vez hay datos reales, no solo sospechas.
   const [diagnosticoMenus, setDiagnosticoMenus] = useState(null);
+  const [detalleDelFallo, setDetalleDelFallo] = useState(null);
   const [menuCargando, setMenuCargando] = useState(false);
   const [menuError, setMenuError] = useState(null);
   const [necesitaVeterinario, setNecesitaVeterinario] = useState(false);
@@ -6081,6 +6082,7 @@ function RawkuOnboardingInterna({
     setMenuCargando(false);
     setMenuError(null);
     setDiagnosticoMenus(null);
+    setDetalleDelFallo(null);
     setNecesitaVeterinario(false);
     setMenuLigeroAbierto(false);
     // Pantalla propia: la de "resultado" tiene un useEffect que genera un
@@ -8216,6 +8218,7 @@ function RawkuOnboardingInterna({
     setAlimentosAPreservarPorMenu([]); // limpiar tras usar — no afectar a futuras generaciones
     setMenuError(null);
     setDiagnosticoMenus(null);
+    setDetalleDelFallo(null);
     setNecesitaVeterinario(false);
     setMenuDespertando(false);
 
@@ -8553,6 +8556,14 @@ function RawkuOnboardingInterna({
             setNecesitaVeterinario(true);
           } else {
             setMenuError(ultimoError?.motivo || "No se encontró una combinación posible con estos alimentos.");
+            // ⚠️ Y LA RESPUESTA ENTERA, NO SOLO SU FRASE (12 de septiembre).
+            // El motor manda con el «no hay menú» tres cosas que dicen POR QUÉ:
+            // qué peldaños intentó (`se_intento_relajando`), qué límite de qué
+            // patología no deja margen (`choque_de_patologias`) y el detalle de
+            // cada intento. La app se quedaba con la frase y tiraba el resto,
+            // así que quien no puede abrir las herramientas del navegador --
+            // o sea, quien lo usa en el móvil -- no tenía NADA que mirar.
+            setDetalleDelFallo(ultimoError || null);
           }
           setMenuCargando(false);
           return;
@@ -11620,8 +11631,50 @@ function RawkuOnboardingInterna({
           </p>
           <p className="text-sm mb-4" style={{ color: MALVA, fontFamily: fontBody }}>{menuError}</p>
 
+          {/* ⚠️ LO QUE EL MOTOR DIJO, ENTERO (12 de septiembre de 2026).
+              CASO REAL: «No hemos encontrado un menú que cumpla», con cualquier
+              perro, y desde el móvil no había forma de saber por qué. La app
+              tenía el detalle -- el registro de cada intento, los peldaños que
+              el motor probó y, si el bloqueo es de una patología, el límite
+              exacto con su cifra y su fuente -- y lo enseñaba SOLO en la
+              pantalla de éxito. O sea que se escondía justo cuando hace falta.
+
+              Esto no adivina nada: pinta lo que vino en la respuesta. */}
+          {!necesitaVeterinario && (detalleDelFallo || diagnosticoMenus) && (
+            <details className="rounded-xl mb-4 text-left w-full" style={{ background: "#FFF0F3", maxWidth: 340 }}>
+              <summary className="text-xs px-4 py-3 cursor-pointer"
+                       style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                Qué dijo el motor
+              </summary>
+              <div className="px-4 pb-3">
+                {diagnosticoMenus && (
+                  <p className="text-[11px] mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+                    Se pidieron {diagnosticoMenus.pedidos} y salieron {diagnosticoMenus.conseguidos}.
+                  </p>
+                )}
+                {(diagnosticoMenus?.registro || []).filter((r) => r.resultado !== "ok").map((r, i) => (
+                  <p key={i} className="text-[11px] mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+                    Intento {r.intento}: {r.resultado} — {r.motivo}
+                  </p>
+                ))}
+                {(detalleDelFallo?.choque_de_patologias || []).map((x, i) => (
+                  <p key={`c${i}`} className="text-[11px] mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+                    <b>{x.nombre_patologia}</b>: {x.tipo === "tope" ? "como mucho" : "al menos"}{" "}
+                    {x.valor} {x.unidad} de {x.nombre_nutriente}. Fuente: {x.fuente}
+                  </p>
+                ))}
+                {Array.isArray(detalleDelFallo?.se_intento_relajando)
+                  && detalleDelFallo.se_intento_relajando.length > 0 && (
+                  <p className="text-[11px]" style={{ color: MALVA, fontFamily: fontBody }}>
+                    Se probó soltando: {detalleDelFallo.se_intento_relajando.join(" · ")}.
+                  </p>
+                )}
+              </div>
+            </details>
+          )}
+
           {/* ⚠️ AÑADIDO — el motor ahora rechaza menús que antes sí daba,
-              a propósito: verifica los 30 requisitos y los límites de
+              a propósito: verifica los 43 requisitos y los límites de
               seguridad, y prefiere no dar menú a dar uno que no cumple.
               Sin esta explicación, "no se pudo calcular" se lee como una
               app rota, cuando en realidad es la app haciendo su trabajo. */}
@@ -11631,7 +11684,7 @@ function RawkuOnboardingInterna({
                 Esto no es un fallo de la app
               </p>
               <p className="text-xs mb-2" style={{ color: TINTA, fontFamily: fontBody }}>
-                Cada menú se comprueba contra los 30 requisitos nutricionales de
+                Cada menú se comprueba contra los 43 requisitos nutricionales de
                 la etapa de {nombreMostrar} y contra los límites de seguridad.
                 Si no encontramos una combinación que los cumpla todos,
                 preferimos no darte un menú antes que darte uno que se queda

@@ -232,6 +232,9 @@ export function crearFakeSupabase(opciones = {}) {
     // motor» de «la app está pintando su respaldo», que a simple vista se ven
     // igual.
     vocabulario: null,
+    // Una respuesta fija para /menu/v2 y /menu/semana (p.ej. un «no factible»
+    // con su diagnóstico). Ver `por-que-no-hay-menu.spec.js`.
+    respuestaMenu: null,
     // ⚠️ El catálogo de `/alimentos`, sembrable (12 de septiembre). El de
     // abajo no trae ninguna categoría de SUPLEMENTO, así que ninguna prueba
     // podía mirar cómo se agrupan — que es justo lo que se pidió arreglar.
@@ -408,6 +411,8 @@ export function crearFakeSupabase(opciones = {}) {
       if (Object.keys(cfg).length > 0) {
         estado.vocabulario = cfg.vocabulario && typeof cfg.vocabulario === "object"
           ? JSON.parse(JSON.stringify(cfg.vocabulario)) : null;
+        estado.respuestaMenu = cfg.respuestaMenu && typeof cfg.respuestaMenu === "object"
+          ? JSON.parse(JSON.stringify(cfg.respuestaMenu)) : null;
         estado.catalogo = cfg.catalogo && typeof cfg.catalogo === "object"
           ? JSON.parse(JSON.stringify(cfg.catalogo)) : null;
       }
@@ -655,6 +660,13 @@ export function crearFakeSupabase(opciones = {}) {
 
     if (ruta === "/menu/v2") {
       estado.peticionesMenu.push(JSON.parse(cuerpo || "{}"));
+      // ⚠️ AÑADIDO (12 septiembre) — poder sembrar una respuesta de «no hay
+      // menú» ENTERA, con sus `choque_de_patologias` y sus
+      // `se_intento_relajando`. Hasta hoy el falso solo sabía dar menús o
+      // colgarse, así que la pantalla de «no hemos encontrado un menú» no la
+      // probaba nadie -- y resultó que escondía justo lo que hace falta para
+      // saber por qué.
+      if (estado.respuestaMenu) return responder(200, estado.respuestaMenu);
       // ⚠️ AÑADIDO (24 agosto) — con `menusDistintos`, cada llamada devuelve
       // un alimento propio además del menú base. Sin esto no se puede
       // distinguir "la compra suma los dos menús" de "suma uno dos veces":
