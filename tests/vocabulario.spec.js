@@ -734,8 +734,8 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     }
     const delMotor = JSON.parse(fs.readFileSync(FICHA, "utf-8")).patologias;
     const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-    const i = app.indexOf("const PATOLOGIAS = [");
-    expect(i, "App.jsx ya no tiene PATOLOGIAS").toBeGreaterThan(-1);
+    const i = app.indexOf("const PATOLOGIAS_RESPALDO = [");
+    expect(i, "App.jsx ya no tiene PATOLOGIAS_RESPALDO").toBeGreaterThan(-1);
     const bloque = app.slice(i, app.indexOf("\n];", i));
 
     for (const m of bloque.matchAll(/\{ key: "([a-z0-9_]+)",( soloVeterinario: true,)?/g)) {
@@ -774,7 +774,7 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
       fs.readFileSync(path.join(RAIZ, "preguntas_por_patologia.json"), "utf-8")).preguntas;
 
     const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-    const i = app.indexOf("const PATOLOGIAS = [");
+    const i = app.indexOf("const PATOLOGIAS_RESPALDO = [");
     const bloque = app.slice(i, app.indexOf("\n];", i));
     const visibles = [...bloque.matchAll(/\{ key: "([a-z0-9_]+)",( soloVeterinario: true,)?/g)]
       .filter((m) => !m[2]).map((m) => m[1]);
@@ -821,7 +821,7 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
       app.indexOf(desde)));
     const claves = (texto) => [...texto.matchAll(/\{ key: "([a-z0-9_]+)"/g)].map((m) => m[1]);
     const ofrece = new Set([
-      ...claves(trozo("const PATOLOGIAS = [", "\n];")),
+      ...claves(trozo("const PATOLOGIAS_RESPALDO = [", "\n];")),
       // ⚠️ `let` y no `const` desde el 11 de septiembre: la lista la sirve el
       // motor y esta tabla es el RESPALDO. Se sigue leyendo de aquí a
       // propósito -- el respaldo es lo que se pinta cuando la API duerme, así

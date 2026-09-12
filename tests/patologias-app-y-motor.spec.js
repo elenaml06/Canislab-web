@@ -2,6 +2,14 @@
 //
 // POR QUÉ EXISTE (8 de septiembre)
 //
+// ⚠️ DESDE EL 12 DE SEPTIEMBRE DE 2026 ESTO MIRA EL RESPALDO, y hay que saberlo.
+// La lista de verdad -- las 47, sus dos etiquetas y sus nueve aparatos -- la
+// sirve `GET /vocabulario` y la app la lee; lo que queda escrito en `App.jsx`
+// es `PATOLOGIAS_RESPALDO`, para cuando Render duerme. Que el respaldo siga
+// cuadrando con el motor es lo que se comprueba aquí, y que la app LEA de
+// verdad lo que le sirve el motor lo comprueba `patologias-del-motor.spec.js`
+// sembrando etiquetas inventadas, más el BLOQUE 98 de la batería del motor.
+//
 // `App.jsx` lleva su propia lista `PATOLOGIAS` con un campo `segura`, y ese
 // campo es EL MISMO dato que `formulable` en `patologias.json` del motor: si
 // a este perro se le genera menú automático o se le para en seco. Su propio
@@ -67,12 +75,12 @@ function derivacionDelMotor() {
 }
 
 // Las patologías que ofrece la app, con su `segura`. Se lee del bloque
-// `const PATOLOGIAS = [...]` de App.jsx, sin comentarios: los comentarios de
+// `const PATOLOGIAS_RESPALDO = [...]` de App.jsx, sin comentarios: los comentarios de
 // ese bloque citan claves y valores, y contarlos daría falsos positivos.
 function patologiasQueOfreceLaApp() {
   const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-  const ini = app.indexOf("const PATOLOGIAS = [");
-  if (ini < 0) throw new Error("no se encuentra `const PATOLOGIAS` en App.jsx");
+  const ini = app.indexOf("const PATOLOGIAS_RESPALDO = [");
+  if (ini < 0) throw new Error("no se encuentra `const PATOLOGIAS_RESPALDO` en App.jsx");
   const bloque = app.slice(ini, app.indexOf("\n];", ini))
     .split("\n").map((l) => l.replace(/^\s*\/\/.*$/, "")).join("\n");
   const salida = new Map();
