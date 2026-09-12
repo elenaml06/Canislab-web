@@ -19,6 +19,42 @@ export const API_BASE = import.meta.env?.VITE_API_BASE || "https://canislab-api.
 // lo bajan por variable de entorno para no tardar un minuto cada uno.
 export const TIEMPO_MAXIMO_PETICION_MS = Number(import.meta.env?.VITE_TIMEOUT_API_MS) || 45000;
 
+// ⚠️ CUÁNTO ESPERAR CUANDO SE PIDEN VARIOS MENÚS DE GOLPE (12 de septiembre
+// de 2026), Y ESTO ERA UN FALLO EN PRODUCCIÓN.
+//
+// CASO REAL: «No hemos encontrado un menú que cumpla», con CUALQUIER perro,
+// en rawku.app y en los despliegues de Vercel. No era el motor: era el reloj.
+//
+// Medido contra la API desplegada, que es la lenta de verdad:
+//
+//     1 menú ....... 10,6 s
+//     3 menús ...... 30,7 s
+//     5 menús ...... 50,7 s
+//     7 menús ...... 70,5 s   <- la semana entera, que es lo que pide la app
+//
+// Y la app cortaba a los 45. O sea que la semana NUNCA cabía: se abortaba a
+// mitad y la pantalla lo contaba como si el perro no tuviera menú posible.
+//
+// ⚠️ Y POR QUÉ NO LO VIO NINGUNA PRUEBA: `playwright.real.config.js` --la
+// única que habla con el motor de verdad-- le da 120 s, con el comentario «el
+// motor tarda de verdad; con 3 s no le daría tiempo ni a empezar». Así que la
+// prueba que existe para cazar desacuerdos entre la app y el motor estaba
+// tapando justo éste. Reproducido apuntándola a la API desplegada con los 45 s
+// de producción: las tres pruebas se caen.
+//
+// La semana no se puede partir en siete llamadas: el presupuesto semanal de
+// seguridad crónica se reparte DENTRO de esa única llamada, y ése es el motivo
+// de que exista `/menu/semana`. Así que lo que se ajusta es la espera.
+export function tiempoParaVariosMenus(cuantos) {
+  const n = Math.max(1, Number(cuantos) || 1);
+  // Si alguien ha puesto un tope a mano (las pruebas), se respeta y no se sube.
+  if (Number(import.meta.env?.VITE_TIMEOUT_API_MS)) return TIEMPO_MAXIMO_PETICION_MS;
+  // 25 s de arranque en frío + 18 s por menú, con techo. Con 7 son 151 s, que
+  // es el doble de lo medido: el margen es a propósito, porque Render va más
+  // lento cuanto más dormido está.
+  return Math.min(180000, 25000 + 18000 * n);
+}
+
 // fetch con límite de tiempo. Si el servidor no contesta, aborta y lanza un
 // error marcado con `esTimeout`, que es lo que permite distinguir "no
 // contesta" (reintentable) de "contesta que no se puede" (no reintentable).
