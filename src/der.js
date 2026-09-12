@@ -243,8 +243,7 @@ export function pctPesoAdultoFediaf(meses, pesoAdultoEstimado) {
 // Fuera del rango de FEDIAF (8 semanas a 1 año) devuelve el peso de la raza si
 // lo hay, y si no null: no se inventa nada.
 export function pesoAdultoDesdeCurvaFediaf(pesoActualKg, meses,
-                                           pesoMedioRaza = null,
-                                           pesoMinRaza = null, pesoMaxRaza = null) {
+                                           pesoMedioRaza = null) {
   const p = Number(pesoActualKg);
   if (!p || p <= 0 || !meses) return pesoMedioRaza ?? null;
 
@@ -273,9 +272,16 @@ export function pesoAdultoDesdeCurvaFediaf(pesoActualKg, meses,
   // predice): se usa la última, la de los gigantes, y el recorte de la raza la
   // acota si se sabe.
   if (estimado === null) estimado = candidato;
-  // No salirse de lo que la raza puede pesar: la estimación es una estimación.
-  if (pesoMinRaza) estimado = Math.max(estimado, pesoMinRaza);
-  if (pesoMaxRaza) estimado = Math.min(estimado, pesoMaxRaza);
+  // ⚠️ AQUÍ SE RECORTABA AL RANGO DE LA RAZA, Y SE HA QUITADO (12 de
+  // septiembre, noche). El motivo, con su medida, está entero en
+  // `der.peso_adulto_desde_curva` del motor; en corto: las curvas de WALTHAM
+  // -- las que publica Royal Canin para veterinarios -- sacan el peso adulto
+  // de la trayectoria del propio cachorro y usan el estándar de raza solo para
+  // elegir la banda, y MyVetDiet llama a su tabla de 180 razas «pesos
+  // indicativos». Medido sobre las 270 razas a 4, 6 y 9 meses: el recorte
+  // movía 47 de 1620 casos, mediana 3,0 % de kcal y 6,9 % el peor, y casi
+  // siempre hacia ARRIBA en cachorros de raza gigante, que es donde FEDIAF
+  // avisa de deformidades esqueléticas por sobrealimentar.
   return Math.round(estimado * 10) / 10;
 }
 

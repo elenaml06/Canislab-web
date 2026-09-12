@@ -141,6 +141,46 @@ test.describe("el crecimiento sin peso adulto: primero FEDIAF, y SACN5 solo fuer
     expect(got).toBe(kcal(140, 5));
   });
 
+  test("el peso adulto NO se recorta al rango de la raza", () => {
+    // ⚠️ AQUÍ HABÍA UN RECORTE, y se quitó el 12 de septiembre por la noche.
+    // `pesoAdultoDesdeCurvaFediaf` recibía `pesoMinRaza` y `pesoMaxRaza` y
+    // acotaba la estimación entre los dos, «porque una estimación no debe
+    // sacar a un perro de lo que su raza puede pesar». Suena prudente y empuja
+    // hacia el lado malo justo donde más caro sale.
+    //
+    // Lo que hacen los demás, mirado antes de tocarlo: las curvas de WALTHAM
+    // -- 50.000 perros, las que publica Royal Canin para veterinarios -- sacan
+    // el peso adulto de la trayectoria del propio cachorro y usan el estándar
+    // de raza solo para ELEGIR la banda; MyVetDiet, con más de 180 razas en
+    // tabla, las llama «pesos indicativos».
+    //
+    // MEDIDO sobre las 270 razas a 4, 6 y 9 meses: movía 47 de 1620 casos,
+    // mediana 3,0 % de kcal y 6,9 % el peor, y casi siempre hacia ARRIBA en
+    // cachorros que apuntan por debajo del mínimo de su raza. Al Mastín
+    // Español de 9 meses le añadía 152 kcal al día, y es un cachorro de raza
+    // gigante -- donde FEDIAF avisa de deformidades esqueléticas por
+    // sobrealimentar.
+    //
+    // Los dos casos son los dos extremos, y se le pasa además un tercer
+    // argumento con el peso de la raza para comprobar que ya no tira de nada.
+    expect(pesoAdultoDesdeCurvaFediaf(37.37, 9),
+      "Mastín Español de 9 meses: la curva dice 47,1 kg y el mínimo de su raza es 52"
+    ).toBeCloseTo(47.1, 1);
+    expect(pesoAdultoDesdeCurvaFediaf(37.37, 9, 52),
+      "y el peso de la raza, que sigue existiendo como respaldo, no puede tirar del resultado"
+    ).toBeCloseTo(47.1, 1);
+    expect(pesoAdultoDesdeCurvaFediaf(6.43, 9),
+      "Caniche Enano de 9 meses: la curva dice 7,4 kg y el máximo de su raza es 7"
+    ).toBeCloseTo(7.4, 1);
+    // ⚠️ Y NO VALE MIRAR `.length`: cuenta los argumentos hasta el primero con
+    // valor por defecto, y con recorte y sin él vale 2 igual. Lo que sí
+    // distingue es pasárselos: si alguien devuelve las dos líneas, este
+    // cachorro sale con el 52 de su raza en vez de con el 47,1 de su curva.
+    expect(pesoAdultoDesdeCurvaFediaf(37.37, 9, null, 52, 60),
+      "aunque se le pasen el mínimo y el máximo de la raza, no puede recortar nada"
+    ).toBeCloseTo(47.1, 1);
+  });
+
   test("sin edad ni peso adulto se queda en el lado prudente", () => {
     const got = calcularDER(5, "cachorro_crecimiento", 1, false, {});
     expect(got).toBe(kcal(140, 5));

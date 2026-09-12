@@ -5008,9 +5008,13 @@ function datosDeUnPerro(perfil) {
   // trayectoria (igual que ya hacía der.py en el servidor) -- la media
   // de la raza queda solo como último recurso, cuando faltan datos.
   const pesoAdultoMedioRaza = perfil.raza?.pesoMedio || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+  // ⚠️ SIN EL RANGO DE LA RAZA (12 de septiembre, noche): aquí se le pasaban
+  // `pesoMin` y `pesoMax` para recortar la estimación, y ese recorte ya no
+  // existe -- el peso adulto lo decide la curva del propio cachorro. La tabla
+  // de razas sigue sirviendo para el peso medio de respaldo (cuando no hay
+  // edad ni peso con los que calcular) y para lo que se le ENSEÑA al dueño.
   const pesoAdultoEsperado = pesoAdultoDesdeCurva(
-    Number(perfil.pesoActual), edad?.totalMeses, pesoAdultoMedioRaza,
-    perfil.raza?.pesoMin, perfil.raza?.pesoMax
+    Number(perfil.pesoActual), edad?.totalMeses, pesoAdultoMedioRaza
   ) || pesoAdultoMedioRaza;
   const etapaCalculada = determinarEtapa(edad, pesoAdultoEsperado);
   // ⚠️ `objetivoVigente` y no `pesoIdealDesdeCondicion` (25 agosto): el
