@@ -125,9 +125,52 @@ test("a un TUTOR se le sigue parando en seco: eso no se ha tocado", async ({ pag
   for (let i = 0; i < 3; i += 1) await noes.nth(i).click();
   await page.getByRole("button", { name: "Sí", exact: true }).last().click();
 
-  const hepatopatia = page.getByText("Hepatopatía / predisposición al cobre", { exact: true });
-  await expect(hepatopatia).toBeVisible();
-  await hepatopatia.click();
+  // ⚠️ REESCRITA EL 11 DE SEPTIEMBRE, y hay que decir por qué para que nadie
+  // la devuelva a como estaba.
+  //
+  // Aquí el tutor MARCABA «Hepatopatía» y chocaba con el muro. Ya no puede:
+  // Elena, ese día, «Un dueño, obviamente, no puede marcar casillas de
+  // veterinario, ni siquiera le deberían salir», y la hepatopatía es una de
+  // las 15 que `quien_formula_cada_patologia.json` marca `solo_veterinario`.
+  //
+  // Y no es que el muro sobre: es que ahora se llega a él por el único camino
+  // que queda, que es **el perro que ya la trae puesta** porque se la puso su
+  // veterinario. Medido ese día: después del filtro, NINGUNA patología que el
+  // dueño pueda marcar es `segura: false`. Así que la mitad peligrosa que esta
+  // prueba vigila -- que quitarle el muro al veterinario no se lo quite al
+  // dueño -- se comprueba justo por ahí.
+  await expect(page.getByText("Hepatopatía / predisposición al cobre", { exact: true }),
+    "al dueño le sigue saliendo la casilla de hepatopatía, que es de veterinario")
+    .toHaveCount(0);
+});
+
+test("y si su veterinario se la puso, el muro le sigue parando", async ({ page, request }) => {
+  // El único camino que queda hasta el muro, y es el que importa: el perro
+  // trae la hepatopatía puesta desde su ficha clínica. El dueño la VE (si se
+  // escondiera, creería que su perro no tiene nada y al guardar se perdería),
+  // no la puede quitar, y al terminar el paso choca igual que antes.
+  await configurar(request, {
+    rolProfesional: false, rolVerificado: false,
+    perros: [{ ...PACIENTE, patologias: ["hepatopatia"], patologia_si: "si" }],
+    accesos: [], menus: [],
+  });
+  await page.goto("/");
+  await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+  await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await page.getByText("Nombre y sexo").waitFor();
+  await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
+
+  const hepatopatia = page.getByRole("button",
+    { name: "Hepatopatía / predisposición al cobre", exact: true });
+  await expect(hepatopatia,
+    "el perro la trae puesta y no se ve: el dueño creería que no tiene nada")
+    .toHaveCount(1);
+  await expect(hepatopatia, "puede quitarla, y eso es de su veterinario").toBeDisabled();
+
+  // Las otras tres preguntas, para poder terminar el paso.
+  const noes = page.getByRole("button", { name: "No", exact: true });
+  for (let i = 0; i < 3; i += 1) await noes.nth(i).click();
 
   // Y al terminar, el muro. Se comprueba AQUÍ y no al marcarla porque el
   // asistente del dueño no enseña el aviso en la casilla: le para al
@@ -164,12 +207,95 @@ test("al marcar una patología ve el tope, qué no se toca y qué decide él", a
   await expect(page.getByText(/POR DEBAJO de algún mínimo de FEDIAF/)).toBeVisible();
 });
 
+// ─── HASTA DÓNDE PUEDE MOVER CADA CIFRA ─────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (10 septiembre): «tenemos que estipular qué porcentajes
+// puede variar el veterinario y cuáles NO, y hasta qué punto o qué techo,
+// dentro de cada patología, de cada caso concreto».
+//
+// La ventana la calcula el backend y la sirve `GET /patologias` en el bloque
+// `margen_profesional`, con la PROCEDENCIA de cada extremo. Aquí se comprueba
+// que llega a la pantalla, porque un margen que solo vive en un JSON del
+// servidor no le sirve a quien firma la pauta -- es el hueco de los ocho
+// `avisos_extra`, escritos con su fuente y sin llegar a nadie.
+test("al marcar una patología ve hasta dónde se puede mover el tope, y de dónde sale cada extremo", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+
+  await page.getByLabel("Buscar patología").fill("renal");
+  await page.getByText("Insuficiencia renal crónica", { exact: true }).click();
+
+  await expect(page.getByText("Hasta dónde se puede mover")).toBeVisible();
+  // Los dos extremos, cada uno con de dónde sale. El de abajo es el mínimo de
+  // FEDIAF; el de arriba, en el renal, es LEY.
+  await expect(page.getByText(/1160 mg.*mínimo de FEDIAF/)).toBeVisible();
+  await expect(page.getByText(/1420,45 mg.*Reglamento \(UE\) 2020\/354/)).toBeVisible();
+  // Y las dos frases que NO dicen lo mismo: bajar del suelo se puede y se
+  // firma; pasar del techo legal no lo puede hacer nadie.
+  await expect(page.getByText(/Por debajo de 1160 deja de ser una dieta completa/)).toBeVisible();
+  await expect(page.getByText(/Ese techo no lo pasa nadie, ni tú ni el motor/)).toBeVisible();
+});
+
+// ⚠️ Y LO QUE LA PANTALLA NO PUEDE AFIRMAR. El Reglamento (UE) 2020/354 NO da
+// un rango de maniobra por nutriente: da un techo o un suelo por objetivo, y su
+// ±15 % es tolerancia analítica de etiquetado, no margen clínico. Enseñar la
+// ventana como «muévete libremente aquí dentro» sería inventarse una fuente.
+// Ver P-03 de PREGUNTAS_ABIERTAS.md, que sigue abierta.
+test("la ventana se enseña como los bordes, no como permiso para moverse dentro", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+  await page.getByLabel("Buscar patología").fill("renal");
+  await page.getByText("Insuficiencia renal crónica", { exact: true }).click();
+
+  await expect(page.getByText(
+    /Son los bordes, no una recomendación de moverse dentro de ellos/)).toBeVisible();
+});
+
+// ─── EL SEGUNDO ESCALÓN DE LA GRASA, QUE NO SE VEÍA ─────────────────────────
+//
+// El tope condicional existe en el motor desde el 8 de septiembre (SACN5 Tabla
+// 67-3 baja la grasa de 37,5 a 25 si el perro además es obeso o
+// hipertrigliceridémico) y no salía por ninguna puerta: quien leía la ficha
+// veía 37,5 y creía que era el único número.
+test("la pancreatitis enseña su segundo tope de grasa y con qué se activa", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+  await page.getByLabel("Buscar patología").fill("pancrea");
+  await page.getByText("Pancreatitis", { exact: true }).click();
+
+  await expect(page.getByText(/Grasa ≤ 37,5 g\/1000 kcal/)).toBeVisible();
+  await expect(page.getByText(/Y si además marcas obesidad o hiperlipidemia/)).toBeVisible();
+  await expect(page.getByText(/Grasa ≤ 25 g\/1000 kcal/)).toBeVisible();
+});
+
+// ⚠️ CORREGIDO (8 septiembre) — ESTE TEST USABA `artrosis` COMO EJEMPLO DE
+// «PATOLOGÍA SIN TOPES», Y ARTROSIS SÍ TIENE UNO.
+//
+// El motor le pone un SUELO de EPA+DHA de 1 g/1000 kcal (SACN5 cap.34, Tabla
+// 34-2). Lo que hacía pasar el test era el propio servidor de mentira, que
+// la servía con `suelos: []` -- o sea que la pantalla se comprobaba contra
+// una ficción. Es literalmente el fallo de `dentro_de_rango` otra vez: «las
+// pruebas pasaban, porque el Supabase de mentira devolvía el nombre
+// equivocado igual que el código».
+//
+// Ahora son DOS pruebas, y cada una comprueba lo suyo:
+//   · hipotiroidismo, que sí es de verdad una patología sin ningún número
+//     (su restricción es por ALIMENTO: grelo y nabo);
+//   · artrosis, que tiene que ENSEÑAR su suelo -- si no, un veterinario
+//     firma creyendo que esa patología no le impone nada al menú.
 test("una patología sin topes lo dice, y sigue diciendo qué decide él", async ({ page, request }) => {
+  await entrarComoVeterinario(page, request);
+  await page.getByLabel("Buscar patología").fill("hipotiroid");
+  await page.getByText("Hipotiroidismo", { exact: true }).click();
+
+  await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
+  await expect(page.getByText("Lo decides tú")).toBeVisible();
+});
+
+test("una patología con SUELO enseña el suelo, no dice que no mueve nada", async ({ page, request }) => {
   await entrarComoVeterinario(page, request);
   await page.getByLabel("Buscar patología").fill("artrosis");
   await page.getByText("Artrosis / osteoartritis", { exact: true }).click();
 
-  await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
+  await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toHaveCount(0);
+  await expect(page.getByText(/EPA/i).first()).toBeVisible();
   await expect(page.getByText("Lo decides tú")).toBeVisible();
 });
 
@@ -194,7 +320,12 @@ test("con dos patologías se ven los topes de las dos", async ({ page, request }
   await expect(page.getByText("Insuficiencia renal crónica")).toHaveCount(2);
   await expect(page.getByText("Pancreatitis", { exact: true })).toHaveCount(2);
   await expect(page.getByText(/Fósforo ≤ 1200 mg\/1000 kcal/).first()).toBeVisible();
-  await expect(page.getByText(/Grasa ≤ 20 g\/1000 kcal/).first()).toBeVisible();
+  // 8 sep: 20 -> 37,5. La grasa de la pancreatitis se cambió en el motor por
+  // la regla de fuentes (SACN5 Tabla 67-3 manda sobre Merck) y el servidor de
+  // mentira se actualizó, pero esta línea se quedó con el número viejo y la
+  // prueba se puso roja. Es la prueba haciendo su trabajo: el número que pinta
+  // la pantalla del veterinario no puede ir por libre.
+  await expect(page.getByText(/Grasa ≤ 37,5 g\/1000 kcal/).first()).toBeVisible();
 });
 
 
@@ -235,7 +366,7 @@ test("un aparato con algo marcado se abre solo, y lo cuenta", async ({ page, req
   // Lo que el paciente TIENE no puede quedarse escondido detrás de un clic:
   // al volver a abrir su ficha dentro de tres meses tiene que verse.
   await entrarComoVeterinario(page, request, {
-    perros: [{ ...PACIENTE, patologias: ["renal", "oxalato"], patologia_si: true }],
+    perros: [{ ...PACIENTE, patologias: ["renal", "oxalato"], patologia_si: "si" }],
   });
 
   await expect(page.getByRole("button", { name: /^Renal y urinario · 2/ })).toBeVisible();

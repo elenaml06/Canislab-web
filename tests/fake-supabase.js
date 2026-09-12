@@ -54,20 +54,41 @@ export const PERRO_DE_PRUEBA = {
   peso_adulto_esperado: null,
   condicion_idx: 2,
   etapa: "adulto",
-  tamano: "grande",
+  tamano: "Grande",                    // uno de los SEIS del motor; en minúscula no es ninguno
   sexo: "hembra",
   castrado: true,
   actividad: "media",
-  raza: "Pastor alemán",
+  // ⚠️ «Pastor Alemán», CON MAYUSCULA (11 septiembre). Aquí ponía «Pastor
+  // alemán», que NO existe en la lista de razas -- ni en la del motor
+  // (`razas.json`) ni en la de la app. `razaDesdeNombre` devolvía
+  // `{nombre: "Pastor alemán"}` a secas, sin tamaño ni peso medio, así que
+  // durante meses TODAS las pruebas que usan este perro corrían contra un
+  // mestizo con nombre de raza. El Supabase de mentira decía algo que la app
+  // de verdad no puede guardar, que es la forma exacta del fallo que ya tiene
+  // escrito `patologias-app-y-motor.spec.js`: «las pruebas siguen pasando
+  // contra una ficción». Lo vigila ahora `vocabulario.spec.js`.
+  raza: "Pastor Alemán",
   fecha_nacimiento: "2021-05-14",
   dieta_actual: null,
-  alergia_si: false,
+  // ⚠️ LOS CUATRO «SI/NO» VAN EN CADENA, NO EN BOOLEANO (11 septiembre).
+  //
+  // Aquí ponía `false`, y la app solo ESCRIBE "si"/"no"/null: es lo que pinta
+  // `SiNoToggle` y lo que manda `guardarPerro`. O sea que esta fila tenía una
+  // forma que la app de verdad no produce, y con ella la pantalla de alergias
+  // y patologías se abría con las cuatro preguntas SIN CONTESTAR y las listas
+  // escondidas -- sin que ninguna prueba lo viera, porque ninguna las miraba.
+  // Es el mismo fallo que las razas con la tilde cambiada: una prueba que pasa
+  // contra una ficción.
+  //
+  // El booleano sigue probado a propósito, en `bugs-produccion.spec.js`: una
+  // fila vieja puede traerlo y `perfilDesdeSupabase` lo normaliza.
+  alergia_si: "no",
   alergias: [],
-  otros_evitar_si: false,
+  otros_evitar_si: "no",
   otros_evitar: [],
-  categorias_excluidas_si: false,
+  categorias_excluidas_si: "no",
   categorias_excluidas: [],
-  patologia_si: false,
+  patologia_si: "no",
   patologias: [],
   created_at: "2024-01-01T00:00:00.000Z",
   updated_at: "2024-01-01T00:00:00.000Z",
@@ -81,9 +102,9 @@ export const SEGUNDO_PERRO_DE_PRUEBA = {
   id: "22222222-2222-4222-8222-222222222222",
   nombre: "Cairo",
   peso_actual: 8.2,
-  tamano: "pequeño",
+  tamano: "Pequeño",                   // el de «Bulldog Francés» en razas.json
   sexo: "macho",
-  raza: "Bulldog francés",
+  raza: "Bulldog Francés",   // con F mayúscula, que es como se llama en la lista
   created_at: "2024-06-01T00:00:00.000Z",
 };
 
@@ -157,6 +178,12 @@ export function crearFakeSupabase(opciones = {}) {
     // Y el caso de "con esas cantidades no cuadra", que es donde se ofrece
     // una alternativa sin aplicarla.
     formularNoCuadra: false,
+    // ⚠️ AÑADIDO (11 septiembre) — lo que el motor dice haber RECORTADO de los
+    // objetivos que puso el veterinario. Se siembra desde la prueba, con la
+    // forma exacta de la API: aplicar el numero de FEDIAF en lugar del suyo sin
+    // decirlo le dejaria firmando algo que no escribio, asi que que se PINTE es
+    // parte del trato y hay que poder comprobarlo.
+    objetivosAjustados: [],
     // Si es true, /menu/v2 y /menu/semana NO responden nunca: simula la
     // API dormida en Render, que es lo que dejaba el "Calculando..."
     // colgado para siempre.
@@ -187,8 +214,24 @@ export function crearFakeSupabase(opciones = {}) {
     // exceso de hueso, hígado...). Vacío por defecto: las pruebas que no van
     // de esto siguen viendo el menú limpio de siempre.
     problemasSeguridad: [],
+    // ⚠️ AÑADIDO (10 septiembre) — los avisos de patología que la API manda
+    // con CADA menú (`avisos_patologia`). Se pueden pedir desde la prueba para
+    // comprobar que llegan a la pantalla: el servidor de verdad los mandaba
+    // desde el 29 de agosto y la app los tiraba en `respuestaApiAMenu`.
+    avisosPatologia: [],
     // El caso de la pancreatitis: solo sale en el último peldaño.
     soloSaleEnElUltimoPeldano: false,
+    // ⚠️ AÑADIDO (11 septiembre) — lo que contesta `GET /vocabulario`.
+    //
+    // Va a `null` por defecto Y ESO ES LO QUE SE QUIERE: sin él, el endpoint
+    // contesta 404 y la app cae a sus listas de respaldo, que es como corren
+    // las demás pruebas de este repo. Aquí NO hay una copia del vocabulario
+    // del motor a propósito -- sería la tercera copia de la misma lista, que
+    // es el fallo que todo esto viene a evitar. Quien lo necesite lo siembra
+    // con palabras INVENTADAS: solo así se distingue «la app lo ha leído del
+    // motor» de «la app está pintando su respaldo», que a simple vista se ven
+    // igual.
+    vocabulario: null,
     // Lo que la cuenta tenga guardado de su clínica (y de su nº de
     // colegiado, que se escribe por el mismo PATCH).
     clinica: {},
@@ -301,6 +344,8 @@ export function crearFakeSupabase(opciones = {}) {
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
       // No pegajoso, como los demás interruptores que cambian una respuesta.
       estado.formularNoCuadra = cfg.formularNoCuadra === true;
+      estado.objetivosAjustados = Array.isArray(cfg.objetivosAjustados)
+        ? cfg.objetivosAjustados.slice() : [];
       estado.pautaNoSeFirma = cfg.pautaNoSeFirma === true;
       if (cfg.olvidarFormular) {
         estado.peticionesFormular = [];
@@ -350,7 +395,16 @@ export function crearFakeSupabase(opciones = {}) {
       estado.menusDistintos = cfg.menusDistintos === true;
       estado.problemasSeguridad = Array.isArray(cfg.problemasSeguridad)
         ? cfg.problemasSeguridad.slice() : [];
+      estado.avisosPatologia = Array.isArray(cfg.avisosPatologia)
+        ? cfg.avisosPatologia.slice() : [];
       estado.soloSaleEnElUltimoPeldano = cfg.soloSaleEnElUltimoPeldano === true;
+      // Como `clinica`: leer no puede borrarlo. `leer()` hace un POST vacío
+      // para mirar el estado, y si esto se reseteara ahí, una prueba que
+      // siembre el vocabulario y luego lea perdería el escenario a mitad.
+      if (Object.keys(cfg).length > 0) {
+        estado.vocabulario = cfg.vocabulario && typeof cfg.vocabulario === "object"
+          ? JSON.parse(JSON.stringify(cfg.vocabulario)) : null;
+      }
       estado.sinColumnasDeClinica = cfg.sinColumnasDeClinica === true;
       // ⚠️ LEER NO PUEDE BORRAR (8 septiembre). `leer()` hace un POST con el
       // cuerpo vacío para mirar el estado, y aquí `clinica` no es un
@@ -504,6 +558,7 @@ export function crearFakeSupabase(opciones = {}) {
             datos_incompletos: {}, datos_dudosos: {},
           },
       problemas_seguridad: estado.problemasSeguridad,
+      avisos_patologia: estado.avisosPatologia,
     };
 
     if (estado.colgarGenerador && (ruta === "/menu/v2" || ruta === "/menu/semana")) {
@@ -567,6 +622,31 @@ export function crearFakeSupabase(opciones = {}) {
       });
     }
 
+    // ⚠️ LAS FRACCIONES DE LOS PREMIOS, PARA QUE ESTE SERVIDOR DEJE DE MENTIR
+    // EN ALGO QUE SÍ CAMBIA EL MENÚ (11 de septiembre de 2026).
+    //
+    // CASO REAL, y lo encontró Elena probándolo en la app: «he probado lo de los
+    // premios y ponga muchos o ninguno me da las mismas kcal». Eran DOS fallos
+    // encadenados, y este servidor tapaba el segundo:
+    //
+    //   1. La app pintaba `derObjetivo` -- lo que MANDA -- en vez de las kcal
+    //      que devuelve el servidor. Arreglado en App.jsx.
+    //   2. Y aquí `/menu/v2` devolvía SIEMPRE el mismo menú, con las mismas
+    //      kcal, dijera lo que dijera la petición. Así que ninguna prueba de
+    //      esta carpeta podía ver el fallo 1: los dos números coincidían porque
+    //      el de mentira no se movía nunca.
+    //
+    // Es literalmente lo que ya está escrito en la cabecera de `menusDistintos`
+    // y en el arreglo de `/patologias` del 8 de septiembre: «un servidor de
+    // mentira que miente solo comprueba lo que ya sabes».
+    //
+    // Estas cuatro fracciones son las de `NIVELES_DE_PREMIOS` en `main.py` del
+    // motor, y NO se pueden desincronizar en silencio: las compara
+    // `tests/vocabulario.spec.js` contra el fichero vivo.
+    const FRACCION_DE_PREMIOS = {
+      ninguno: 0, alguno: 0.05, hasta_el_maximo: 0.10, mas_del_maximo: 0.20,
+    };
+
     if (ruta === "/menu/v2") {
       estado.peticionesMenu.push(JSON.parse(cuerpo || "{}"));
       // ⚠️ AÑADIDO (24 agosto) — con `menusDistintos`, cada llamada devuelve
@@ -583,7 +663,32 @@ export function crearFakeSupabase(opciones = {}) {
           aviso_composicion: estado.avisoComposicion,
         });
       }
-      return responder(200, { ...MENU_FALSO, aviso_composicion: estado.avisoComposicion });
+      // La ración pesa las kcal QUE QUEDAN después de los premios, igual que
+      // hace el motor de verdad, y los gramos bajan con ellas. Sin premios
+      // (`premios_nivel` ausente o «ninguno») esto devuelve exactamente lo de
+      // siempre y ninguna prueba anterior cambia.
+      const _p = JSON.parse(cuerpo || "{}");
+      const _frac = FRACCION_DE_PREMIOS[_p.premios_nivel] || 0;
+      const _der = Number(_p.der_objetivo) || 0;
+      if (_frac > 0 && _der > 0) {
+        const _factor = 1 - _frac;
+        return responder(200, {
+          ...MENU_FALSO,
+          menu: Object.fromEntries(
+            Object.entries(MENU_FALSO.menu).map(([n, g]) => [n, Math.round(g * _factor)])),
+          kcal_total: Math.round(_der * _factor),
+          gramos_total: Math.round(
+            Object.values(MENU_FALSO.menu).reduce((a2, b2) => a2 + b2, 0) * _factor),
+          problemas_seguridad: [
+            ...(MENU_FALSO.problemas_seguridad || []),
+            `PREMIOS: este menú está calculado contando ${Math.round(_der * _frac)} kcal al día ` +
+            `fuera de su ración (${Math.round(_frac * 100)} % de lo que come).`,
+          ],
+          aviso_composicion: estado.avisoComposicion,
+        });
+      }
+      return responder(200, { ...MENU_FALSO, kcal_total: _der || undefined,
+                              aviso_composicion: estado.avisoComposicion });
     }
     // Los tres caminos de edición devuelven el menú en "gramos", no en
     // "menu" -- igual que el backend de verdad.
@@ -704,6 +809,7 @@ export function crearFakeSupabase(opciones = {}) {
               nutriente: "fosforo", unidad: "mg", valor: 1200,
               minimo_fediaf_adulto: 1160, maximo_fediaf_adulto: null,
               margen_pct: 3.4,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 1160.0, suelo_de_donde: "minimo_fediaf:Fósforo", techo: 1420.45, techo_de_donde: "legal_ue:10_renal:fosforo", bajo_el_suelo_necesita_firma: true },
               fuente: "Freeman LM, dvm360 2009; WSAVA; IRIS",
               por_que: "Las dietas renales comerciales aportan 480-1000 mg/1000 kcal.",
             }],
@@ -719,9 +825,9 @@ export function crearFakeSupabase(opciones = {}) {
           urato: {
             nombre: "Urolitos de urato",
             formulable: false, formulable_por_profesional: true,
-            necesita_bajo_fediaf: false, motivo_no_formulable: "Purinas",
-            solo_en_adulto: true, en_crecimiento: "bloquear",
-            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            necesita_bajo_fediaf: true, motivo_no_formulable: "Purinas",
+            solo_en_adulto: false, en_crecimiento: null,
+            nutriente_frontera: "purinas", objetivo_terapeutico_por_1000kcal: 90,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [], suelos: [],
             aviso_profesional: "Restricción de purinas: fuera vísceras y carnes rojas.",
@@ -731,12 +837,13 @@ export function crearFakeSupabase(opciones = {}) {
             nombre: "Insuficiencia renal moderada-grave",
             formulable: false, formulable_por_profesional: true,
             necesita_bajo_fediaf: true, motivo_no_formulable: "Proteína bajo FEDIAF",
-            solo_en_adulto: true, en_crecimiento: "bloquear",
-            nutriente_frontera: "proteina", objetivo_terapeutico_por_1000kcal: 45,
+            solo_en_adulto: false, en_crecimiento: null,
+            nutriente_frontera: "proteina", objetivo_terapeutico_por_1000kcal: 42.5,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
               nutriente: "fosforo", unidad: "mg", valor: 1200,
               minimo_fediaf_adulto: 1160, maximo_fediaf_adulto: null, margen_pct: 3.4,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 1160.0, suelo_de_donde: "minimo_fediaf:Fósforo", techo: 1420.45, techo_de_donde: "legal_ue:10_renal:fosforo", bajo_el_suelo_necesita_firma: true },
               fuente: "IRIS 3-4", por_que: "Lo más estricto sin romper FEDIAF.",
             }],
             suelos: [],
@@ -745,14 +852,17 @@ export function crearFakeSupabase(opciones = {}) {
           },
           cardiopatia_b2: {
             nombre: "Cardiopatía ACVIM B2",
-            formulable: true, formulable_por_profesional: true,
+            formulable: true, formulable_por_profesional: false,
             necesita_bajo_fediaf: false, motivo_no_formulable: null,
             solo_en_adulto: true, en_crecimiento: "bloquear",
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
-              nutriente: "sodio", unidad: "mg", valor: 900,
-              minimo_fediaf_adulto: 300, maximo_fediaf_adulto: null, margen_pct: 200,
+              // 8 sep: 900 -> 739 (el techo legal del Reg. (UE) 2020/354 entrada 24).
+              // 10 sep: 739 -> 738,6, porque 739 redondeaba ese techo legal HACIA ARRIBA.
+              nutriente: "sodio", unidad: "mg", valor: 738.6,
+              minimo_fediaf_adulto: 290, maximo_fediaf_adulto: null, margen_pct: 154.7,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 290.0, suelo_de_donde: "minimo_fediaf:Sodio", techo: 738.64, techo_de_donde: "legal_ue:24_cardiaca:sodio", bajo_el_suelo_necesita_firma: true },
               fuente: "ACVIM 2019", por_que: "Restricción moderada en B2.",
             }],
             suelos: [],
@@ -762,38 +872,117 @@ export function crearFakeSupabase(opciones = {}) {
             nombre: "Pancreatitis",
             formulable: true, formulable_por_profesional: true,
             necesita_bajo_fediaf: false, motivo_no_formulable: null,
-            solo_en_adulto: true, en_crecimiento: "bloquear",
+            solo_en_adulto: true, en_crecimiento: "sin_tope",
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
             excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
             topes: [{
-              nutriente: "grasa", unidad: "g", valor: 20,
+              nutriente: "grasa", unidad: "g", valor: 37.5,   // 8 sep: 20 (Merck) -> 37,5 (SACN5 Tabla 67-3), por la regla de fuentes del motor
               minimo_fediaf_adulto: 13.75, maximo_fediaf_adulto: null,
               margen_pct: 45.5,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 13.75, suelo_de_donde: "minimo_fediaf:Grasa_total", techo: null, techo_de_donde: "sin_techo", bajo_el_suelo_necesita_firma: true },
               fuente: "Merck Veterinary Manual",
               por_que: "Literal de la fuente: «feeding a low-fat diet».",
+            }, {
+              nutriente: "proteina", unidad: "g", valor: 75,
+              minimo_fediaf_adulto: 52.1, maximo_fediaf_adulto: null,
+              margen_pct: 44.0,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 52.1, suelo_de_donde: "minimo_fediaf:Proteína_total", techo: null, techo_de_donde: "sin_techo", bajo_el_suelo_necesita_firma: true },
+              fuente: "SACN5 5ª ed., cap. 67, Tabla 67-3",
+              por_que: "«15 to 30 %» de materia seca.",
+            }],
+            // El segundo escalón: SACN5 Tabla 67-3 baja la grasa a 25 si el
+            // perro además es obeso o hipertrigliceridémico. Lo sirve la API
+            // desde el 10 de septiembre y aquí no estaba, así que la pantalla
+            // se comprobaba contra una ficha con un solo número.
+            topes_si_ademas: [{
+              nutriente: "grasa", unidad: "g", valor: 25,
+              minimo_fediaf_adulto: 13.75, maximo_fediaf_adulto: null,
+              margen_pct: 81.8,
+              margen_profesional: { sentido_de_la_cifra: "max", suelo: 13.75, suelo_de_donde: "minimo_fediaf:Grasa_total", techo: null, techo_de_donde: "sin_techo", bajo_el_suelo_necesita_firma: true },
+              requiere: ["obesidad", "hiperlipidemia"],
+              fuente: "SACN5 5ª ed., cap. 67, Tabla 67-3",
+              por_que: "«<=10% for obese and/or hypertriglyceridemic dogs».",
             }],
             suelos: [],
             aviso_profesional: null, aviso_profesional_crecimiento: null,
             aviso_general: null,
           },
-          artrosis: {
-            nombre: "Artrosis / osteoartritis",
+          // ⚠️ AÑADIDA (8 septiembre) — LA ÚNICA SIN NINGÚN LÍMITE NUMÉRICO.
+          // Hacía falta porque `vet-patologias.spec.js` usaba `artrosis`
+          // como «patología sin topes», y artrosis SÍ tiene un suelo de
+          // EPA+DHA en el motor (1 g/1000 kcal, SACN5 cap.34). Lo que
+          // ocultaba el desajuste era este mismo servidor de mentira, que
+          // la servía con `suelos: []`. Hipotiroidismo sí es de verdad una
+          // patología que no mueve ningún número: su restricción es por
+          // ALIMENTO (grelo y nabo).
+          hipotiroidismo: {
+            nombre: "Hipotiroidismo",
             formulable: true, formulable_por_profesional: true,
             necesita_bajo_fediaf: false, motivo_no_formulable: null,
             solo_en_adulto: false, en_crecimiento: null,
             nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
-            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null,
+            nota: "No hay tope numérico: la restricción es por alimento (grelo y nabo, Brassica rapa, ricos en progoitrina). No existe umbral canino publicado de crucíferas.",
             topes: [], suelos: [],
+            aviso_profesional: null, aviso_profesional_crecimiento: null,
+            aviso_general: "No se cambia la composición, salvo que se quitan el grelo y el nabo.",
+          },
+          artrosis: {
+            nombre: "Artrosis / osteoartritis",
+            formulable: true, formulable_por_profesional: true,
+            necesita_bajo_fediaf: false, motivo_no_formulable: null,
+            // 8 sep (tarde): el motor la pasó a `solo_en_adulto` al aplicar la
+            // Tabla 34-2 entera -- su techo de fósforo (1750) cae por debajo del
+            // mínimo de un cachorro (2250), así que en crecimiento se suelta con
+            // aviso. El mock decía todavía false/null y `patologias-app-y-motor`
+            // lo cazó: es exactamente para lo que existe esa prueba.
+            solo_en_adulto: true, en_crecimiento: "sin_tope",
+            nutriente_frontera: null, objetivo_terapeutico_por_1000kcal: null,
+            excluye_fruta: false, max_pct_kcal_grasa_si_ademas: null, nota: null,
+            topes: [],
+            suelos: [{
+              nutriente: "epa", unidad: "g", valor: 1,        // 8 sep: era "epa_dha" y la fuente (SACN5 Tabla 34-2) pide EPA SOLA
+              minimo_fediaf_adulto: 0.11, maximo_fediaf_adulto: null,
+              margen_pct: null,
+              fuente: "SACN5 5ª ed., cap. 34, Tabla 34-2",
+              por_que: "«0.4 to 1.1 %» de materia seca.",
+            }],
             aviso_profesional: null, aviso_profesional_crecimiento: null,
             aviso_general: null,
           },
         },
       });
     }
+    // ── EL VOCABULARIO DEL MOTOR ────────────────────────────────────────
+    // `GET /vocabulario` sirve las listas que la app tiene que reflejar (los
+    // niveles de actividad con sus DOS registros, las etapas, las categorías,
+    // los peldaños). Aquí solo se devuelve lo que la prueba haya sembrado: si
+    // no ha sembrado nada, 404 -- y la app se queda con su respaldo, que es lo
+    // que hace en las otras ~45 pruebas de este repo.
+    if (ruta === "/vocabulario") {
+      if (!estado.vocabulario) return responder(404, { detail: "sin vocabulario sembrado" });
+      return responder(200, estado.vocabulario);
+    }
+    // ⚠️ CON `especie`, COMO EL DE VERDAD (11 septiembre). Aquí faltaba ese
+    // campo, y el selector del veterinario lo usa para agrupar los alimentos
+    // por especie dentro de cada categoría: sin él, una prueba del árbol
+    // pasaría contra una forma que la API no devuelve. Es el mismo fallo que
+    // las razas con la tilde cambiada. `especie: null` es legítimo y lo
+    // devuelve la API de verdad para la verdura y los suplementos, así que hay
+    // de los dos.
     if (ruta === "/alimentos") {
       return responder(200, {
-        "Carne muscular": [{ nombre: "Carne muscular de pollo", kcal_100g: 110 }],
-        "Hueso carnoso": [{ nombre: "Hueso carnoso de pollo", kcal_100g: 150 }],
+        "Carne muscular": [
+          { nombre: "Carne muscular de pollo", kcal_100g: 110, especie: "Pollo" },
+          { nombre: "Muslo de pollo sin piel", kcal_100g: 120, especie: "Pollo" },
+          { nombre: "Carne muscular de vaca", kcal_100g: 130, especie: "Vaca" },
+        ],
+        "Hueso carnoso": [
+          { nombre: "Hueso carnoso de pollo", kcal_100g: 150, especie: "Pollo" },
+        ],
+        "Verduras y frutas": [
+          { nombre: "Zanahoria", kcal_100g: 35, especie: null },
+        ],
       });
     }
     // ── LA ESCALERA DE RELAJACIÓN ───────────────────────────────────────
@@ -901,6 +1090,7 @@ export function crearFakeSupabase(opciones = {}) {
                            "Carne muscular de pollo": Number(gramos["Carne muscular de pollo"]) || 400 };
       return responder(200, { factible: true, menu: completado, gramos_fijos_movidos: [],
                               peldano: peticion.peldano || "estricto",
+                              objetivos_ajustados: estado.objetivosAjustados,
                               estado: haceEstado(completado) });
     }
 

@@ -57,14 +57,17 @@ const PERRO_LOCAL = {
   raza: null,
   fecha_nacimiento: "2015-03-10",
   dieta_actual: "pienso",
-  alergia_si: true,
+  alergia_si: "si",
   alergias: ["pollo"],
-  otros_evitar_si: true,
+  otros_evitar_si: "si",
   otros_evitar: ["cerdo"],
-  categorias_excluidas_si: true,
+  categorias_excluidas_si: "si",
   categorias_excluidas: ["Hueso carnoso"],
-  patologia_si: false,
+  patologia_si: "no",
   patologias: [],
+  // El extremo, no el primero de la lista: `ninguno` se parece demasiado al
+  // vacío y la prueba pasaría aunque el campo se perdiera en el salto.
+  premios_nivel: "mas_del_maximo",
 };
 
 // Lo mismo que vigila ficha-ida-y-vuelta al guardar, aquí al migrar: si un
@@ -91,6 +94,7 @@ const CAMPOS = [
   ["categorias_excluidas",    "un perro sin dientes no puede masticar hueso"],
   ["patologia_si",            "cambia los límites de seguridad"],
   ["patologias",              "cambia los límites de seguridad"],
+  ["premios_nivel",           "lo que come fuera de la ración cambia cuánta comida le toca"],
 ];
 
 const MENU_LOCAL = {
@@ -309,6 +313,8 @@ test.describe("sin cuenta se puede tener más de un perro", () => {
     await page.getByRole("button", { name: "Continuar" }).click();
     await page.getByText("5 / 6").waitFor();
     await page.getByRole("button", { name: "No", exact: true }).click();
+    // Los premios: el paso 5 no deja continuar sin contestar (ver App.jsx).
+    await page.getByRole("button", { name: /^Ninguno/ }).click();
     await page.getByRole("button", { name: "Continuar" }).click();
     await page.getByText("6 / 6").waitFor();
     const noes = page.getByRole("button", { name: "No", exact: true });

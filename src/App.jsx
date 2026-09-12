@@ -33,10 +33,12 @@ import PautaImprimible from "./pautaimprimible.jsx";
 import { perrosDelModo } from "./pacientes";
 import { contiene } from "./texto.js";
 import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicion,
+         salvedadDelBcs,
          condicionDesdeBcs, bcsVigente } from "./bcs";
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout } from "./api.js";
+import { useVocabulario, alLlegarVocabulario, ACTIVIDAD_API, claveDeActividad } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
@@ -89,7 +91,8 @@ import { capturarError, migaDePan, identificarUsuarioEnSentry } from "./sentry.j
 // Las kcal del día viven aparte desde el 26 de agosto: es lógica pura, y
 // además está duplicada en der.py de la API. Ver la cabecera de der.js.
 import { finCrecimientoMeses, inicioSeniorAnios, pesoEsperado,
-         determinarEtapa, calcularDER, ACTIVIDAD_KEY } from "./der.js";
+         determinarEtapa, calcularDER, ACTIVIDAD_KEY,
+         pesoAdultoDesdeCurvaFediaf } from "./der.js";
 
 // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL: "pantalla en blanco al
 // tocar el menú" reportado varias veces sin conseguir localizar la
@@ -308,7 +311,18 @@ function razaDesdeNombre(nombre) {
   return RAZAS.find((r) => r.nombre === nombre) || { nombre };
 }
 
-const RAZAS = [
+// ⚠️ LAS 255 RAZAS SON UN RESPALDO DESDE EL 11 DE SEPTIEMBRE DE 2026.
+//
+// Vivian SOLO aqui, 255 filas dentro de este archivo, y de cada una salen el
+// peso adulto esperado -- y de ahi las kcal, la etapa y el techo de calcio del
+// cachorro de raza grande -- y las dos cifras de energia propias de FEDIAF.
+// Ahora viven en `razas.json` del motor y llegan por `GET /vocabulario`.
+//
+// Elena: «esto tiene que ser para TODO, razas, tamaño, etapa, actividad,
+// preguntas para las patologias de veterinarios, todo».
+//
+// `tests/vocabulario.spec.js` compara las dos listas fila a fila.
+const RAZAS_RESPALDO = [
   {"nombre": "Affenpinscher", "tamano": "Toy", "pesoMin": 3, "pesoMax": 6, "pesoMedio": 4.5},
   {"nombre": "Airedale Terrier", "tamano": "Mediano", "pesoMin": 19, "pesoMax": 25, "pesoMedio": 22.0},
   {"nombre": "Akita Americano", "tamano": "Gigante", "pesoMin": 32, "pesoMax": 59, "pesoMedio": 45.5},
@@ -565,9 +579,23 @@ const RAZAS = [
   {"nombre": "Spaniel Tibetano", "tamano": "Mini", "pesoMin": 4, "pesoMax": 7, "pesoMedio": 5.5},
   {"nombre": "Kromfohrländer", "tamano": "Pequeño", "pesoMin": 9, "pesoMax": 16, "pesoMedio": 12.5},
 ];
-const TAMANOS = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
+// La lista que de verdad se usa. Empieza siendo el respaldo y se sustituye
+// entera cuando llega `GET /vocabulario`. Es una variable de modulo y no un
+// estado de React a proposito: `razaDesdeNombre` y `perfilDesdeSupabase` se
+// llaman FUERA de todo componente, y un hook ahi no sirve. El re-render lo
+// dispara `useVocabulario`, que si es estado.
+let RAZAS = RAZAS_RESPALDO;
+
+// Los seis tamaños y los cinco escalones de condicion, tambien de respaldo.
+// Los sirve `GET /vocabulario` con SUS DOS REGISTROS: los seis tamaños llevan
+// el rango de peso MEDIDO sobre las 255 razas (el que estaba escrito a mano en
+// `RANGO_PESO_POR_TAMANO` tenia cuatro de seis caducados, porque la lista de
+// razas crecio debajo y la tabla no), y los cinco escalones del dueño son los
+// BCS 1, 3, 5, 7 y 9 -- el MISMO numero que pone el veterinario, no otra escala.
+const TAMANOS_RESPALDO = ["Toy", "Mini", "Pequeño", "Mediano", "Grande", "Gigante"];
+let TAMANOS = TAMANOS_RESPALDO;
 const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
-const CONDICIONES = [
+const CONDICIONES_RESPALDO = [
   // ⚠️ CAMBIADO (5 agosto, madrugada) — pedido expreso, tras varias
   // rondas descartando alternativas (rellenito de amor, entrado en
   // carnes): nombres cariñosos, simétricos con el patrón "muy X / X"
@@ -578,6 +606,8 @@ const CONDICIONES = [
   { label: "Rellenito", detalle: "Cuesta notar las costillas, poca cintura" },
   { label: "Muy gordete", detalle: "No se notan las costillas, sin cintura" },
 ];
+let CONDICIONES = CONDICIONES_RESPALDO;
+
 // Qué bandera de "sí/no" acompaña a cada lista. En la ficha de una sola
 // pantalla las listas SON la respuesta -- una lista vacía es "no tiene" --,
 // pero el resto de la app lee estas banderas, así que se escriben solas para
@@ -605,7 +635,27 @@ const BANDERA_DE = {
 // El índice es lo único que llega al cálculo del DER, así que cambiar las
 // palabras no cambia ni una kcal -- y estas son las palabras que usa quien
 // escribe una pauta, no "no para".
-const NIVELES_CLINICOS = [
+// ⚠️ ESTAS DOS LISTAS SON UN RESPALDO, NO LA VERDAD (11 de septiembre de 2026).
+//
+// Elena: «no hay que hacer que el motor coincida con lo de la app. hay que hacer
+// que la app coincida con lo del motor [...] si el motor dice que hay dieciocho
+// niveles de actividad, la app tiene que tener 18 niveles de actividad porque si
+// no no sirve de nada, y asi con todo».
+//
+// La verdad es `GET /vocabulario`, que sirve los niveles con su clave, su cifra
+// de FEDIAF y LAS DOS ETIQUETAS -- la del dueño y la del veterinario --, porque
+// eso tambien lo pidio Elena: «el vocabulario que usa la app en modo usuario
+// tiene que ser entendible para el usuario y el que se usa en modo veterinario
+// tiene que ser mas tecnico».
+//
+// Estas listas solo se usan mientras esa peticion no ha llegado, o si falla. Si
+// se desincronizan del motor, el respaldo enseña un nivel que el motor no sabe
+// recibir -- por eso `tests/vocabulario.spec.js` compara las dos.
+//
+// ⚠️ Y ojo con el numero: el motor tiene CINCO niveles y la Tabla VII-7 de
+// FEDIAF tiene CUATRO filas de actividad. La cuarta, «High activity 150-175»,
+// la partimos nosotros en dos. Esta escrito en `niveles_de_actividad.json`.
+const NIVELES_CLINICOS_RESPALDO = [
   { label: "Reposo / restricción", detalle: "sedentario, postoperatorio" },
   { label: "Mantenimiento", detalle: "paseos diarios" },
   { label: "Actividad moderada", detalle: "ejercicio regular" },
@@ -613,13 +663,182 @@ const NIVELES_CLINICOS = [
   { label: "Trabajo", detalle: "pastoreo, guarda, tiro" },
 ];
 
-const NIVELES = [
+const NIVELES_RESPALDO = [
   { label: "Sedentario", detalle: "Paseos cortos, se mueve poco", Icono: Moon },
   { label: "Normal", detalle: "Paseos diarios de siempre", Icono: Footprints },
   { label: "Activo", detalle: "Paseos largos, juega bastante", Icono: Zap },
   { label: "Muy activo", detalle: "Corre, hace deporte, no para", Icono: Flame },
   { label: "Trabajo", detalle: "Pastoreo, guarda, o similar", Icono: Award },
 ];
+
+// ⚠️ LA ACTIVIDAD TIENE QUE LLEGAR AL MOTOR, NO SOLO A LAS KCAL (11 septiembre).
+//
+// Elena: «ten en cuenta que TODOS LOS DATOS QUE RECOJA LA APP TIENEN QUE LLEGAR
+// DE ALGUNA MANERA AL MOTOR, SI NO SON DATOS INUTILES Y CUANDO SE PIDEN ES
+// SIEMPRE POR ALGO».
+//
+// La ficha pregunta la actividad desde siempre, y esta app la usaba SOLO para
+// calcular el DER. Al motor le llegaban las kcal ya hechas, o sea que veia 1955
+// y no sabia si era un galgo de sofa o un perro de trineo. Y eso decide dos
+// cosas suyas:
+//
+//   · que le apriete los topes de seguridad cronica por peso metabolico (yodo,
+//     selenio, mercurio, tiaminasa y vitamina D), porque un tope por 1000 kcal
+//     deja pasar el doble a quien come el doble;
+//   · que el menu lleve la nota de que su techo de fosforo sale de la tabla del
+//     perro en MANTENIMIENTO y su propia fuente le pide un 50 % mas.
+//
+// El motor sabe deducirlo del cociente DER/peso^0,75, y lo seguira haciendo si
+// este campo no llega. Pero deducirlo confunde al Gran Danes, que come 200
+// kcal/kg^0,75 POR RAZA y no por actividad. Mejor mandarlo.
+//
+// Las cinco claves son las de `der.ACTIVIDAD_KEY` en el repo del motor y el
+// orden es el mismo que el de NIVELES, arriba.
+// ⚠️ EL VOCABULARIO SE LEE DEL MOTOR, UNA SOLA VEZ POR SESION.
+//
+// Se cachea en una promesa a nivel de modulo a proposito: si cada pantalla que
+// necesita los niveles lanzara su propia peticion, la API de Render -- que
+// duerme tras 15 minutos -- recibiria cuatro despertares en vez de uno.
+//
+// Si falla, se devuelve null y quien lo use cae al respaldo. No se reintenta:
+// una lista de cinco etiquetas no justifica insistirle a un servidor dormido, y
+// el respaldo esta comprobado contra el motor por `tests/vocabulario.spec.js`.
+// ⚠️ LA PETICION VIVE EN `src/vocabulario.js` (11 septiembre), no aqui: la
+// necesitan los dos, esta pantalla para las listas de la ficha y
+// `topespatologia.jsx` para las preguntas de cada patologia, e importarla de
+// aqui seria un ciclo.
+//
+// Lo que queda en este archivo es SOLO instalar lo que llega en sus sitios.
+// Son variables de modulo y no estado de React a proposito: `razaDesdeNombre`,
+// `perfilDesdeSupabase` y el calculo del peso adulto se llaman FUERA de todo
+// componente, y un hook alli no sirve de nada. El re-render lo dispara
+// `useVocabulario`, que si es estado; esto solo cambia de donde leen.
+//
+// Cada lista se instala SOLO si viene completa y no vacia. Media lista es peor
+// que ninguna: si el motor devolviera tres razas por un fallo, el buscador
+// dejaria de encontrar 252 sin decir nada.
+function instalarVocabulario(vocab) {
+  if (!vocab) return null;
+  const razas = vocab?.razas?.razas;
+  if (Array.isArray(razas) && razas.length > 0) RAZAS = razas;
+
+  const tam = vocab?.tamanos?.tamanos;
+  if (Array.isArray(tam) && tam.length > 0) {
+    TAMANOS = tam.map((t) => t.clave);
+    const rangos = {};
+    for (const t of tam) {
+      const r = t.rango_observado_kg;
+      if (r && r.peso_min != null && r.peso_max != null) {
+        // Con coma decimal, que es como se escribe aqui.
+        const n = (x) => String(x).replace(".", ",");
+        rangos[t.clave] = `${n(r.peso_min)}-${n(r.peso_max)}kg`;
+      }
+    }
+    if (Object.keys(rangos).length === tam.length) RANGO_PESO_POR_TAMANO = rangos;
+  }
+
+  // Los cinco escalones del dueño, en el orden en que los ofrece la ficha
+  // (`condicionIdx` los indexa). Son los BCS marcados `ofrecido_al_dueno`.
+  const puntos = vocab?.condicion_corporal?.puntos;
+  if (Array.isArray(puntos)) {
+    const delDueno = puntos
+      .filter((p) => p.ofrecido_al_dueno && p.dueno?.titulo)
+      .map((p) => ({ label: p.dueno.titulo, detalle: p.dueno.detalle || "" }));
+    if (delDueno.length === CONDICIONES_RESPALDO.length) CONDICIONES = delDueno;
+  }
+  // Las familias de patología: la pregunta, sus respuestas y a qué clave del
+  // motor lleva cada una. Solo se instala si viene completa, como las demás:
+  // media lista aquí sería un estadio que no se puede elegir.
+  const familias = familiasDelVocabulario(vocab);
+  if (familias) {
+    FAMILIAS_PATOLOGIA = familias;
+    rehacerIndicesDeFamilia();
+  }
+
+  return vocab;
+}
+
+alLlegarVocabulario(instalarVocabulario);
+
+// Los niveles que hay que pintar, en el registro que toque. `modo` es "dueno" o
+// "veterinario", que son las dos claves que sirve el motor.
+function nivelesDeActividad(vocab, modo) {
+  const respaldo = modo === "veterinario" ? NIVELES_CLINICOS_RESPALDO : NIVELES_RESPALDO;
+  const servidos = vocab?.niveles_de_actividad?.niveles;
+  if (!Array.isArray(servidos) || servidos.length === 0) return respaldo;
+  return servidos.map((n, i) => ({
+    label: n?.[modo]?.titulo ?? respaldo[i]?.label ?? n.clave,
+    detalle: n?.[modo]?.detalle ?? respaldo[i]?.detalle ?? "",
+    // El icono es cosa de la app: el motor no sabe de iconos.
+    Icono: NIVELES_RESPALDO[i]?.Icono ?? NIVELES_RESPALDO[0].Icono,
+  }));
+}
+
+// ─── LOS PREMIOS ────────────────────────────────────────────────────────────
+//
+// ⚠️ POR QUE SE PREGUNTA (11 de septiembre de 2026). Cuatro fuentes dicen lo
+// mismo y una trae el mecanismo: «Los alimentos y premios desequilibrados no se
+// deben proporcionar en mas de un 10 % de la ingesta calorica diaria total.
+// Cuando se agregan alimentos desequilibrados a una dieta completa y
+// equilibrada, SE PRODUCE UNA DILUCION DE NUTRIENTES, y los nutrientes
+// esenciales pueden quedar POR DEBAJO DE LOS REQUERIMIENTOS MINIMOS» (Ettinger
+// 8a ed. cap. 192; repetido en el cap. 175 y en Fascetti & Delaney 2a ed.
+// cap. 7).
+//
+// O sea que un dueño que sigue el menu al gramo y luego da premios NO esta
+// dando el menu que le calculamos. El motor ya lo sabe hacer: formula la racion
+// con las kcal que quedan y le sigue exigiendo el dia entero de nutrientes. Lo
+// unico que falta es preguntarlo, y eso es esto.
+//
+// ⚠️ Y SE PREGUNTA EN PORCENTAJE, NO EN KCAL, a proposito: nadie sabe las
+// calorias de la galleta que le da a su perro, y la fuente habla justo en esa
+// unidad. Es el motor quien convierte, con el DER de ESTE perro.
+//
+// Esta lista es un RESPALDO, como las de actividad: la verdad es
+// `GET /vocabulario`, que sirve las cuatro claves con sus DOS registros y con
+// la marca de cual de las cifras es de la fuente (solo el 10 %) y cual la
+// ponemos nosotros (el 5 % y el 20 %).
+const PREMIOS_RESPALDO = [
+  { clave: "ninguno", label: "Ninguno", detalle: "Solo come su ración, nada más" },
+  { clave: "alguno", label: "Alguno suelto", detalle: "Un premio de vez en cuando, para entrenar o por el gusto" },
+  { clave: "hasta_el_maximo", label: "Bastantes, pero no me paso", detalle: "Premios a diario, o algo de la comida de casa, sin que sea la mitad de lo que come" },
+  { clave: "mas_del_maximo", label: "Muchos", detalle: "Premios todos los días y sobras de la mesa: una parte buena de lo que come viene de fuera de su ración" },
+];
+
+const PREMIOS_CLINICOS_RESPALDO = [
+  { clave: "ninguno", label: "Sin aporte extraración", detalle: "0 % de la ingesta calórica diaria" },
+  { clave: "alguno", label: "Aporte extraración bajo", detalle: "Se calcula con un 5 % de las kcal del día" },
+  { clave: "hasta_el_maximo", label: "Aporte extraración en el techo recomendado", detalle: "10 % de las kcal del día (Ettinger caps. 175 y 192; Fascetti cap. 7)" },
+  { clave: "mas_del_maximo", label: "Aporte extraración por encima del techo", detalle: "Se calcula con un 20 % de las kcal del día" },
+];
+
+const PREGUNTA_PREMIOS_RESPALDO = {
+  dueno: "¿Le das premios, chuches o algo de tu comida, además de su ración?",
+  veterinario: "Aporte calórico extraración (premios, sobras de mesa, suplementos no formulados): ¿qué fracción de la ingesta diaria representa?",
+};
+
+/** Las respuestas que hay que pintar, en el registro que toque. */
+function nivelesDePremios(vocab, modo) {
+  const respaldo = modo === "veterinario" ? PREMIOS_CLINICOS_RESPALDO : PREMIOS_RESPALDO;
+  const servidos = vocab?.premios?.niveles;
+  if (!Array.isArray(servidos) || servidos.length === 0) return respaldo;
+  return servidos.map((n, i) => ({
+    clave: n?.clave ?? respaldo[i]?.clave,
+    label: n?.[modo]?.titulo ?? respaldo[i]?.label ?? n?.clave,
+    detalle: n?.[modo]?.detalle ?? respaldo[i]?.detalle ?? "",
+    pct: n?.pct_del_dia,
+  }));
+}
+
+function preguntaDePremios(vocab, modo) {
+  return vocab?.premios?.pregunta?.[modo] || PREGUNTA_PREMIOS_RESPALDO[modo];
+}
+
+// ⚠️ `ACTIVIDAD_API` y `claveDeActividad` VIVEN EN `vocabulario.js` DESDE EL 11
+// DE SEPTIEMBRE, y no es un traslado por orden: `formulador.jsx` -- la pantalla
+// del veterinario -- las necesita y no puede importar de aquí sin hacer un
+// ciclo. Estaban solo aquí, así que el formulador no mandaba la actividad ni el
+// nivel de premios en ninguna de sus llamadas. Ver el comentario de allí.
 
 // ─── ELEGIR ALIMENTO: LA LISTA DE ESPECIES, UNA SOLA VEZ ─────────────────────
 //
@@ -890,11 +1109,34 @@ const CATEGORIAS_ALIMENTO = {
 // siguen un patrón de FAMILIA (ver `FAMILIAS_PATOLOGIA` más abajo) --
 // una sola casilla con una pregunta de subtipo debajo, no una casilla
 // por cada variante, que sería ilegible.
+// ⚠️ `soloVeterinario` — LAS QUE AL DUEÑO NI LE SALEN (11 de septiembre de 2026).
+//
+// Elena: «Un dueño, obviamente, no puede marcar casillas de veterinario, ni
+// siquiera le deberían salir».
+//
+// Son las 15 que `quien_formula_cada_patologia.json` del motor marca
+// `solo_veterinario`, y ese fichero no opina: cada linea sale de la CITA de la
+// fuente de esa patologia. Si su tabla condiciona la cifra a un dato clinico
+// -- el estadio IRIS que decide el techo de fosforo, los trigliceridos que
+// bajan la grasa de 37,5 a 25 --, entonces no la puede marcar quien no tiene
+// ese dato. Hasta hoy la app le ofrecia las 15 al dueño.
+//
+// ⚠️ ESTO ES UN RESPALDO, como las demas listas: la verdad la sirve
+// `GET /vocabulario` y `laPuedeMarcarElDueno` la prefiere. Aqui esta escrito
+// para que una API dormida no acabe enseñandole al dueño las 15.
+// `tests/vocabulario.spec.js` compara las dos, clave a clave.
+//
+// ⚠️ Y LO QUE YA ESTA MARCADO NO SE ESCONDE. Si el perro trae «renal» puesto
+// -- lo marco su veterinario, o se marco antes de este cambio --, la casilla
+// se sigue viendo: esconderla dejaria al dueño leyendo «Nada que destacar» de
+// un perro renal, y a la primera que guardara la ficha la patologia se
+// perderia EN SILENCIO y le cambiaria el menu. Eso es exactamente la familia
+// de fallos del `guardarPerro` de agosto.
 const PATOLOGIAS = [
-  { key: "renal", label: "Insuficiencia renal crónica", segura: true },
-  { key: "renal_proteinuria", label: "Proteinuria renal (UPC > 0,5)", segura: true },
-  { key: "pancreatitis", label: "Pancreatitis", segura: true },
-  { key: "oxalato", label: "Cálculos de oxalato cálcico", segura: true },
+  { key: "renal", soloVeterinario: true, label: "Insuficiencia renal crónica", segura: true },
+  { key: "renal_proteinuria", soloVeterinario: true, label: "Proteinuria renal (UPC > 0,5)", segura: true },
+  { key: "pancreatitis", soloVeterinario: true, label: "Pancreatitis", segura: true },
+  { key: "oxalato", soloVeterinario: true, label: "Cálculos de oxalato cálcico", segura: true },
   // ⚠️ CORREGIDO (7 septiembre) — CONFLACIÓN ENCONTRADA: esta única casilla
   // mandaba SIEMPRE la clave "estruvita" al backend, aunque el perro
   // tuviera cistina o urato -- las tres bloquean igual para el tutor, así
@@ -902,11 +1144,19 @@ const PATOLOGIAS = [
   // (restricción de purinas) veía el aviso.profesional de "estruvita"
   // (pH urinario), que es el equivocado. Ahora es la cabeza de una
   // familia con subtipo -- ver `FAMILIAS_PATOLOGIA`.
-  { key: "estruvita", label: "Cálculos urinarios (estruvita / oxalato de calcio ya cubierto arriba / urato / cistina)", segura: false,
+  // ⚠️ `segura` PASA A TRUE (8 septiembre): la estruvita se abrió a
+  // formulable en el motor. Su motivo para estar cerrada («depende del pH
+  // urinario y de analíticas que la app no puede ver») era cierto pero
+  // escondía que SACN5 Tabla 43-3 da tres cifras formulables para PREVENIR
+  // la recurrencia (magnesio ≤250, fósforo ≤1500, proteína ≤62,5), las tres
+  // por encima del mínimo de FEDIAF. Lo que sigue necesitando prescripción
+  // es DISOLVER un cálculo ya formado. El subtipo urato/cistina de esta
+  // familia sí sigue cerrado, y por eso la casilla lleva subtipo.
+  { key: "estruvita", soloVeterinario: true, label: "Cálculos urinarios (estruvita / oxalato de calcio ya cubierto arriba / urato / cistina)", segura: true,
     aviso: "Estos cálculos dependen del pH de la orina y de analíticas que la app no puede ver. Una dieta mal ajustada aquí puede empeorarlos, así que no generamos menú automático: necesitas una dieta pautada por tu veterinario." },
-  { key: "urato", label: "Urolitos de urato", segura: false,
+  { key: "urato", soloVeterinario: true, label: "Urolitos de urato", segura: false,
     aviso: "La carga de purinas de una ración cruda está muy por encima de cualquier objetivo seguro para esta condición, y no solo por las vísceras. No generamos menú automático: necesitas una dieta pautada por tu veterinario, a menudo con pienso terapéutico específico." },
-  { key: "cistina", label: "Urolitos de cistina", segura: false,
+  { key: "cistina", soloVeterinario: true, label: "Urolitos de cistina", segura: false,
     aviso: "Depende del pH de la orina y de analíticas que la app no puede ver, igual que estruvita -- y el objetivo terapéutico de metionina+cistina está además por debajo del mínimo nutricional de cualquier perro sano. No generamos menú automático: necesitas una dieta pautada por tu veterinario." },
   // ⚠️ CAMBIADO A `segura: false` (25 agosto), con la revisión clínica.
   // La restricción de cobre que hace falta en una hepatopatía por acúmulo
@@ -919,27 +1169,54 @@ const PATOLOGIAS = [
   // Va aquí y no solo en el servidor porque el aviso tiene que saltar al
   // ELEGIR la patología, no después de recorrer todo el generador para
   // que al final no salga menú. Mismo patrón que estruvita.
-  { key: "hepatopatia", label: "Hepatopatía / predisposición al cobre", segura: false,
+  { key: "hepatopatia", soloVeterinario: true, label: "Hepatopatía / predisposición al cobre", segura: false,
     aviso: "La restricción de cobre que hace falta en una hepatopatía por acúmulo está POR DEBAJO del mínimo de cobre que necesita cualquier perro para estar sano. No es algo que se pueda resolver eligiendo mejor los alimentos: hace falta supervisión veterinaria con suplementación dirigida, así que no generamos menú automático." },
-  { key: "shunt_sin_encefalopatia", label: "Shunt portosistémico hepático", segura: false,
+  { key: "shunt_sin_encefalopatia", soloVeterinario: true, label: "Shunt portosistémico hepático", segura: false,
     aviso: "El shunt hace que la sangre porta-hepática se salte el hígado, así que el amoniaco de catabolizar proteína no se depura: la proteína hay que bajarla por debajo del mínimo saludable de FEDIAF, y eso necesita una dieta pautada por tu veterinario." },
-  { key: "cardiopatia", label: "Cardiopatía", segura: true },
-  { key: "dcm_taurina_respondedora", label: "Miocardiopatía dilatada respondedora a taurina", segura: true },
+  { key: "cardiopatia", soloVeterinario: true, label: "Cardiopatía", segura: true },
+  { key: "dcm_taurina_respondedora", soloVeterinario: true, label: "Miocardiopatía dilatada respondedora a taurina", segura: true },
   { key: "dcm_asociada_a_dieta", label: "Miocardiopatía dilatada asociada a dieta (\"grain-free\")", segura: true },
-  { key: "diabetes", label: "Diabetes mellitus", segura: true },
+  { key: "diabetes", soloVeterinario: true, label: "Diabetes mellitus", segura: true },
   { key: "hipotiroidismo", label: "Hipotiroidismo", segura: true },
-  { key: "hiperlipidemia", label: "Hiperlipidemia (triglicéridos o colesterol altos)", segura: true },
+  { key: "hiperlipidemia", soloVeterinario: true, label: "Hiperlipidemia (triglicéridos o colesterol altos)", segura: true },
   { key: "obesidad", label: "Obesidad / adelgazamiento dirigido", segura: true },
   { key: "ple_linfangiectasia", label: "Enteropatía pierde-proteínas / linfangiectasia intestinal", segura: true },
   { key: "insuficiencia_pancreatica_exocrina", label: "Insuficiencia pancreática exocrina (EPI)", segura: true },
   { key: "fracaso_renal_agudo", label: "Fracaso renal agudo (no crónico)", segura: true },
+  // ⚠️ AÑADIDAS (8 septiembre) — TRES DIGESTIVAS QUE LA FUENTE DECLARA Y NO
+  // OFRECÍAMOS. Salieron del barrido de las 70 tablas «Key nutritional
+  // factors» de SACN5 contra las patologías del motor: las tres tienen tabla
+  // propia con cifras, y las tres se formulan sin bajar de FEDIAF.
+  //
+  // OJO con la FLATULENCIA y el ESTREÑIMIENTO: son incompatibles entre sí a
+  // propósito -- una pide fibra ≤12,5 g/1000 kcal y la otra ≥17,5 --, igual
+  // que la flatulencia con la hiperlipidemia. Si alguien marca las dos, el
+  // motor no da menú y dice qué dos límites chocan. No es un fallo: son dos
+  // objetivos clínicos opuestos.
+  { key: "estrenimiento_cronico", label: "Estreñimiento crónico", segura: true },
+  { key: "flatulencia", label: "Gases (flatulencia excesiva)", segura: true },
+  { key: "intestino_irritable", label: "Síndrome de intestino irritable", segura: true },
+  { key: "sibo", label: "Sobrecrecimiento bacteriano intestinal (SIBO)", segura: true },
   { key: "enteropatia_cronica", label: "Enteropatía crónica / colitis", segura: true },
   { key: "artrosis", label: "Artrosis / osteoartritis", segura: true },
   { key: "riesgo_gdv", label: "Riesgo de torsión gástrica (razas de tórax profundo)", segura: true },
   { key: "disfuncion_cognitiva", label: "Disfunción cognitiva canina", segura: true },
   { key: "dermatosis_zinc", label: "Dermatosis zinc-sensible (razas nórdicas)", segura: true },
   { key: "dermatitis_atopica", label: "Dermatitis atópica", segura: true },
-  { key: "epilepsia_idiopatica", label: "Epilepsia idiopática", segura: true },
+  // ⚠️ AÑADIDA (8 septiembre, cuarta pasada) — la Tabla 31-3 de SACN5
+  // («Adverse Reactions to Food») es una de las TRES tablas de patología
+  // canina que se habían perdido al cortar la salida del barrido de tablas.
+  // Tiene cifras propias (omega-3, fósforo, sodio) y una exclusión de
+  // alimentos (atún y caballa, por aminas vasoactivas) que el motor no hacía.
+  //
+  // NO sustituye a las alergias: lo que cura una reacción adversa al alimento
+  // es quitar el ingrediente, y eso se hace en Alergias y en Personalizar.
+  // Esto es lo que la literatura pide ADEMÁS, para una dieta de eliminación
+  // que se come durante meses. El label empieza por «Alergia» a propósito:
+  // es la palabra que busca quien la busca, no «reacción adversa».
+  { key: "reaccion_adversa_alimento", soloVeterinario: true,
+    label: "Alergia o intolerancia alimentaria diagnosticada", segura: true },
+  { key: "epilepsia_idiopatica", soloVeterinario: true, label: "Epilepsia idiopática", segura: true },
   { key: "mielopatia_degenerativa", label: "Mielopatía degenerativa", segura: true },
   { key: "cushing", label: "Hiperadrenocorticismo (Cushing)", segura: true },
   { key: "addison", label: "Hipoadrenocorticismo (Addison)", segura: true },
@@ -986,7 +1263,7 @@ const APARATOS = [
              "estruvita", "urato", "cistina"] },
   { titulo: "Digestivo y páncreas",
     claves: ["pancreatitis", "enteropatia_cronica", "ple_linfangiectasia",
-             "insuficiencia_pancreatica_exocrina"] },
+             "insuficiencia_pancreatica_exocrina", "reaccion_adversa_alimento"] },
   // ⚠️ "Hepático" y no "Hígado": en esta misma ficha hay una categoría de
   // ALIMENTO que se llama «Hígado» (la que se puede excluir), y dos botones
   // con el mismo nombre en la misma pantalla se confunden -- lo vio primero
@@ -1037,7 +1314,7 @@ const PATOLOGIAS_POR_APARATO = (() => {
 // la cabecera (y a cualquier otra hermana) en `perfil.patologias` -- el
 // array que ve el backend nunca lleva dos claves de la misma familia a
 // la vez.
-const FAMILIAS_PATOLOGIA = {
+let FAMILIAS_PATOLOGIA = {
   cardiopatia: {
     pregunta: "¿Sabes el estadio ACVIM?",
     opciones: [
@@ -1075,29 +1352,111 @@ const FAMILIAS_PATOLOGIA = {
   },
   estruvita: {
     pregunta: "¿Qué tipo de cálculo, si se sabe?",
+    // ⚠️ AMPLIADA (8 septiembre): entran los dos tipos que faltaban, y con
+    // esto están los CINCO que reconoce la literatura. El de fosfato cálcico
+    // se formula (sus cifras están por encima del mínimo de FEDIAF); el de
+    // sílice no, porque su único eje dietético es bajar la proteína a 10-18 %
+    // de materia seca y todo ese rango cae por debajo del mínimo.
     opciones: [
       { key: "estruvita", label: "Estruvita (o no lo sé)" },
       { key: "urato", label: "Urato (dálmata, shunt hepático)" },
       { key: "cistina", label: "Cistina" },
+      { key: "urolitos_fosfato_calcico", label: "Fosfato cálcico" },
+      { key: "urolitos_silice", label: "Sílice" },
     ],
   },
 };
+// ⚠️ LA LISTA LA SIRVE EL MOTOR (11 de septiembre de 2026, noche).
+//
+// Lo de arriba es el RESPALDO. Las preguntas, sus respuestas y a qué clave
+// lleva cada una viven en `preguntas_por_patologia.json` del motor y se sirven
+// por `GET /vocabulario`, igual que quién puede marcar cada casilla. Copiadas
+// aquí eran una segunda lista: el día que el motor añadiera un estadio -- y ya
+// pasó con los cinco de la cardiopatía y con los cinco tipos de urolito -- la
+// app se quedaría con la suya vieja, el veterinario no podría elegirlo, y el
+// menú saldría verde igual porque el semáforo mide contra el perro SANO.
+//
+// ⚠️ Y `segura` SE DERIVA DE LO QUE DICE EL MOTOR, no de esta tabla. Era el
+// riesgo que el comentario de `PATOLOGIAS` lleva escrito desde agosto --
+// «`segura` es el `formulable` del backend, si un día se desincronizan...» --,
+// y el motor lo dice en cada respuesta: `cifras_que_aplica._no_formulable`.
+// Lo que SÍ sigue viniendo de aquí es el `aviso`, que es texto clínico y el
+// motor no lo tiene. Una respuesta no formulable que llegara sin aviso lleva
+// uno genérico: mejor un aviso corto que ninguno.
+const AVISO_SIN_TEXTO = "Esta opción necesita una dieta pautada por tu veterinario: sus cifras "
+  + "caen por debajo de lo que un perro sano necesita, y eso no se arregla eligiendo mejor "
+  + "los alimentos.";
+
+function familiasDelVocabulario(vocab) {
+  const servidas = vocab?.preguntas_por_patologia?.que_decide_cada_respuesta;
+  if (!servidas || typeof servidas !== "object") return null;
+  const salida = {};
+  for (const [cabecera, info] of Object.entries(servidas)) {
+    if (!info?.la_hace_la_app) continue;
+    const respuestas = Array.isArray(info.respuestas) ? info.respuestas : [];
+    if (respuestas.length < 2) continue;   // una sola respuesta no es una pregunta
+    const local = FAMILIAS_RESPALDO[cabecera];
+    salida[cabecera] = {
+      pregunta: info.pregunta || local?.pregunta || "",
+      // ⚠️ LA FORMA VIENE DEL MOTOR Y NO SE DEDUCE. Hay dos, y se aplican al
+      // revés: `sustituye_a_la_cabecera` (los cinco subtipos: la respuesta es
+      // una clave HERMANA y echa a la cabecera) y `anade_otra_patologia` (las
+      // de analítica: la respuesta SUMA una segunda patología y la cabecera se
+      // queda). Confundirlas dejaría al perro sin su pancreatitis.
+      comoSeAplica: info.como_se_aplica || "sustituye_a_la_cabecera",
+      // En la forma que SUMA, una respuesta puede no añadir nada («no los tiene
+      // altos»), y entonces no lleva clave. Es el caso bueno: lo que decide es
+      // la otra.
+      opciones: respuestas.filter((r) => r?.clave_motor || info.como_se_aplica === "anade_otra_patologia").map((r) => {
+        const suyo = (local?.opciones || []).find((o) => o.key === r.clave_motor) || {};
+        const formulable = !(r.cifras_que_aplica || {})._no_formulable;
+        return {
+          // `null` es una respuesta legítima en la forma que suma: significa
+          // «no añadas nada». Se le da una clave propia para poder pintarla y
+          // saber cuál está elegida.
+          key: r.clave_motor || `__ninguna__${(r.label || "").slice(0, 24)}`,
+          anade: r.clave_motor || null,
+          label: r.label || suyo.label || r.clave_motor,
+          segura: formulable,
+          aviso: formulable ? suyo.aviso : (suyo.aviso || AVISO_SIN_TEXTO),
+        };
+      }),
+    };
+  }
+  return Object.keys(salida).length ? salida : null;
+}
+
 // Clave real -> familia a la que pertenece, para poder quitar a las
-// hermanas del array al elegir una nueva.
-const FAMILIA_DE_CLAVE = Object.fromEntries(
-  Object.entries(FAMILIAS_PATOLOGIA).flatMap(([cabecera, { opciones }]) =>
-    opciones.map((o) => [o.key, cabecera]))
-);
+// hermanas del array al elegir una nueva. Se REHACE cuando llega el
+// vocabulario: si se quedara con las claves del respaldo, elegir un estadio
+// nuevo dejaría DOS claves de la misma familia en el array y el motor
+// aplicaría el `min()` de las dos sin que nadie lo pidiera.
+const FAMILIAS_RESPALDO = FAMILIAS_PATOLOGIA;
+let FAMILIA_DE_CLAVE = {};
+let OPCIONES_DE_FAMILIA_POR_CLAVE = {};
+
+function rehacerIndicesDeFamilia() {
+  // ⚠️ SOLO LAS FAMILIAS QUE SUSTITUYEN. Las de analítica añaden una patología
+  // que tiene su PROPIA casilla (`hiperlipidemia`, `renal_proteinuria`), así
+  // que meterla aquí haría que marcar otra cosa de esa «familia» la borrase del
+  // array -- y la borraría también si el dueño la había marcado por su cuenta.
+  const soloSustituyen = Object.entries(FAMILIAS_PATOLOGIA)
+    .filter(([, f]) => f.comoSeAplica !== "anade_otra_patologia");
+  FAMILIA_DE_CLAVE = Object.fromEntries(
+    soloSustituyen.flatMap(([cabecera, { opciones }]) =>
+      opciones.map((o) => [o.key, cabecera]))
+  );
+  OPCIONES_DE_FAMILIA_POR_CLAVE = Object.fromEntries(
+    soloSustituyen.flatMap(([, { opciones }]) => opciones.map((o) => [o.key, o]))
+  );
+}
+rehacerIndicesDeFamilia();
 
 // Toda opción de toda familia, indexada por su propia clave -- para poder
 // resolver "urato" o "renal_avanzada" aunque no tengan su propia entrada
 // en `PATOLOGIAS` (algunas sí la tienen también, p.ej. "urato"; la
 // entrada de `PATOLOGIAS` manda si existen las dos, por eso se comprueba
 // primero en `datosPatologia`).
-const OPCIONES_DE_FAMILIA_POR_CLAVE = Object.fromEntries(
-  Object.values(FAMILIAS_PATOLOGIA).flatMap(({ opciones }) =>
-    opciones.map((o) => [o.key, o]))
-);
 
 // La ÚNICA función que hay que llamar para saber si una clave de patología
 // (venga de una casilla simple o de una opción de familia) es segura y qué
@@ -1110,6 +1469,39 @@ function datosPatologia(key) {
   return PATOLOGIAS.find((p) => p.key === key) || OPCIONES_DE_FAMILIA_POR_CLAVE[key] || null;
 }
 
+// ─── QUIEN PUEDE MARCAR CADA CASILLA ────────────────────────────────────────
+//
+// ⚠️ Elena, 11 de septiembre de 2026: «Un dueño, obviamente, no puede marcar
+// casillas de veterinario, ni siquiera le deberían salir».
+//
+// La verdad la sirve el motor en `GET /vocabulario`, que la lee de
+// `quien_formula_cada_patologia.json`. Los tres valores son `dueno`,
+// `dueno_con_diagnostico` y `solo_veterinario`, y solo el tercero se esconde:
+// «con diagnóstico» sigue siendo algo que el dueño sabe de su propio perro.
+//
+// Si el vocabulario no ha llegado, manda el respaldo (`soloVeterinario` en
+// PATOLOGIAS). Una API dormida no puede acabar enseñándole al dueño las 15.
+function laPuedeMarcarElDueno(clave, vocab) {
+  const servido = vocab?.preguntas_por_patologia?.por_patologia?.[clave]?.quien_puede_marcarla;
+  if (servido) return servido !== "solo_veterinario";
+  return !(datosPatologia(clave)?.soloVeterinario);
+}
+
+// Las casillas que se le ofrecen al dueño: las suyas, MÁS las que el perro ya
+// trae puestas aunque sean de veterinario.
+//
+// ⚠️ LO SEGUNDO NO ES UN MATIZ. Si el perro trae «renal» puesto y se esconde,
+// el dueño lee «Nada que destacar» de un perro renal, y a la primera que
+// guarde la ficha la patología se pierde EN SILENCIO y le cambia el menú. Es
+// la familia de fallos de `guardarPerro` de agosto: no da error, no se ve en
+// pantalla, y aparece días después en la comida.
+function patologiasQueVeElDueno(vocab, puestas = []) {
+  return PATOLOGIAS.filter((p) =>
+    laPuedeMarcarElDueno(p.key, vocab)
+    || puestas.includes(p.key)
+    || puestas.some((k) => FAMILIA_DE_CLAVE[k] === p.key));
+}
+
 // ¿Está esta familia activa? -- no basta con mirar si `patologias` incluye
 // la clave cabecera: puede estar activa con una hermana (p.ej. "renal_
 // avanzada" en vez de "renal").
@@ -1120,9 +1512,27 @@ function familiaPatologiaActiva(cabecera, patologias) {
 // La pregunta de subtipo, si esta cabecera tiene familia y está activa.
 // `onCambiar` recibe el array de patologías YA actualizado.
 function SelectorSubtipoPatologia({ cabecera, patologias, onCambiar }) {
+  // Se pide aquí para que el componente se vuelva a pintar cuando llegue: las
+  // familias son una variable de módulo, y sin este hook las respuestas del
+  // motor no aparecerían hasta el siguiente re-render por otra causa.
+  useVocabulario();
   const familia = FAMILIAS_PATOLOGIA[cabecera];
-  if (!familia || !familiaPatologiaActiva(cabecera, patologias)) return null;
-  const actual = patologias.find((k) => FAMILIA_DE_CLAVE[k] === cabecera) || cabecera;
+  if (!familia) return null;
+  const suma = familia.comoSeAplica === "anade_otra_patologia";
+  // En la forma que SUMA, la pregunta sale cuando está marcada la CABECERA
+  // (pancreatitis, diabetes, renal); en la que sustituye, cuando está activa
+  // cualquiera de la familia.
+  if (!(suma ? patologias.includes(cabecera) : familiaPatologiaActiva(cabecera, patologias))) {
+    return null;
+  }
+  // Cuál está elegida. Al sustituir, la hermana que esté en el array; al
+  // sumar, la que añade una clave que YA está puesta, y si no hay ninguna, la
+  // primera respuesta que no añade nada («no lo sé»).
+  const queAnaden = familia.opciones.filter((o) => o.anade !== null && o.anade !== undefined);
+  const puesta = queAnaden.find((o) => patologias.includes(o.anade));
+  const actual = suma
+    ? (puesta ? puesta.key : (familia.opciones.find((o) => !o.anade) || {}).key)
+    : (patologias.find((k) => FAMILIA_DE_CLAVE[k] === cabecera) || cabecera);
   return (
     <div className="ml-3 mt-1 mb-1.5 pl-3 flex flex-col gap-1" style={{ borderLeft: `2px solid #E3DAF0` }}>
       <p className="text-[11px] leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
@@ -1132,6 +1542,15 @@ function SelectorSubtipoPatologia({ cabecera, patologias, onCambiar }) {
         const elegido = actual === o.key;
         return (
           <button key={o.key} type="button" onClick={() => {
+            if (suma) {
+              // Se quitan TODAS las que esta pregunta puede añadir y se pone la
+              // elegida, si añade algo. Así contestar «no» retira la que
+              // hubiera: cambiar de respuesta tiene que poder deshacer.
+              const puedeAnadir = queAnaden.map((x) => x.anade);
+              const sinLasSuyas = patologias.filter((k) => !puedeAnadir.includes(k));
+              onCambiar(o.anade ? [...sinLasSuyas, o.anade] : sinLasSuyas);
+              return;
+            }
             const sinHermanas = patologias.filter((k) => FAMILIA_DE_CLAVE[k] !== cabecera);
             onCambiar([...sinHermanas, o.key]);
           }}
@@ -1252,7 +1671,28 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // pantalla lo pisaba con el número cada vez que se abría.
       nombre: data.nombre || `Menú ${i + 1}`,
       dias: diasPorMenuArr[i],
-      kcal: Math.round(derObjetivo),
+      // ⚠️ LAS KCAL QUE SE ENSEÑAN SON LAS DE LA RACIÓN, NO LAS QUE SE PIDIERON
+      // (11 de septiembre de 2026).
+      //
+      // Aquí ponía `Math.round(derObjetivo)`: el número que se le MANDA al
+      // servidor, no el que devuelve. Mientras la ración pesaba lo mismo que el
+      // DER (±3 % de tolerancia) la diferencia no se veía, y por eso llevaba así
+      // desde siempre.
+      //
+      // CASO REAL, y lo encontró Elena probándolo en la app el mismo día que se
+      // puso la pregunta de los premios: «he probado lo de los premios y ponga
+      // muchos o ninguno me da las mismas kcal». Claro: con premios la ración se
+      // calcula con las kcal QUE QUEDAN -- un 20 % menos si dices «muchos» --,
+      // el servidor devolvía 859 y la tarjeta seguía pintando 1100. La ración
+      // había cambiado de verdad (los gramos también) y el número que la
+      // resume decía que no.
+      //
+      // Es la familia de fallos del CLAUDE.md: no da error, no rompe nada, y lo
+      // que enseña la pantalla deja de ser lo que hay.
+      kcal: Math.round(data.kcal_total ?? derObjetivo),
+      // Y las del día entero, para poder decir las dos cuando hay premios: la
+      // ración es una parte del día, no el día.
+      kcalDelDia: Math.round(derObjetivo),
       items,
       // ⚠️ AÑADIDO (5 agosto): antes el "27/27 OK" era texto fijo, sin
       // ningún dato real detrás. Ahora se lleva la ficha de verdad que
@@ -1263,6 +1703,31 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // sola, hígado en exceso, patologías...) en cada respuesta, pero
       // nunca se leían aquí -- se perdían sin que nadie los viera.
       problemasSeguridad: data.problemas_seguridad || [],
+      // ⚠️ AÑADIDO (10 septiembre) — EXACTAMENTE EL MISMO CASO QUE EL DE
+      // ARRIBA, y por eso duele: el servidor manda `avisos_patologia` con
+      // CADA menú desde el 29 de agosto (lo monta `avisos_de_patologias`
+      // en el motor, y desde el 8 de septiembre incluye los `avisos_extra`)
+      // y esta función no lo recogía, así que se perdían aquí mismo, dos
+      // líneas por debajo del comentario que cuenta que ya había pasado.
+      // Son 20 avisos en 12 patologías, y dicen justo lo que el motor NO
+      // puede hacer solo: que al perro con bromuro potásico hay que medirle
+      // el bromo en sangre DESPUÉS de cambiarle la dieta, que el mitotano
+      // se absorbe treinta veces mejor con comida, que el zinc oral no se
+      // da con la comida, contra qué número se lee una analítica de
+      // taurina. Dos de ellos describen algo que pasa POR CULPA del cambio
+      // de dieta que hace esta app.
+      avisosPatologia: data.avisos_patologia || [],
+      // ⚠️ AÑADIDO (10 septiembre) — LAS NOTAS QUE SOLO VE EL VETERINARIO.
+      // El motor calculaba estas tres y NO salían de la API: `revisar_seguridad`
+      // devuelve dos listas y `main.py` pedía solo la primera, así que la
+      // segunda se construía y se tiraba (desde agosto, con el aviso de la
+      // vitamina A dentro). Ahora salen por `avisos_profesional`, que es una
+      // clave APARTE de `problemas_seguridad` a propósito: Elena, el 10 de
+      // septiembre, «esos avisos nunca tiene que verlos un usuario, solo un
+      // veterinario». No son incumplimientos y ninguna se arregla cambiando el
+      // menú: son lecturas que dicen qué mirar (el calcio al 99 % de su techo,
+      // el cordero y la taurina, la vitamina A viniendo de tres sitios).
+      avisosProfesional: data.avisos_profesional || [],
       // ⚠️ AÑADIDO — mismo caso que problemasSeguridad: el servidor ya
       // mandaba esto y no se leía en ningún sitio. Explica por qué a
       // este menú le falta una categoría entera (típicamente vísceras o
@@ -1309,7 +1774,13 @@ function calcularEdad(dia, mesIdx, anio) {
     const mesAnterior = new Date(hoy.getFullYear(), hoy.getMonth(), 0);
     dias += mesAnterior.getDate();
   }
-  return { anios: Math.floor(meses / 12), meses: meses % 12, dias, totalMeses: Math.floor(meses / 12) * 12 + (meses % 12) };
+  // ⚠️ `totalDias` AÑADIDO (9 septiembre) para poder cortar Early Growth en
+  // las 14 SEMANAS que dice FEDIAF, y no en «4 meses». Con meses enteros no
+  // se puede: 14 semanas caen a mitad del cuarto mes. Se calcula sobre el
+  // calendario, no multiplicando meses por 30.
+  const totalDias = Math.floor((hoy - nacimiento) / 86400000);
+  return { anios: Math.floor(meses / 12), meses: meses % 12, dias, totalDias,
+           totalMeses: Math.floor(meses / 12) * 12 + (meses % 12) };
 }
 
 const PESO_ADULTO_POR_TAMANO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, Grande: 32, Gigante: 55 };
@@ -1322,10 +1793,18 @@ const PESO_ADULTO_POR_TAMANO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, G
 // entre tamaños vecinos (hay razas en el límite que podrían encajar en
 // cualquiera de los dos) -- no hace falta una frontera exacta, solo una
 // referencia para elegir el que mejor describa al perro.
-const RANGO_PESO_POR_TAMANO = {
+// ⚠️ CUATRO DE LOS SEIS ESTABAN CADUCADOS (11 septiembre). El comentario de
+// arriba dice bien de donde sale esto -- el minimo y el maximo reales entre las
+// razas de cada tamaño -- y esa cuenta se hizo UNA VEZ y se escribio a mano.
+// Despues la lista de razas crecio y la tabla no: medido hoy sobre las 255,
+// Mini llega a 10 y no a 9, Pequeño a 20 y no a 19, Mediano empieza en 11 y no
+// en 14, y Grande en 18 y no en 20. Ahora la cuenta la hace el motor y llega
+// por `GET /vocabulario`; esto es el respaldo.
+const RANGO_PESO_POR_TAMANO_RESPALDO = {
   Toy: "1,5-6kg", Mini: "4-9kg", "Pequeño": "5-19kg",
   Mediano: "14-34kg", Grande: "20-52kg", Gigante: "32-110kg",
 };
+let RANGO_PESO_POR_TAMANO = RANGO_PESO_POR_TAMANO_RESPALDO;
 
 // ⚠️ AÑADIDO (5 agosto, noche) — FALLO GRAVE ENCONTRADO: el peso adulto
 // esperado de un cachorro se calculaba SIEMPRE con la media fija de su
@@ -1337,52 +1816,23 @@ const RANGO_PESO_POR_TAMANO = {
 // a los 26kg de la media de su raza -- 192 kcal/día de diferencia,
 // confirmado. Esto es la MISMA tabla y misma lógica que CURVA_CRECIMIENTO
 // y peso_adulto_desde_curva() en der.py, letra por letra.
-const CURVA_CRECIMIENTO = {
-  2: [0.35, 0.30, 0.25, 0.20, 0.15],
-  3: [0.50, 0.45, 0.40, 0.32, 0.25],
-  4: [0.65, 0.58, 0.52, 0.44, 0.35],
-  5: [0.75, 0.68, 0.60, 0.50, 0.40],
-  6: [0.80, 0.75, 0.65, 0.55, 0.45],
-  7: [0.85, 0.80, 0.72, 0.62, 0.52],
-  8: [0.90, 0.85, 0.78, 0.68, 0.58],
-  9: [0.94, 0.90, 0.84, 0.74, 0.64],
-  10: [0.97, 0.93, 0.88, 0.80, 0.70],
-  11: [0.99, 0.96, 0.92, 0.85, 0.75],
-  12: [1.00, 0.98, 0.95, 0.89, 0.80],
-  15: [1.00, 1.00, 0.99, 0.95, 0.88],
-  18: [1.00, 1.00, 1.00, 0.99, 0.94],
-  24: [1.00, 1.00, 1.00, 1.00, 1.00],
-};
-function columnaTamano(pesoAdultoEstimado) {
-  if (pesoAdultoEstimado < 5) return 0;
-  if (pesoAdultoEstimado < 10) return 1;
-  if (pesoAdultoEstimado < 25) return 2;
-  if (pesoAdultoEstimado < 45) return 3;
-  return 4;
-}
-function pesoAdultoDesdeCurva(pesoActualKg, meses, pesoMedioRaza, pesoMinRaza, pesoMaxRaza) {
-  if (!pesoActualKg || pesoActualKg <= 0 || !meses) return pesoMedioRaza;
-  if (meses >= 24) return pesoActualKg; // ya es adulto
+// ⚠️ Y EL 11 DE SEPTIEMBRE ESA TABLA SE FUE ENTERA, A `der.js` Y CON OTRA
+// FUENTE. Aquí vivía `CURVA_CRECIMIENTO`, copiada «letra por letra» de la que
+// había en `der.py`, y las dos venían de reproducciones divulgativas de las
+// curvas WALTHAM y NO del texto del estudio. FEDIAF publica esa misma curva
+// como CINCO ECUACIONES en su Tabla VII-8a, válidas de las 8 semanas al año, y
+// en este repo manda FEDIAF.
+//
+// ⚠️ Y ESTA ERA LA COPIA QUE DE VERDAD CORRÍA: App.jsx calcula
+// `pesoAdultoEsperado` con ella ANTES de llamar a `calcularDER` y se lo pasa ya
+// hecho, así que cambiar solo `der.js` y `der.py` no habría movido ni una kcal
+// en la app. Se vio probándolo dentro de la app con la cuenta de prueba.
+//
+// Ahora hay UNA sola implementación, en `der.js`, y las tres pantallas la
+// importan. Medido: un cachorro mestizo de 30 kg a los 6 meses pasa de estimar
+// 66,7 kg de adulto a 46,6, y su ración de 2478 a 2142 kcal.
+const pesoAdultoDesdeCurva = pesoAdultoDesdeCurvaFediaf;
 
-  const edades = Object.keys(CURVA_CRECIMIENTO).map(Number).sort((a, b) => a - b);
-  let estimado = pesoMedioRaza || pesoActualKg * 2;
-
-  for (let i = 0; i < 4; i++) {
-    const col = columnaTamano(estimado);
-    const antes = Math.max(...edades.filter((e) => e <= meses), edades[0]);
-    const despues = Math.min(...edades.filter((e) => e >= meses), edades[edades.length - 1]);
-    const p1 = CURVA_CRECIMIENTO[antes][col];
-    const p2 = CURVA_CRECIMIENTO[despues][col];
-    const pct = despues === antes ? p1 : p1 + (p2 - p1) * (meses - antes) / (despues - antes);
-    if (pct <= 0) return estimado;
-    const nuevo = pesoActualKg / pct;
-    if (Math.abs(nuevo - estimado) < 0.2) { estimado = nuevo; break; }
-    estimado = nuevo;
-  }
-  if (pesoMinRaza) estimado = Math.max(estimado, pesoMinRaza);
-  if (pesoMaxRaza) estimado = Math.min(estimado, pesoMaxRaza);
-  return Math.round(estimado * 10) / 10;
-}
 
 
 // ⚠️ LA FÓRMULA SE FUE A `bcs.js` (29 agosto), entera y sin cambiarla. Los
@@ -1573,6 +2023,26 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // lado seguro del error.
   enModoProfesional = false }) {
   const [tabActiva, setTabActiva] = useState(menus[0].id);
+  // ⚠️ LA CUARTA COPIA DE LOS NIVELES DE ACTIVIDAD, encontrada el 11 de
+  // septiembre escribiendo `tests/vocabulario.spec.js`. Esta pantalla tenía la
+  // lista escrita A MANO dentro del propio JSX:
+  //
+  //     valor: [«Sedentario», «Normal», «Activo», «Muy activo», «Trabajo»][idx]
+  //
+  // (escrito con comillas angulares a posta: con las rectas, el guardián de
+  //  `vocabulario.spec.js` cazaría este comentario como si fuera una quinta copia.)
+  //
+  // Cuatro copias de la misma lista y ninguna prueba que las comparara, que es
+  // exactamente la forma del fallo de `CATEGORIAS_QUE_ELIGE_EL_USUARIO`. Y ésta
+  // era la peor de las cuatro, porque además ENSEÑABA EL REGISTRO DEL DUEÑO A
+  // UN VETERINARIO: con `enModoProfesional` a mano en esta misma función, la
+  // ficha del paciente decía «Muy activo» donde la de al lado dice «Actividad
+  // alta (extremo bajo del rango)».
+  //
+  // La petición no se repite: `pedirVocabulario` la cachea a nivel de módulo.
+  const vocabDeLaVista = useVocabulario();
+  const nivelesDeLaVista = nivelesDeActividad(vocabDeLaVista,
+                                              enModoProfesional ? "veterinario" : "dueno");
   // ⚠️ AÑADIDO — LAS DOS PESTAÑAS DEL RESULTADO. Pedido expreso: la
   // pantalla del menú era un scroll larguísimo donde el plan de
   // transición y la congelación quedaban enterrados a mitad de
@@ -1892,6 +2362,8 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // exceso, límites por patología...) en cada respuesta, y nunca se
   // mostraban en ningún sitio -- se perdían en silencio.
   const problemasSeguridad = problemasSeguridadPorMenu[tabActiva] || menu.problemasSeguridad || [];
+  // Las notas de lectura del profesional viajan con el menú, igual que la ficha.
+  const avisosProfesional = menu.avisosProfesional || [];
   // El aviso de composición va por menú igual que los de seguridad: en
   // una rotación, un menú puede llevar vísceras y otro no.
   // Se usa `??` y no `||` a propósito: tras editar, el servidor manda
@@ -1933,6 +2405,8 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           der_objetivo: menu.kcal,
+          actividad: claveDeActividad(perfil),
+          premios_nivel: perfil?.premiosNivel || null,
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
           nombres_excluidos: Array.from(alimentosEvitados || []),
@@ -2279,6 +2753,31 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           </div>
         )}
 
+        {/* ⚠️ LAS NOTAS DE LECTURA, Y SOLO PARA EL PROFESIONAL (10 septiembre).
+            Van aparte de las «notas de manejo» de arriba porque son otra cosa:
+            aquéllas se hacen (comprar el pescado frío, no dar uva) y éstas se
+            interpretan. Ninguna es un incumplimiento -- el menú está verde -- y
+            ninguna se arregla cambiando el menú: dicen qué mirar. Al dueño no
+            se le enseñan, por petición expresa: le sobran y algunas asustan. */}
+        {vistaActiva === "comoDarlo" && enModoProfesional && avisosProfesional.length > 0 && (
+          <div className="rounded-xl p-3 mb-3" style={{ background: "#FFFFFF", border: "1px solid #E3DAF0" }}>
+            <p className="text-[11px] tracking-[0.1em] uppercase mb-1.5"
+               style={{ color: MALVA, fontFamily: "monospace" }}>
+              {avisosProfesional.length === 1 ? "Nota de lectura" : `${avisosProfesional.length} notas de lectura`}
+            </p>
+            <div className="flex flex-col gap-1.5">
+              {avisosProfesional.map((p, i) => (
+                <p key={i} className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>{p}</p>
+              ))}
+            </div>
+            <p className="text-[11px] mt-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              Ninguna de éstas es un incumplimiento: el menú cumple los 43 requisitos.
+              Son lecturas de la ración que la fuente enuncia sin darles cifra, así que
+              el motor no puede aplicarlas solo.
+            </p>
+          </div>
+        )}
+
         {vistaActiva === "comoDarlo" && (
           <div className="flex flex-col gap-3 mb-4">
           {necesitaTransicion && (
@@ -2316,6 +2815,40 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               </p>
             </div>
           )}
+            {/* ⚠️ ESTO VA EL PRIMERO, Y NO ES UNA OPINIÓN DE DISEÑO (9 septiembre).
+                SACN5 5ª ed., cap.3, citando el AAHA Compliance Study, literal:
+
+                  «55% of pet owners who fed a therapeutic food also supplemented
+                   the recommended food with other foods or treats. The primary
+                   reason cited by clients was that THEY DIDN'T KNOW NOT TO.»
+
+                Más de la mitad rompe la dieta calculada sin saber que la está
+                rompiendo, y el motivo número uno es que nadie se lo dijo. El
+                motor calcula gramo a gramo para cubrir 43 requisitos y no modela
+                premios ni lo que cae de la mesa — eso está declarado como
+                limitación en el repo del motor —, así que este aviso no es letra
+                pequeña: es la causa documentada de que una ración calculada no
+                haga lo que dice.
+
+                El mismo capítulo mide que el dueño recuerda «as little as half»
+                de lo que se le cuenta, así que va corto, arriba y en su propio
+                recuadro, no dentro de otro párrafo. */}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "#FFF0F4", border: "1.5px solid #FFC9D8" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle size={14} style={{ color: ROSA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: ROSA, fontFamily: "monospace" }}>
+                  Esto es todo lo que come
+                </p>
+              </div>
+              <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Las cantidades están calculadas para que {nombrePerro} cubra todo lo que necesita <b>con esto y
+                nada más</b>. Un premio, un trozo de queso o las sobras de la cena cambian el resultado, aunque
+                parezcan poca cosa.
+                <br /><br />
+                Si le das premios, dínoslo y los contamos: <b>más de la mitad de la gente que sigue una dieta
+                calculada le añade cosas por encima</b>, y casi siempre porque nadie le dijo que no lo hiciera.
+              </p>
+            </div>
             <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
               <div className="flex items-center gap-1.5 mb-1">
                 <AlertCircle size={14} style={{ color: VIOLETA }} />
@@ -2337,6 +2870,72 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 Una vez descongelado, dáselo <b>dentro de 3 días</b> guardándolo en la nevera; pasado ese
                 tiempo, mejor no. El pescado se estropea antes que la carne: si huele mal, descártalo aunque
                 no hayan pasado los tres días.
+              </p>
+            </div>
+            {/* ⚠️ AÑADIDO (10 septiembre) — LA HIGIENE DE LA CASA, QUE NO ES LO
+                MISMO QUE LA DEL ALIMENTO.
+                El panel de arriba protege AL PERRO: congelar mata los parásitos.
+                Esto protege a quien vive con él, y es otra cosa que la app no
+                decía en ninguna parte. SACN5 cap.56, literal: «Dogs consuming
+                such foods SHED BACTERIAL PATHOGENS AT A MUCH HIGHER RATE than
+                those consuming conventionally cooked commercial foods» (Weese y
+                Armstrong, 2006), con Salmonella, Campylobacter, Escherichia y
+                Yersinia cultivadas en comida cruda casera y comercial.
+                No es un argumento contra el crudo ni cambia ningún menú: es
+                información que la fuente da y que quien elige alimentar así
+                tiene derecho a tener. Va aquí, pegado a la congelación, porque
+                es donde ya se habla de manipular la comida. */}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle size={14} style={{ color: VIOLETA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  Higiene en casa
+                </p>
+              </div>
+              <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Un perro que come crudo <b>excreta más bacterias</b> que uno que come pienso — salmonela,
+                campilobacter y similares —, aunque él esté perfectamente sano y no le pase nada. Congelar
+                bien lo protege a él de los parásitos; esto es lo otro, y es para las personas de la casa.
+                <br /><br />
+                Lávate las manos después de darle de comer y de recoger las heces, limpia el cuenco y la
+                superficie donde preparas, y no dejes que te lama la cara justo después de comer. Si en casa
+                hay <b>bebés, embarazadas, personas mayores o alguien con las defensas bajas</b> (quimioterapia,
+                trasplante, tratamiento inmunosupresor), esto importa bastante más y merece hablarlo con
+                vuestro médico.
+              </p>
+            </div>
+            {/* ⚠️ AÑADIDO (11 septiembre) — LA REVISIÓN CON EL VETERINARIO, QUE
+                LA APP NO PEDÍA EN NINGUNA PARTE.
+                Fascetti & Delaney 2ª ed., cap. 8, literal: «It is recommended
+                that any animal receiving a home-prepared diet be checked by a
+                veterinarian at least every six months», y cada tres meses o
+                menos si hay una enfermedad de por medio, con peso, condición
+                corporal y analítica si procede.
+                Rawku formula dietas caseras: esta frase habla exactamente de lo
+                que hace esta pantalla, y no estaba dicha. No cambia ningún menú
+                -- es lo que el motor NO puede hacer solo --, y por eso va aquí,
+                con la congelación y la higiene, que son las otras dos cosas que
+                dependen de la persona y no del cálculo.
+                El mismo párrafo trae el nombre del fallo que vigila: el «diet
+                drift», que el dueño vaya sustituyendo ingredientes por su
+                cuenta. Eso sí lo puede arreglar la app -- regenerar el menú con
+                lo que de verdad le da -- y por eso se dice. */}
+            <div className="rounded-xl p-3 mb-4" style={{ background: "#F0ECF7", border: "1px solid #D9CDEE" }}>
+              <div className="flex items-center gap-1.5 mb-1">
+                <AlertCircle size={14} style={{ color: VIOLETA }} />
+                <p className="text-[11px] tracking-[0.1em] uppercase" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  Revisión con tu veterinario
+                </p>
+              </div>
+              <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                Un perro que come una dieta casera conviene que lo vea su veterinario <b>al menos cada seis
+                meses</b> — y cada tres o antes si tiene alguna enfermedad —, con su peso, su condición
+                corporal y la analítica que crea necesaria. No es porque este menú no cumpla: es que quien
+                vigila a {nombrePerro} por dentro no es una cuenta, es alguien que lo ve.
+                <br /><br />
+                Y si has ido cambiando ingredientes por tu cuenta — un día sin hueso, otra verdura porque no
+                había —, <b>vuelve aquí y regenéralo</b> con lo que de verdad le das. Un menú que ya no es el
+                que se calculó deja de cumplir sin que se note.
               </p>
             </div>
           {/* ⚠️ AÑADIDO — CÓMO PREPARAR CADA ALIMENTO, TODO JUNTO.
@@ -2824,6 +3423,27 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   return `El menú de ${nombrePerro} está ajustado teniendo en cuenta ${condicion}. Son ajustes orientativos en la buena dirección, pero su veterinario es quien mejor puede valorar si encaja con su caso concreto — enséñale este menú antes de empezar.`;
                 })()}
               </p>
+              {/* ⚠️ AÑADIDO (10 septiembre) — LO QUE EL MOTOR NO PUEDE HACER SOLO.
+                  El texto de arriba dice «está ajustado teniendo en cuenta X» y se
+                  queda ahí. Lo que faltaba es lo concreto: que si el perro toma
+                  bromuro potásico hay que medirle el bromo en sangre después de
+                  este cambio de dieta, que el mitotano va con comida, que el zinc
+                  oral NO va con comida, contra qué número se lee una analítica de
+                  taurina. El servidor los manda con cada menú y no los leía nadie.
+                  Van AQUÍ y no en un panel propio a propósito: este panel ya sale
+                  exactamente cuando hay patología, y un aviso más entre los avisos
+                  se lee; un panel más se cierra. */}
+              {(menu?.avisosPatologia || []).length > 0 && (
+                <ul className="mt-2 flex flex-col gap-1.5">
+                  {menu.avisosPatologia.map((texto, i) => (
+                    <li key={i} className="text-xs flex gap-1.5 items-start"
+                        style={{ color: TINTA, fontFamily: fontBody }}>
+                      <span aria-hidden="true" style={{ color: ROSA, flexShrink: 0 }}>·</span>
+                      <span>{String(texto).split("||").map((t) => t.trim()).filter(Boolean).join(" ")}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         )}
@@ -3229,7 +3849,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           {[
             { label: "Peso actual", valor: `${perfil?.pesoActual || "-"}kg` },
             { label: "Etapa actual", valor: etapaLabel },
-            { label: "Actividad", valor: ["Sedentario", "Normal", "Activo", "Muy activo", "Trabajo"][perfil?.actividadIdx] || "Normal" },
+            { label: "Actividad", valor: (nivelesDeLaVista[perfil?.actividadIdx] || nivelesDeLaVista[1] || {}).label || "—" },
             { label: "Esterilizado", valor: perfil?.esterilizado === "si" ? "Sí" : "No" },
             { label: "Alergias", valor: (perfil?.alergias || []).map((a) => a.alimento.replace("Todo: ", "")).join(", ") || "Ninguna" },
             // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: aquí solo
@@ -3757,7 +4377,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                     className="w-full px-3 py-2 rounded-lg text-sm"
                     style={{ border: "1.5px solid #E3DAF0", color: TINTA, fontFamily: fontBody }}
                   >
-                    <option value="cachorro_joven">Cachorro (hasta 2 meses)</option>
+                    <option value="cachorro_joven">Cachorro (menos de 14 semanas)</option>
                     <option value="cachorro_crecimiento">Cachorro (en crecimiento)</option>
                     <option value="adulto">Adulto</option>
                     <option value="senior">Senior</option>
@@ -4165,6 +4785,17 @@ const ETAPA_LABEL = {
 // los OTROS perros de la casa, no solo para el que se está mirando: al
 // hacer sus menús a la vez hay que sacar de cada fila sus kcal y su
 // etapa, y eso empieza por convertirla.
+// Los cuatro «¿tiene alergias / patologías / …?» viven en el perfil como las
+// cadenas "si" y "no" -- es lo que pinta `SiNoToggle` y es lo unico que la app
+// escribe. Al leer se acepta tambien el booleano: una fila que lo traiga asi
+// no puede dejar la pregunta en blanco. `null` sigue siendo «sin contestar», y
+// eso no se toca: es lo que impide continuar sin responder.
+function _siNo(v) {
+  if (v === true || v === "si") return "si";
+  if (v === false || v === "no") return "no";
+  return null;
+}
+
 function perfilDesdeSupabase(p) {
   if (!p) return null;
   const fechaNac = p.fecha_nacimiento ? new Date(p.fecha_nacimiento) : null;
@@ -4184,16 +4815,44 @@ function perfilDesdeSupabase(p) {
     // casos `objetivoVigente` lo calcula al vuelo y Evolución pide
     // confirmarlo.
     pesoObjetivoKg: p.peso_objetivo_kg ?? null,
-    actividadIdx: p.actividad === "alta" ? 2 : p.actividad === "baja" ? 0 : 1,
+    // ⚠️ LOS CINCO NIVELES, NO TRES (11 septiembre). Esto leia solo «alta»,
+    // «baja» y todo lo demas como 1, asi que aunque la base de datos guardara
+    // «muy_alta» o «trabajo» volvian como Normal. Es la otra mitad del arreglo
+    // de `ACTIVIDAD_POR_INDICE` en supabase.js -- si solo se arregla uno de los
+    // dos lados, el dato sigue perdiendose. El orden es el de NIVELES.
+    actividadIdx: ["baja", "media", "alta", "muy_alta", "trabajo"].indexOf(p.actividad) >= 0
+      ? ["baja", "media", "alta", "muy_alta", "trabajo"].indexOf(p.actividad)
+      : 1,
     actividadTocado: true,
+    // Puede no venir: las fichas anteriores al 11 de septiembre no lo tienen, y
+    // tampoco viene si la columna aun no existe en Supabase. En los dos casos
+    // vuelve como null y la pantalla vuelve a preguntarlo -- que es lo correcto:
+    // mejor preguntar otra vez que dar por hecho que no le da ninguno.
+    premiosNivel: p.premios_nivel ?? null,
     esterilizado: p.castrado ? "si" : "no",
-    alergiaSi: p.alergia_si,
+    // ⚠️ LOS CUATRO «SI/NO» SE LEEN NORMALIZADOS (11 de septiembre de 2026).
+    //
+    // CASO REAL ENCONTRADO escribiendo la prueba de las casillas de
+    // veterinario: un perro sembrado con `patologia_si: true` abria la
+    // pantalla de patologias con la pregunta SIN CONTESTAR y la lista
+    // ESCONDIDA, porque toda la pantalla compara contra las cadenas "si" y
+    // "no" (`perfil.patologiaSi === "si"`) y aqui entraba un booleano.
+    //
+    // Y lo que hace ese caso peligroso no es que no se vea: es que la
+    // pregunta parece sin contestar, asi que lo natural es pulsar «No» -- y
+    // «No» hace `set("patologias", [])`. Las patologias de un perro renal se
+    // borran de un toque, sin un aviso, y el menu siguiente ya es otro.
+    //
+    // La app solo ESCRIBE "si"/"no"/null, asi que una fila con booleano viene
+    // de otro sitio (o de una fila vieja). Normalizar al leer cuesta una
+    // linea y cierra las dos puertas.
+    alergiaSi: _siNo(p.alergia_si),
     alergias: p.alergias || [],
-    otrosEvitarSi: p.otros_evitar_si,
+    otrosEvitarSi: _siNo(p.otros_evitar_si),
     otrosEvitar: p.otros_evitar || [],
-    patologiaSi: p.patologia_si,
+    patologiaSi: _siNo(p.patologia_si),
     patologias: p.patologias || [],
-    categoriasExcluidasSi: p.categorias_excluidas_si,
+    categoriasExcluidasSi: _siNo(p.categorias_excluidas_si),
     categoriasExcluidas: p.categorias_excluidas || [],
     dia: fechaNac ? fechaNac.getDate() : 15,
     mesIdx: fechaNac ? fechaNac.getMonth() : 1,
@@ -4257,6 +4916,11 @@ function datosDeUnPerro(perfil) {
         pesoIdealKg: objetivo.kg,
         raza: perfil.raza?.nombre,
         machoEntero: perfil.sexo === "macho" && perfil.esterilizado !== "si",
+        // ⚠️ AÑADIDO (9 septiembre): sin esto, el ajuste de «adulto joven» de la
+        // Tabla VII-6 de FEDIAF (130 kcal/kg^0,75 en el perro de 1-2 años contra
+        // 110 en el de 3-7) no puede aplicarse, porque `calcularDER` no sabía la
+        // edad. La entrada existía en `AJUSTE_EDAD` y era código muerto.
+        mesesEdad: edad?.totalMeses,
       });
 
   return {
@@ -4279,6 +4943,8 @@ function cuerpoApiDeUnPerro(perfil) {
     forzar_presencia: [],
     restringir_especie: null,
     der_objetivo: d.derReal,
+    actividad: claveDeActividad(perfil),
+    premios_nivel: perfil?.premiosNivel || null,
     etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
     especies_excluidas: Array.from(d.especiesExcluidas),
     evitar_especies: [],
@@ -4360,6 +5026,14 @@ function RawkuOnboardingInterna({
   onCrearCuenta = () => {},
   onDescartarLocal = () => {},
 }) {
+  // ⚠️ EL VOCABULARIO DEL MOTOR (11 septiembre). Una sola peticion por sesion,
+  // cacheada a nivel de modulo. De aqui salen los niveles de actividad con SUS
+  // DOS registros -- el del dueño y el del veterinario --, en vez de las listas
+  // que esta app tenia copiadas a mano. Si no llega, se cae al respaldo.
+  const vocab = useVocabulario();
+  const nivelesDueno = nivelesDeActividad(vocab, "dueno");
+  const nivelesVet = nivelesDeActividad(vocab, "veterinario");
+
   // Sin cuenta: `usuario` existe (USUARIO_LOCAL) para que todos los
   // `usuario && ...` de esta pantalla sigan valiendo, pero no hay sesión
   // de Supabase detrás. Lo que cambia es dónde se guardan las cosas y
@@ -4611,6 +5285,12 @@ function RawkuOnboardingInterna({
       pesoObjetivoKg: null,
       actividadIdx: 1,
       actividadTocado: true,
+      // ⚠️ ARRANCA SIN CONTESTAR, no en «ninguno» (11 de septiembre). Poner un
+      // valor por defecto seria contestar por el dueño una pregunta que decide
+      // cuanta comida le toca a su perro: quien no la vea pasaria por ella con
+      // un «no le doy premios» que no ha dicho. Con null, la pantalla no deja
+      // continuar hasta que elige.
+      premiosNivel: null,
       esterilizado: null,
       alergiaSi: null,
       alergias: [],
@@ -7292,6 +7972,8 @@ function RawkuOnboardingInterna({
 
     const cuerpoBase = {
       der_objetivo: derReal,                       // el DER de AHORA
+      actividad: claveDeActividad(perfil),
+      premios_nivel: perfil?.premiosNivel || null,
       etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
@@ -7451,6 +8133,8 @@ function RawkuOnboardingInterna({
           forzar_presencia: eleccionesDelUsuario(modo, configDeEsteMenu),
           restringir_especie: restriccionesDeEspecie(modo, configDeEsteMenu),
           der_objetivo: derReal,
+          actividad: claveDeActividad(perfil),
+          premios_nivel: perfil?.premiosNivel || null,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
           // (para dar variedad entre varios menús automáticos) se
@@ -7547,6 +8231,8 @@ function RawkuOnboardingInterna({
             forzar_presencia: [],
             restringir_especie: null,
             der_objetivo: derReal,
+            actividad: claveDeActividad(perfil),
+            premios_nivel: perfil?.premiosNivel || null,
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
             especies_excluidas: Array.from(especiesExcluidas),
             evitar_especies: [],
@@ -8184,18 +8870,47 @@ function RawkuOnboardingInterna({
               <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
                 Peso objetivo estimado:{" "}
                 <span style={{ color: VIOLETA, fontWeight: 700 }}>{objetivoBcs} kg</span>
-                {bcsPuesto === 9 && " (cota inferior: la escala se satura en 9)"}
+                {salvedadDelBcs(bcsPuesto) && ` (${salvedadDelBcs(bcsPuesto)})`}
               </p>
             )}
           </BloqueFicha>
 
           <BloqueFicha titulo="Actividad">
             <div className="grid grid-cols-1 gap-1.5">
-              {NIVELES_CLINICOS.map((n, idx) => {
+              {nivelesVet.map((n, idx) => {
                 const activo = perfil.actividadTocado && perfil.actividadIdx === idx;
                 return (
                   <button key={n.label}
                     onClick={() => { set("actividadIdx", idx); set("actividadTocado", true); }}
+                    className="text-left px-3 py-2 rounded-lg flex items-center justify-between"
+                    style={{ background: activo ? "#F0EBF8" : PAPEL,
+                             border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
+                             cursor: "pointer" }}>
+                    <span style={{ color: TINTA, fontFamily: fontBody, fontSize: 14 }}>{n.label}</span>
+                    <span className="text-[11px] text-right ml-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                      {n.detalle}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </BloqueFicha>
+
+          {/* ⚠️ EL APORTE EXTRARACIÓN (11 de septiembre de 2026). La misma
+              pregunta que al dueño, en la palabra de la fuente: el registro
+              «veterinario» de `GET /vocabulario`, que además dice cuál de las
+              cifras es de la fuente (el 10 %) y cuál la ponemos nosotros (el
+              5 % y el 20 %). Quien firma una pauta necesita poder distinguirlo. */}
+          <BloqueFicha titulo="Aporte calórico extraración">
+            <p className="text-xs mb-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+              {preguntaDePremios(vocab, "veterinario")} El motor formula la ración con las kcal
+              que quedan y le sigue exigiendo el día entero de nutrientes.
+            </p>
+            <div className="grid grid-cols-1 gap-1.5">
+              {nivelesDePremios(vocab, "veterinario").map((n) => {
+                const activo = perfil.premiosNivel === n.clave;
+                return (
+                  <button key={n.clave} onClick={() => set("premiosNivel", n.clave)}
                     className="text-left px-3 py-2 rounded-lg flex items-center justify-between"
                     style={{ background: activo ? "#F0EBF8" : PAPEL,
                              border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}`,
@@ -8760,7 +9475,7 @@ function RawkuOnboardingInterna({
               <p className="text-sm" style={{ color: MALVA, fontFamily: fontBody }}>
                 Peso objetivo estimado:{" "}
                 <span style={{ color: VIOLETA, fontWeight: 700 }}>{objetivoBcs} kg</span>
-                {puesto === 9 && " (cota inferior: la escala se satura en 9)"}
+                {salvedadDelBcs(puesto) && ` (${salvedadDelBcs(puesto)})`}
               </p>
             )}
             <div className="flex-1" />
@@ -8844,8 +9559,9 @@ function RawkuOnboardingInterna({
   }
 
   if (!enModoProfesional && paso === 5) {
-    const puedeContinuar = perfil.actividadTocado && perfil.esterilizado !== null;
-    const actual = NIVELES[perfil.actividadIdx];
+    const puedeContinuar = perfil.actividadTocado && perfil.esterilizado !== null
+                           && !!perfil.premiosNivel;
+    const actual = nivelesDueno[perfil.actividadIdx] || nivelesDueno[0];
     const Icono = actual.Icono;
     return (
       <div className="cnl-pantalla-completa w-full flex flex-col" style={{ background: PAPEL }}>
@@ -8881,6 +9597,40 @@ function RawkuOnboardingInterna({
                   style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
                   <Scissors size={20} strokeWidth={1.6} style={{ color: activo ? ROSA : "#C4B8DC" }} />
                   <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay }}>{op.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ⚠️ LOS PREMIOS (11 de septiembre de 2026). Ettinger 8a ed. cap. 192:
+              «Los alimentos y premios desequilibrados no se deben proporcionar
+              en mas de un 10 % de la ingesta calorica diaria total. Cuando se
+              agregan alimentos desequilibrados a una dieta completa y
+              equilibrada, SE PRODUCE UNA DILUCION DE NUTRIENTES, y los
+              nutrientes esenciales pueden quedar POR DEBAJO DE LOS
+              REQUERIMIENTOS MINIMOS.» Lo repiten el cap. 175 y Fascetti cap. 7.
+
+              O sea que un dueño que sigue el menu al gramo y luego da premios
+              NO esta dando el menu que le calculamos. El motor sabe contarlo
+              -- formula la racion con las kcal que quedan y le sigue exigiendo
+              el dia entero de nutrientes --, pero solo si se lo decimos.
+
+              Va en esta pantalla y no en una nueva a proposito: es una
+              pregunta de «como vive este perro», igual que la actividad y la
+              esterilizacion, y una pantalla mas es un paso mas que abandonar. */}
+          <Etiqueta>{preguntaDePremios(vocab, "dueno")}</Etiqueta>
+          <p className="text-xs mb-4" style={{ color: MALVA, fontFamily: fontBody }}>
+            Nos hace falta para calcular su ración: lo que come fuera de ella también cuenta
+          </p>
+          <div className="grid grid-cols-1 gap-2 mb-2">
+            {nivelesDePremios(vocab, "dueno").map((op) => {
+              const activo = perfil.premiosNivel === op.clave;
+              return (
+                <button key={op.clave} onClick={() => set("premiosNivel", op.clave)}
+                  className="text-left px-4 py-3 rounded-2xl transition-all"
+                  style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
+                  <span className="block" style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{op.label}</span>
+                  <span className="block text-xs mt-0.5" style={{ color: activo ? "#F3E9FB" : MALVA, fontFamily: fontBody }}>{op.detalle}</span>
                 </button>
               );
             })}
@@ -8989,13 +9739,28 @@ function RawkuOnboardingInterna({
             <SiNoToggle valor={perfil.patologiaSi} onChange={(v) => { set("patologiaSi", v); if (v === "no") set("patologias", []); }} />
             {perfil.patologiaSi === "si" && (
               <div className="flex flex-col gap-2 mt-3">
-                {PATOLOGIAS.map((p) => {
+                {/* ⚠️ AQUI SE FILTRA (11 septiembre). Elena: «Un dueño,
+                    obviamente, no puede marcar casillas de veterinario, ni
+                    siquiera le deberían salir». Eran QUINCE de las 37 que se
+                    le ofrecían: renal, pancreatitis, cardiopatía, diabetes,
+                    los cuatro tipos de cálculo, la hepatopatía... todas ellas
+                    con la cifra que aplica el motor colgando de un dato
+                    clínico que el dueño no tiene. La lista de quién puede
+                    marcar cada una NO se opina aquí: sale de la cita de la
+                    fuente de cada patología y llega por `GET /vocabulario`. */}
+                {patologiasQueVeElDueno(vocab, perfil.patologias).map((p) => {
                   const activo = perfil.patologias.includes(p.key)
                     || familiaPatologiaActiva(p.key, perfil.patologias);
+                  // Puesta por un veterinario y de las que el dueño no puede
+                  // marcar: se VE, para que sepa lo que lleva su perro, y no
+                  // se puede quitar desde aquí.
+                  const deVeterinario = activo && !laPuedeMarcarElDueno(p.key, vocab);
                   return (
                     <div key={p.key}>
                       <button
+                        disabled={deVeterinario}
                         onClick={() => {
+                          if (deVeterinario) return;
                           if (activo) {
                             set("patologias", perfil.patologias.filter(
                               (k) => k !== p.key && FAMILIA_DE_CLAVE[k] !== p.key));
@@ -9009,8 +9774,16 @@ function RawkuOnboardingInterna({
                         <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{p.label}</span>
                         {activo && <Check size={16} style={{ color: ROSA }} />}
                       </button>
-                      <SelectorSubtipoPatologia cabecera={p.key} patologias={perfil.patologias}
-                        onCambiar={(nuevas) => set("patologias", nuevas)} />
+                      {deVeterinario ? (
+                        <p className="text-[11px] leading-snug mt-1 px-1"
+                           style={{ color: MALVA, fontFamily: fontBody }}>
+                          Esto lo lleva puesto desde su ficha clínica. Ajusta el menú, y
+                          quitarlo o cambiarlo es cosa de tu veterinario.
+                        </p>
+                      ) : (
+                        <SelectorSubtipoPatologia cabecera={p.key} patologias={perfil.patologias}
+                          onCambiar={(nuevas) => set("patologias", nuevas)} />
+                      )}
                     </div>
                   );
                 })}
@@ -9684,7 +10457,7 @@ function RawkuOnboardingInterna({
       paso: 5,
       Icono: Zap,
       titulo: "Actividad y esterilización",
-      valor: `${NIVELES[perfil.actividadIdx].label} · Esterilizado: ${perfil.esterilizado === "si" ? "Sí" : perfil.esterilizado === "no" ? "No" : "—"}`,
+      valor: `${(nivelesDueno[perfil.actividadIdx] || nivelesDueno[0]).label} · Esterilizado: ${perfil.esterilizado === "si" ? "Sí" : perfil.esterilizado === "no" ? "No" : "—"}`,
     },
     {
       paso: 6,
@@ -9844,7 +10617,7 @@ function RawkuOnboardingInterna({
               kilocalorías al día
             </p>
             <p className="text-[11px] mt-3 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
-              {etapaLabel} · {NIVELES[perfil.actividadIdx].label.toLowerCase()}
+              {etapaLabel} · {(nivelesDueno[perfil.actividadIdx] || nivelesDueno[0]).label.toLowerCase()}
               {perfil.raza?.nombre ? ` · ${perfil.raza.nombre}` : ""}
             </p>
             <div className="mt-4 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.18)" }}>
@@ -10221,10 +10994,29 @@ function RawkuOnboardingInterna({
             });
             return fila;
           }}
-          onGuardar={(gramosFormulados, estadoFinal, indicaciones) => {
+          // ⚠️ LAS RACIONES QUE YA HAY PUESTAS EN LA SEMANA (11 septiembre).
+          //
+          // El formulador tenía este prop desde que se construyó el presupuesto
+          // semanal, y AQUÍ NO SE LE PASABA NADA: se quedaba en su valor por
+          // defecto `[]`. O sea que la protección estaba en el motor (BLOQUE
+          // 92, que la mide con el fallo puesto), el formulador la mandaba
+          // (`raciones_ya_puestas`), y la app nunca le daba las raciones. Una
+          // cadena de tres piezas con la primera desconectada.
+          //
+          // Son los menús que el PROFESIONAL ha formulado para este paciente,
+          // con sus gramos y los días que cubre cada uno. La resta la hace el
+          // servidor: aquí solo se declaran.
+          racionesDeLaSemana={(menusGuardados || [])
+            .flatMap((fila) => (fila?.menus_data || []))
+            .filter((m) => m && m.formulado_por_el_profesional && m.menu)
+            .map((m) => ({ gramos: m.menu, dias: Math.max(1, Number(m.dias) || 1) }))}
+          onGuardar={(gramosFormulados, estadoFinal, indicaciones, diasDeEstaRacion) => {
             const comoUnMenu = {
               factible: true,
               menu: gramosFormulados,
+              // Los días que cubre, para que la SIGUIENTE ración de la semana
+              // sepa cuánto presupuesto crónico se ha llevado ésta.
+              dias: Math.max(1, Number(diasDeEstaRacion) || 1),
               ficha: estadoFinal?.ficha || null,
               problemas_seguridad: estadoFinal?.problemas_seguridad || [],
               kcal_total: estadoFinal?.kcal ?? null,

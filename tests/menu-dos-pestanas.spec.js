@@ -70,6 +70,38 @@ test.describe("el resultado se lee en dos pestañas", () => {
     await expect(page.getByText(/Congelación/)).toHaveCount(0);
   });
 
+  // ─── «ESTO ES TODO LO QUE COME», Y VA EL PRIMERO ──────────────────────────
+  //
+  // ⚠️ AÑADIDO (9 septiembre) al leer entero el cap.3 de SACN5, que cita el
+  // AAHA Compliance Study: «55% of pet owners who fed a therapeutic food also
+  // supplemented the recommended food with other foods or treats. The primary
+  // reason cited by clients was that THEY DIDN'T KNOW NOT TO.»
+  //
+  // Más de la mitad rompe la dieta calculada sin saberlo, y el motivo número
+  // uno es que nadie se lo dijo. El motor cubre 43 requisitos gramo a gramo y
+  // no modela premios: si este aviso desaparece o se hunde debajo de los demás,
+  // la app vuelve a callarse la causa documentada de que una ración calculada
+  // no haga lo que dice.
+  //
+  // Se comprueba que ESTÁ y que va ANTES que el de congelación, porque el mismo
+  // capítulo mide que el dueño recuerda «as little as half» de lo que se le
+  // cuenta: lo que va al final no se lee.
+  test("«Cómo darlo» avisa de que no se añade nada, y lo dice lo primero", async ({ page }) => {
+    await generarMenu(page);
+    await page.getByRole("button", { name: "Cómo darlo" }).click();
+
+    const aviso = page.getByText("Esto es todo lo que come");
+    await expect(aviso).toBeVisible();
+    await expect(page.getByText(/con esto y\s+nada más/)).toBeVisible();
+
+    const congelacion = page.getByText("Congelación").first();
+    await expect(congelacion).toBeVisible();
+
+    const yAviso = (await aviso.boundingBox()).y;
+    const yCongelacion = (await congelacion.boundingBox()).y;
+    expect(yAviso, "el aviso de no añadir nada va por encima del de congelación").toBeLessThan(yCongelacion);
+  });
+
   test("«Cómo darlo» tiene la transición, la congelación y cómo se prepara cada cosa", async ({ page }) => {
     await generarMenu(page);
     await page.getByRole("button", { name: "Cómo darlo" }).click();
@@ -233,4 +265,24 @@ test.describe("el resultado se lee en dos pestañas", () => {
     while (i < a.length && a[i] === b[i]) i += 1;
     return i;
   }
+
+  // ⚠️ AÑADIDO (10 septiembre) — LA HIGIENE DE LA CASA.
+  // El panel de congelación protege AL PERRO: congelar mata los parásitos. Este
+  // protege a quien vive con él, y la app no lo decía en ninguna parte. SACN5
+  // cap.56: «Dogs consuming such foods shed bacterial pathogens at a much higher
+  // rate than those consuming conventionally cooked commercial foods».
+  // Se vigila igual que el resto de esta pantalla: que esté en SU pestaña y no
+  // en la otra, porque un bloque que se queda dentro de un condicional que ya no
+  // se cumple desaparece sin dar ningún error.
+  test("«Cómo darlo» dice también la higiene de la casa, y no solo la del alimento", async ({ page }) => {
+    await generarMenu(page);
+    await page.getByRole("button", { name: /Cómo darlo/ }).click();
+    await expect(page.getByText("Higiene en casa")).toBeVisible();
+    await expect(page.getByText(/excreta más bacterias/)).toBeVisible();
+    // Y lo que de verdad hay que hacer, que es lo que se olvida.
+    await expect(page.getByText(/Lávate las manos/)).toBeVisible();
+    // En la pestaña del menú no pinta nada.
+    await page.getByRole("button", { name: /^El menú/ }).click();
+    await expect(page.getByText("Higiene en casa")).toHaveCount(0);
+  });
 });

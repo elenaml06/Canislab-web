@@ -350,3 +350,148 @@ test("y en modo veterinario no se ofrece «¿tienes más perros?»", async ({ pa
   await esperarElPaciente(page);
   await expect(page.getByText(/¿Tienes más perros\?/)).toHaveCount(0);
 });
+
+// ─── LAS RESPUESTAS DE CADA PREGUNTA LAS ENUMERA EL MOTOR ───────────────────
+//
+// ⚠️ AÑADIDO (11 de septiembre de 2026, noche). Elena: «revisa que todas las
+// preguntas que has metido donde veterinario realmente funcionan, devuelve lo
+// que debe, y da los valores que debe para cada respuesta».
+//
+// Las cinco preguntas de subtipo vivían ESCRITAS en `FAMILIAS_PATOLOGIA` de
+// App.jsx: la pregunta, sus respuestas y a qué clave del motor lleva cada una.
+// Eso es una segunda lista de algo que ya está en `preguntas_por_patologia.json`
+// del motor, y el día que el motor añadiera un estadio la app se quedaría con
+// la suya vieja -- el veterinario no podría elegirlo, y el menú saldría verde
+// igual porque el semáforo mide contra el perro SANO. Ya pasó: los cuatro
+// estadios ACVIM existían en el motor y no había casilla para ninguno.
+//
+// SE SIEMBRA UN ESTADIO INVENTADO a propósito: con los estadios de verdad, «la
+// app lo ha leído del motor» y «la app está pintando su respaldo» se ven
+// exactamente igual en pantalla.
+const CARDIO_INVENTADA = {
+  preguntas_por_patologia: {
+    de_donde: "inventado por tests/puerta-veterinario.spec.js",
+    que_decide_cada_respuesta: {
+      cardiopatia: {
+        pregunta: "¿Cuánto zumbiquete tiene?",
+        la_hace_la_app: true,
+        quien_la_contesta: "solo_veterinario",
+        estado: "aplicada",
+        respuestas: [
+          { label: "Nada de zumbiquete", clave_motor: "cardiopatia", cifras_que_aplica: {} },
+          { label: "Zumbiquete moderado", clave_motor: "cardiopatia_c",
+            cifras_que_aplica: { max_sodio: 625.0 } },
+          { label: "Zumbiquete del malo", clave_motor: "cardiopatia_d",
+            cifras_que_aplica: { max_sodio: 480.0, _no_formulable: true } },
+        ],
+      },
+    },
+  },
+};
+
+test("las respuestas de la pregunta de subtipo salen de /vocabulario", async ({ page, request }) => {
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true, perros: [], accesos: [], menus: [],
+    vocabulario: CARDIO_INVENTADA,
+  });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  await page.getByLabel("Buscar patología").fill("cardio");
+  await page.getByText("Cardiopatía", { exact: true }).click();
+
+  // La pregunta y las respuestas del motor, no las ocho del respaldo.
+  await expect(page.getByText("¿Cuánto zumbiquete tiene?")).toBeVisible();
+  await expect(page.getByText("Zumbiquete del malo", { exact: true })).toBeVisible();
+  await expect(page.getByText("B2 — remodelado, sin síntomas", { exact: true })).toHaveCount(0);
+
+  // Y elegir una sigue cambiando la clave real: la hermana se va del array.
+  const malo = page.getByText("Zumbiquete del malo", { exact: true });
+  await malo.click();
+  await expect(malo).toHaveCSS("border-color", "rgb(90, 64, 136)");
+  const moderado = page.getByText("Zumbiquete moderado", { exact: true });
+  await moderado.click();
+  await expect(moderado).toHaveCSS("border-color", "rgb(90, 64, 136)");
+  await expect(malo).not.toHaveCSS("border-color", "rgb(90, 64, 136)");
+});
+
+// Y el respaldo, que tiene que seguir sirviendo: Render duerme a los 15 minutos
+// y sin él la cardiopatía se quedaría sin estadio, que es de donde venimos.
+test("sin /vocabulario la pregunta de subtipo cae en el respaldo", async ({ page, request }) => {
+  await configurar(request, { rolProfesional: true, rolVerificado: true, perros: [], accesos: [], menus: [] });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+  await page.getByLabel("Buscar patología").fill("cardio");
+  await page.getByText("Cardiopatía", { exact: true }).click();
+  await expect(page.getByText("¿Sabes el estadio ACVIM?")).toBeVisible();
+  await expect(page.getByText("D — insuficiencia cardíaca refractaria", { exact: true })).toBeVisible();
+});
+
+// ─── LAS PREGUNTAS DE ANALÍTICA: LA RESPUESTA SUMA, NO SUSTITUYE ────────────
+//
+// ⚠️ AÑADIDO (11 de septiembre de 2026, noche). Elena: «para patologías también
+// se tiene que tener en cuenta que algunas patologías necesitan saber ciertas
+// cosas de analíticas. eso también se tiene que preguntar».
+//
+// Son una forma DISTINTA de las cinco de subtipo, y confundirlas rompe cosas:
+// al elegir el estadio ACVIM, la respuesta SUSTITUYE a la cabecera (el array
+// nunca lleva dos claves de la misma familia); al contestar una analítica, la
+// respuesta SUMA una segunda patología y la cabecera se QUEDA. Si se aplicara
+// la lógica de sustituir, contestar «sí, triglicéridos altos» dejaría al perro
+// sin su pancreatitis.
+//
+// La forma la dice el motor en `como_se_aplica`, no se deduce: `hiperlipidemia`
+// es una patología de pleno derecho con su propia casilla, igual que
+// `cardiopatia_c`. Lo que cambia es que aquí se suma y allí se sustituye.
+const ANALITICA_INVENTADA = {
+  preguntas_por_patologia: {
+    de_donde: "inventado por tests/puerta-veterinario.spec.js",
+    que_decide_cada_respuesta: {
+      pancreatitis: {
+        pregunta: "¿Le salió el zumbiquete alto en la última analítica?",
+        la_hace_la_app: true,
+        quien_la_contesta: "solo_veterinario",
+        estado: "aplicada",
+        como_se_aplica: "anade_otra_patologia",
+        respuestas: [
+          { label: "No lo tiene alto, o no lo sé", clave_motor: null, cifras_que_aplica: {} },
+          { label: "Sí, el zumbiquete está alto", clave_motor: "hiperlipidemia",
+            cifras_que_aplica: { max_grasa: 25.0 } },
+        ],
+      },
+    },
+  },
+};
+
+test("contestar una analítica AÑADE la otra patología y deja la cabecera", async ({ page, request }) => {
+  await configurar(request, {
+    rolProfesional: true, rolVerificado: true, perros: [], accesos: [], menus: [],
+    vocabulario: ANALITICA_INVENTADA,
+  });
+  await entrar(page);
+  await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
+
+  await page.getByLabel("Buscar patología").fill("pancrea");
+  // ⚠️ `getByRole("button")` y no `getByText`: al marcarla aparece un segundo
+  // «Pancreatitis» en el resumen de lo marcado, y el texto suelto encuentra
+  // los dos.
+  await page.getByRole("button", { name: "Pancreatitis", exact: true }).click();
+
+  // La pregunta del motor, no una escrita en la app.
+  await expect(page.getByText("¿Le salió el zumbiquete alto en la última analítica?")).toBeVisible();
+
+  const si = page.getByText("Sí, el zumbiquete está alto", { exact: true });
+  await si.click();
+  await expect(si).toHaveCSS("border-color", "rgb(90, 64, 136)");
+
+  // ⚠️ LO QUE DE VERDAD SE COMPRUEBA: la pancreatitis SIGUE marcada. Con la
+  // lógica de sustituir, habría desaparecido -- y el perro se habría quedado
+  // sin el tope de grasa de su propia enfermedad, con el menú en verde.
+  await expect(page.getByRole("paragraph").filter({ hasText: /^Pancreatitis$/ })).toBeVisible();
+
+  // Y contestar que no la retira: cambiar de respuesta tiene que poder deshacer.
+  const no = page.getByText("No lo tiene alto, o no lo sé", { exact: true });
+  await no.click();
+  await expect(no).toHaveCSS("border-color", "rgb(90, 64, 136)");
+  await expect(si).not.toHaveCSS("border-color", "rgb(90, 64, 136)");
+});

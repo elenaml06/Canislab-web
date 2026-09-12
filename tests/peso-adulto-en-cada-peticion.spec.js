@@ -54,8 +54,8 @@ function cachorroDeRazaGrande() {
     peso_actual: 18.0,
     peso_adulto_esperado: null,     // a propósito: la app lo estima, no lo copia
     etapa: "cachorro",
-    tamano: "grande",
-    raza: "Pastor alemán",
+    tamano: "Grande",
+    raza: "Pastor Alemán",
     fecha_nacimiento: nacimiento.toISOString().slice(0, 10),
     dieta_actual: "barf",
   };

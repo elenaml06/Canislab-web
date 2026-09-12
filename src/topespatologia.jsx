@@ -26,6 +26,7 @@
 // paciente.
 import { useEffect, useState } from 'react'
 import { API_BASE, fetchConTimeout } from './api.js'
+import { useVocabulario } from './vocabulario.js'
 
 const VIOLETA = '#5A4088'
 const ROSA = '#FF6F91'
@@ -87,6 +88,76 @@ function cifra(v) {
   return String(Math.round(n * 100) / 100).replace('.', ',')
 }
 
+// De dónde sale cada extremo de la ventana, en cristiano. La clave viene del
+// backend (`minimo_fediaf:Fósforo`, `legal_ue:24_cardiaca:sodio`...) y aquí solo
+// se traduce: los NÚMEROS no se tocan, que es la regla de este archivo entero.
+function deDonde(clave) {
+  if (!clave) return null
+  if (clave.startsWith('minimo_fediaf:')) return { texto: 'mínimo de FEDIAF', ley: false }
+  if (clave.startsWith('maximo_fediaf:')) return { texto: 'máximo de FEDIAF', ley: false }
+  if (clave.startsWith('legal_ue:')) return { texto: 'techo LEGAL, Reglamento (UE) 2020/354', ley: true }
+  if (clave.startsWith('seguridad:')) return { texto: 'tope de seguridad crónica', ley: true }
+  if (clave === 'sin_techo') return { texto: 'nadie pone techo por arriba', ley: false }
+  if (clave === 'sin_suelo') return { texto: 'FEDIAF no pone mínimo a este nutriente', ley: false }
+  return { texto: clave, ley: false }
+}
+
+// ─── LA VENTANA: HASTA DÓNDE SE PUEDE MOVER ESTA CIFRA ──────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (10 septiembre): «tenemos que estipular qué porcentajes
+// puede variar el veterinario y cuáles NO, y hasta qué punto o qué techo,
+// dentro de cada patología, de cada caso concreto».
+//
+// El bloque `margen_profesional` que llega del backend lo trae ya resuelto, con
+// la PROCEDENCIA de cada extremo, y por eso este componente no calcula nada:
+// pintar aquí un suelo o un techo sería la tercera copia de la misma tabla, que
+// es como se desincronizó la del `POST /menu`.
+//
+// Y hay que decir las dos cosas distintas que son los dos extremos, porque no
+// se parecen: bajar del suelo es **posible** y necesita firma (es la frontera de
+// VETERINARIOS.md); pasar de un techo legal **no lo puede hacer nadie**.
+function Ventana({ m, unidad }) {
+  if (!m) return null
+  const suelo = deDonde(m.suelo_de_donde)
+  const techo = deDonde(m.techo_de_donde)
+  return (
+    <div className="rounded-lg px-2.5 py-2 mt-1.5" style={{ background: '#F7F4FC' }}>
+      <p className="text-[10px] tracking-[0.1em] uppercase mb-1"
+         style={{ color: VIOLETA, fontFamily: fontMono }}>Hasta dónde se puede mover</p>
+      <p className="text-[11px] leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+        {m.suelo === null || m.suelo === undefined
+          ? <>Por abajo, {suelo && suelo.texto}. </>
+          : <>Por abajo, <b>{cifra(m.suelo)} {unidad}</b> ({suelo && suelo.texto}). </>}
+        {m.techo === null || m.techo === undefined
+          ? <>Por arriba, {techo && techo.texto}.</>
+          : <>Por arriba, <b>{cifra(m.techo)} {unidad}</b> ({techo && techo.texto}).</>}
+      </p>
+      {m.bajo_el_suelo_necesita_firma && (
+        <p className="text-[11px] leading-snug mt-1" style={{ color: ROSA, fontFamily: fontBody }}>
+          Por debajo de {cifra(m.suelo)} deja de ser una dieta completa: es una
+          prescripción, y esa la firmas tú.
+        </p>
+      )}
+      {techo && techo.ley && m.techo !== null && m.techo !== undefined && (
+        <p className="text-[11px] leading-snug mt-1" style={{ color: ROSA, fontFamily: fontBody }}>
+          Ese techo no lo pasa nadie, ni tú ni el motor.
+        </p>
+      )}
+      {/* ⚠️ LO QUE NO SE PUEDE AFIRMAR, y por eso se dice. El Reglamento (UE)
+          2020/354 NO da un rango de maniobra por nutriente: da un techo o un
+          suelo por objetivo. Lo único que pone como rango es el TIEMPO, y su
+          ±15 % es tolerancia analítica de etiquetado, no margen clínico.
+          Enseñar la ventana como «puedes moverte libremente aquí dentro» sería
+          afirmar algo que ninguna fuente dice -- ver P-03 de
+          PREGUNTAS_ABIERTAS.md, que sigue abierta. */}
+      <p className="text-[10px] leading-snug mt-1" style={{ color: MALVA, fontFamily: fontBody }}>
+        Son los bordes, no una recomendación de moverse dentro de ellos: ninguna
+        fuente publica un rango de maniobra por nutriente.
+      </p>
+    </div>
+  )
+}
+
 function Limite({ l, esTope }) {
   const referencia = esTope ? l.minimo_fediaf_adulto : l.maximo_fediaf_adulto
   // ⚠️ EL MARGEN ES LA PREGUNTA DE VERDAD («de qué margen puede salir»).
@@ -109,6 +180,7 @@ function Limite({ l, esTope }) {
           )}
         </p>
       )}
+      <Ventana m={l.margen_profesional} unidad={l.unidad} />
       {l.fuente && (
         <p className="text-[10px] mt-1 leading-snug" style={{ color: MALVA, fontFamily: fontMono }}>
           {l.fuente}
@@ -124,6 +196,69 @@ function Limite({ l, esTope }) {
           </p>
         </details>
       )}
+    </div>
+  )
+}
+
+// ─── LO QUE EL MOTOR NO PUEDE SABER SOLO ────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (11 septiembre): «esto tiene que ser para TODO, razas,
+// tamaño, etapa, actividad, PREGUNTAS PARA LAS PATOLOGIAS DE VETERINARIOS,
+// todo....»
+//
+// De las 47 patologías, 24 son `solo_veterinario` y en ocho de ellas la cifra
+// que aplica el motor DEPENDE de un dato clínico que la app no pregunta: el
+// estadio IRIS decide el techo de fósforo, los triglicéridos bajan la grasa de
+// 37,5 a 25, el estadio ACVIM separa el B1 del B2. Mientras nadie pregunte eso,
+// la cifra se elige a ciegas — y quien firma la pauta es quien tiene el dato.
+//
+// ⚠️ Y ESTO NO ES UNA OPINIÓN DE PRODUCTO. Cada línea sale de la CITA de la
+// fuente de esa patología, en `quien_formula_cada_patologia.json`, que audita
+// el BLOQUE 79 del motor. Aquí no se escribe ni una: llegan por
+// `GET /vocabulario`, que es el mismo fichero. Copiarlas sería la segunda copia
+// de una tabla que ya tiene su auditor.
+//
+// ⚠️ LO QUE SE DICE ES QUE LA APP NO LO PREGUNTA, no que lo pregunte. Recoger
+// la respuesta sin que llegue al motor sería pedir un dato inútil, que es
+// exactamente lo contrario de la otra regla de Elena («TODOS LOS DATOS QUE
+// RECOJA LA APP TIENEN QUE LLEGAR DE ALGUNA MANERA AL MOTOR»). El motor aplica
+// hoy UNA cifra por patología, no una por estadio. Que llegue a aplicar varias
+// es una decisión clínica y está apuntada como pendiente.
+function LoQueFaltaPreguntar({ claves = [] }) {
+  const vocab = useVocabulario()
+  const porPatologia = vocab?.preguntas_por_patologia?.por_patologia
+  if (!porPatologia) return null
+
+  const conPregunta = (claves || [])
+    .map((k) => [k, porPatologia[k]])
+    .filter(([, d]) => d && (d.pregunta_que_falta || d.quien_puede_marcarla === 'solo_veterinario'))
+  if (conPregunta.length === 0) return null
+
+  return (
+    <div className="rounded-2xl px-4 py-4 mt-3"
+         style={{ background: '#FFF7E8', border: '1px solid #F5DFA8' }}>
+      <p className="text-[11px] tracking-[0.14em] uppercase mb-2"
+         style={{ color: '#B37A00', fontFamily: fontMono }}>Lo que el motor no puede saber solo</p>
+      {conPregunta.map(([clave, d]) => (
+        <div key={clave} className="mb-3 last:mb-0">
+          <p style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{d.nombre || clave}</p>
+          {d.quien_puede_marcarla === 'solo_veterinario' && (
+            <p className="text-[11px] leading-snug mt-0.5" style={{ color: '#7A5C00', fontFamily: fontBody }}>
+              Esta casilla la marca un veterinario: su cifra depende de un dato clínico
+              {d.que_dato ? ` (${d.que_dato})` : ''}.
+            </p>
+          )}
+          {d.pregunta_que_falta && (
+            <p className="text-[11px] leading-snug mt-1" style={{ color: TINTA, fontFamily: fontBody }}>
+              {d.pregunta_que_falta}
+            </p>
+          )}
+        </div>
+      ))}
+      <p className="text-[10px] leading-snug mt-1" style={{ color: '#7A5C00', fontFamily: fontBody }}>
+        La app todavía no hace estas preguntas, así que el motor aplica una sola cifra por
+        patología. Léelas antes de firmar: el dato lo tienes tú, no él.
+      </p>
     </div>
   )
 }
@@ -173,6 +308,20 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
           )}
           {p.topes.map((l) => <Limite key={`t-${l.nutriente}`} l={l} esTope />)}
           {p.suelos.map((l) => <Limite key={`s-${l.nutriente}`} l={l} esTope={false} />)}
+          {/* ─── EL SEGUNDO ESCALÓN, QUE NO SE VEÍA ────────────────────────
+              ⚠️ AÑADIDO (10 septiembre). Existen desde el 8 y no salían por
+              ninguna puerta: la grasa de la pancreatitis baja de 37,5 a 25 si
+              además hay obesidad o hipertrigliceridemia, y quien leía la ficha
+              veía 37,5 y creía que era el único número. Mismo hueco que los
+              ocho avisos_extra. */}
+          {(p.topes_si_ademas || []).map((l) => (
+            <div key={`c-${l.nutriente}`}>
+              <p className="text-[11px] leading-snug mb-1" style={{ color: VIOLETA, fontFamily: fontBody }}>
+                Y si además marcas {(l.requiere || []).join(' o ')}:
+              </p>
+              <Limite l={l} esTope />
+            </div>
+          ))}
 
           {/* ─── QUÉ ES INAMOVIBLE Y QUÉ DECIDE ÉL ────────────────────────
               ⚠️ PEDIDO EXPRESO (8 septiembre): «que le diga las
@@ -256,6 +405,12 @@ export default function QueCambiaLaPatologia({ claves = [], titulo = 'Lo que le 
           )}
         </div>
       ))}
+
+      {/* Y al final, lo que el motor NO puede saber solo: las preguntas que la
+          app todavia no hace y de las que depende la cifra. Va aqui abajo a
+          proposito -- primero lo que el motor SI aplica, luego lo que le falta
+          --, y con su propio color, porque no es un tope: es un hueco. */}
+      <LoQueFaltaPreguntar claves={claves} />
     </div>
   )
 }

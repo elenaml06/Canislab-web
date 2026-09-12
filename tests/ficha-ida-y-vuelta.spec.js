@@ -44,24 +44,48 @@ const FICHA_COMPLETA = {
   peso_actual: 17.4,
   fecha_nacimiento: "2015-03-10",     // ni el 15 de febrero de este año
   castrado: true,                      // el defecto es false
-  actividad: "baja",                   // el defecto es "media"
+  // ⚠️ «trabajo» Y NO «baja» (11 septiembre). Hasta hoy aquí ponía "baja", que
+  // es el índice 0, y el fallo que esta prueba existe para cazar vivía en los
+  // índices 3 y 4: la app ofrecía cinco niveles y la base de datos guardaba
+  // tres, así que «Muy activo» y «Trabajo» volvían como Normal. Con "baja" la
+  // prueba pasaba sin tocar el fallo -- eligió un valor que no lo prueba, que
+  // es la misma lección de los bloques 57, 58 y 60 del motor. Con el extremo de
+  // arriba, si alguien vuelve a recortar la lista, esto se pone rojo.
+  actividad: "trabajo",                // el defecto es "media"; este es el índice 4
   condicion_idx: 3,                    // el defecto es 2
   bcs: 6,
   tutor_nombre: "María López",
   tutor_contacto: "600 000 000",                              // el defecto es null, y 6 no es ninguno
                                        // de los cinco escalones del dueño
   sexo: "macho",
-  raza: null,                          // mestizo: manda el tamaño manual
-  tamano: "Pequeño",                   // el defecto acaba siendo 25 kg de adulto
+  // ⚠️ UNA RAZA DE VERDAD, Y NO `null` (11 septiembre). Aquí ponía `raza: null`
+  // («mestizo»), que es el valor por defecto: con él este campo no se probaba,
+  // porque null vuelve como null aunque se pierda por el camino. Es la misma
+  // lección que la actividad tres líneas más arriba -- elegir un valor que no
+  // prueba nada. Y `raza` no estaba en CAMPOS, así que nadie vigilaba que
+  // sobreviviera: de la raza salen el peso adulto esperado (y de ahí las kcal
+  // y la etapa) y las dos cifras propias de FEDIAF, Gran Danés y Terranova.
+  raza: "Border Collie",               // el defecto es "Pastor Alemán"
+  // Y el tamaño TIENE que ser el de esa raza: cuando hay raza reconocida,
+  // `guardarPerro` escribe `perfil.raza.tamano` y el manual no se mira. Poner
+  // aquí «Pequeño» con un Border Collie era pedirle a la ficha que guardara una
+  // contradicción, y guardaba -- con razón -- la de la raza.
+  tamano: "Mediano",                   // el de «Border Collie» en razas.json
   dieta_actual: "pienso",              // de aquí sale si necesita transición
-  alergia_si: true,
+  alergia_si: "si",
   alergias: ["pollo"],
-  otros_evitar_si: true,
+  otros_evitar_si: "si",
   otros_evitar: ["cerdo"],
-  categorias_excluidas_si: true,
+  categorias_excluidas_si: "si",
   categorias_excluidas: ["Hueso carnoso"],
-  patologia_si: false,
+  patologia_si: "no",
   patologias: [],
+  // ⚠️ «mas_del_maximo» Y NO «ninguno» (11 septiembre), por la misma lección
+  // que la actividad: `ninguno` es la primera opción y la que más se parece al
+  // vacío, así que con ella la prueba pasaría aunque el campo se perdiera. Este
+  // es el extremo, y es el que cambia más la ración -- un 20 % de las kcal del
+  // día formuladas con el día entero de nutrientes.
+  premios_nivel: "mas_del_maximo",
 };
 
 // Qué tiene que volver EXACTAMENTE igual, y por qué importa. El porqué no es
@@ -77,6 +101,7 @@ const CAMPOS = [
   ["tutor_nombre",            "una pauta firmada tiene que saber a quién se le dio"],
   ["tutor_contacto",          "una pauta firmada tiene que saber a quién se le dio"],
   ["sexo",                    "un macho entero necesita más kcal"],
+  ["raza",                    "de aquí sale su peso adulto esperado, y las dos cifras de energía propias de FEDIAF"],
   ["tamano",                  "en un mestizo, de aquí sale su peso adulto esperado"],
   ["dieta_actual",            "de aquí sale si necesita transición desde el pienso"],
   ["alergia_si",              "una alergia puede ser médica"],
@@ -87,6 +112,7 @@ const CAMPOS = [
   ["categorias_excluidas",    "un perro sin dientes no puede masticar hueso"],
   ["patologia_si",            "cambia los límites de seguridad"],
   ["patologias",              "cambia los límites de seguridad"],
+  ["premios_nivel",           "lo que come fuera de la ración diluye la ración: el motor la formula con las kcal que quedan y le exige igual el día entero de nutrientes"],
 ];
 
 test.describe("la ficha del perro sobrevive a guardar y volver", () => {

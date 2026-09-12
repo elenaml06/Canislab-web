@@ -591,6 +591,10 @@ async function completarAsistente(page, nombre) {
 
   await page.getByText("5 / 6").waitFor();
   await page.getByRole("button", { name: "No", exact: true }).click();  // sin esterilizar
+  // ⚠️ Y los premios (11 septiembre): el paso 5 no deja continuar hasta que se
+  // contesta. Es a proposito -- poner un valor por defecto seria contestar por
+  // el dueño una pregunta que decide cuanta comida le toca a su perro.
+  await page.getByRole("button", { name: /^Ninguno/ }).click();
   await page.getByRole("button", { name: "Continuar" }).click();
 
   // El paso 6 son cuatro preguntas (alergias, otras cosas a evitar,

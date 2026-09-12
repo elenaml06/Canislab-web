@@ -24,7 +24,7 @@ const OTRO_PACIENTE = {
   ...PERRO_DE_PRUEBA,
   id: "33333333-3333-4333-8333-333333333333",
   nombre: "Ruffo",
-  raza: "Galgo español",
+  raza: "Galgo Español",
   peso_actual: 27,
   tutor_nombre: "Marta Ibáñez",
 };
@@ -32,7 +32,7 @@ const TERCER_PACIENTE = {
   ...PERRO_DE_PRUEBA,
   id: "44444444-4444-4444-8444-444444444444",
   nombre: "Kira",
-  raza: "Border collie",
+  raza: "Border Collie",
   peso_actual: 18,
   tutor_nombre: "Luis Prado",
 };
@@ -40,7 +40,7 @@ const CUARTO_PACIENTE = {
   ...PERRO_DE_PRUEBA,
   id: "55555555-5555-4555-8555-555555555555",
   nombre: "Toby",
-  raza: "Teckel",
+  raza: "Dachshund Estándar",
   peso_actual: 9,
   tutor_nombre: "Ana Ruiz",
 };
@@ -256,12 +256,20 @@ test("al marcar una patología, el veterinario ve el tope, la fuente y el margen
 test("una patología sin topes lo dice, en vez de callarse", async ({ page, request }) => {
   // Callarse aquí sería peor que no enseñar nada: dejaría creer que el motor
   // ajusta algo cuando no ajusta ningún límite numérico.
+  //
+  // ⚠️ CAMBIADO (8 septiembre) DE `artrosis` A `hipotiroidismo`, y el motivo
+  // no es cosmético: ARTROSIS SÍ MUEVE UN LÍMITE. El motor le pone un suelo
+  // de EPA+DHA de 1 g/1000 kcal (SACN5 cap.34, Tabla 34-2). Esta prueba
+  // pasaba porque el servidor de mentira la servía con `suelos: []` -- se
+  // estaba comprobando la pantalla contra una ficción, que es el mismo fallo
+  // de `dentro_de_rango`. Hipotiroidismo sí es de verdad una patología sin
+  // ningún número: su restricción es por ALIMENTO (grelo y nabo).
   await configurar(request, comoVeterinario({ perros: [], accesos: [] }));
   await entrar(page);
   await page.getByRole("button", { name: /Dar de alta un paciente/ }).click();
 
-  await page.getByLabel("Buscar patología").fill("artrosis");
-  await page.getByText("Artrosis / osteoartritis", { exact: true }).click();
+  await page.getByLabel("Buscar patología").fill("hipotiroid");
+  await page.getByText("Hipotiroidismo", { exact: true }).click();
   await expect(page.getByText(/No mueve ningún límite numérico del menú/)).toBeVisible();
 });
 
@@ -312,7 +320,7 @@ test("dentro del menú de un paciente no le dicen que se lo enseñe a un veterin
   // Mal, sí, y no por el tono: es la persona que va a firmar esa pauta con
   // su número de colegiado. Decirle «enséñaselo a tu veterinario» es decirle
   // que lo que tiene delante no cuenta.
-  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: true };
+  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: "si" };
   await configurar(request, comoVeterinario({
     perros: [PACIENTE_RENAL],
     accesos: [activo(PACIENTE_RENAL)],
@@ -354,7 +362,7 @@ test("dentro del menú de un paciente no le dicen que se lo enseñe a un veterin
 
   // 3. El paciente, sin salir a buscarlo: es lo que hacen los programas que
   //    ya usan (Nutrimenta, VetMenu) -- el caso acompaña a la formulación.
-  await expect(page.getByText(/Pastor alemán/)).toBeVisible();
+  await expect(page.getByText(/Pastor Alemán/)).toBeVisible();
   await expect(page.getByText(/1211 kcal\/día/)).toBeVisible();
 
   // 4. Y en vez del «que lo apruebe tu veterinario», el tope que la
@@ -372,7 +380,7 @@ test("y el aviso de seguridad baja al final, sin alarma pero sin perderse", asyn
   // El aviso está bien calculado y no se quita: lo que está mal es DÓNDE. A
   // un tutor hay que pararle antes de que dé de comer algo; un veterinario
   // formula primero y revisa las notas después.
-  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: true };
+  const PACIENTE_RENAL = { ...PACIENTE, patologias: ["renal"], patologia_si: "si" };
   const AVISO = "Las costillas de cordero aportan mucho hueso: revisa el total de calcio de la semana.";
   await configurar(request, comoVeterinario({
     perros: [PACIENTE_RENAL], accesos: [activo(PACIENTE_RENAL)],

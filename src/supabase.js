@@ -278,7 +278,35 @@ export async function getPerros(userId) {
 // A partir de aquí esta función recibe la ficha TAL Y COMO LA TIENE LA
 // APP y hace ella las conversiones. Sigue aceptando la forma antigua
 // (fechaNacimiento, castrado, actividad) por si algún sitio la usa.
-const ACTIVIDAD_POR_INDICE = ['baja', 'media', 'alta']
+// ⚠️ ARREGLADO EL 11 DE SEPTIEMBRE — LOS DOS NIVELES DE ARRIBA NO SE GUARDABAN.
+//
+// Aqui ponia `['baja', 'media', 'alta']`: TRES. Y la app ofrece CINCO niveles
+// (NIVELES, en App.jsx: Sedentario, Normal, Activo, Muy activo, Trabajo).
+//
+// O sea que los indices 3 y 4 caian en `undefined`, el `?? 'media'` de abajo los
+// convertia en «media», y al recargar la ficha volvian como **Normal**. En
+// silencio, sin error y sin que cambiara nada en pantalla.
+//
+// Y eso cambia la comida: Trabajo son 175 kcal/kg^0,75 y Normal 110, o sea que
+// **un perro de trabajo recibia un 37 % menos** del que le toca cada vez que se
+// recargaba su ficha. El menu salia verde porque era un menu correcto para el
+// perro equivocado. Es la familia del apartado «Fallos que no puede encontrar la
+// usuaria» del CLAUDE.md del motor, y el caso que lo define es identico: siete
+// campos de `guardarPerro` que se guardaban vacios porque se leian con nombres
+// que no existian.
+//
+// COMO SALIO: escribiendo `tests/actividad-en-cada-peticion.spec.js`, con un
+// perro de trabajo, para comprobar otra cosa -- que la actividad viaja en el
+// cuerpo de la peticion. Viajaba bien; lo que estaba roto era la ficha.
+//
+// POR QUE NO LO CAZO `ficha-ida-y-vuelta.spec.js`, que tiene «actividad» en su
+// lista de campos: su perro usaba `actividad: "baja"`, el indice 0, que esta
+// dentro del rango que si sobrevivia. Ahora usa el 4, que es el que lo prueba.
+//
+// LOS TRES PRIMEROS NO SE RENOMBRAN, a proposito: hay fichas guardadas con
+// «baja», «media» y «alta» desde el primer dia, y renombrarlos las romperia
+// todas. Los dos nuevos se anaden detras.
+const ACTIVIDAD_POR_INDICE = ['baja', 'media', 'alta', 'muy_alta', 'trabajo']
 
 function fechaNacimientoISO(perfil) {
   if (perfil.fechaNacimiento) return perfil.fechaNacimiento   // forma antigua
@@ -335,6 +363,14 @@ export function filaDePerro(userId, perfil, extras = {}) {
     sexo: perfil.sexo,
     castrado: perfil.castrado ?? (perfil.esterilizado === 'si'),
     actividad: perfil.actividad ?? ACTIVIDAD_POR_INDICE[perfil.actividadIdx ?? 1] ?? 'media',
+    // ⚠️ AÑADIDO (11 de septiembre de 2026) — LOS PREMIOS.
+    // Ettinger 8a ed. cap. 192: dar mas de un 10 % de las kcal del dia en
+    // alimentos desequilibrados «produce una dilucion de nutrientes, y los
+    // nutrientes esenciales pueden quedar por debajo de los requerimientos
+    // minimos». El motor formula la racion con las kcal que quedan, pero solo
+    // si se lo decimos -- y para deciselo en CADA peticion hay que guardarlo.
+    // Sin esto, la ficha se contesta una vez y se olvida al recargar.
+    premios_nivel: perfil.premiosNivel || null,
     // ⚠️ CORREGIDO — aquí se guardaba el OBJETO entero de la raza
     // ({nombre, tamano, pesoMin, pesoMax, pesoMedio}) en una columna que
     // sólo debería llevar el nombre. Al releerlo salía texto ilegible en
@@ -366,6 +402,12 @@ const esColumnaQueNoExiste = (error, columna) => {
   return error?.code === 'PGRST204' || texto.includes(columna)
 }
 
+// Las columnas de `perros` que son mas nuevas que el codigo que las escribe.
+// Si falta el ALTER TABLE, se guarda la ficha sin ellas en vez de no guardarla.
+// ⚠️ El orden importa poco; lo que importa es que una columna nueva se añada
+// AQUI el mismo dia que a `filaDePerro`.
+const COLUMNAS_NUEVAS = ['peso_objetivo_kg', 'premios_nivel']
+
 export async function guardarPerro(userId, perfil, extras = {}) {
   const payload = filaDePerro(userId, perfil, extras)
 
@@ -375,12 +417,19 @@ export async function guardarPerro(userId, perfil, extras = {}) {
 
   let { data, error } = await escribir(payload)
 
-  if (error && esColumnaQueNoExiste(error, 'peso_objetivo_kg')) {
-    // Falta el ALTER TABLE. Se guarda el resto: perder el peso objetivo es
-    // molesto, no poder guardar la ficha es que la app no sirve.
-    const { peso_objetivo_kg, ...sinLaColumna } = payload
-    void peso_objetivo_kg
-    console.warn('[rawku] la columna peso_objetivo_kg no existe todavía en Supabase; ' +
+  // ⚠️ GENERALIZADO (11 de septiembre de 2026). Esto miraba SOLO
+  // `peso_objetivo_kg`, y el dia que se añadio `premios_nivel` el mismo problema
+  // volvia entero: codigo en produccion antes que el ALTER TABLE y la ficha sin
+  // poder guardarse. Ahora la lista es una lista, y añadir una columna nueva es
+  // añadir una linea aqui -- que es lo que hay que acordarse de hacer, y por eso
+  // esta escrito junto a ellas.
+  for (const columna of COLUMNAS_NUEVAS) {
+    if (!error || !esColumnaQueNoExiste(error, columna)) continue
+    // Falta el ALTER TABLE. Se guarda el resto: perder un campo es molesto, no
+    // poder guardar la ficha es que la app no sirve.
+    const sinLaColumna = { ...payload }
+    delete sinLaColumna[columna]
+    console.warn(`[rawku] la columna ${columna} no existe todavía en Supabase; ` +
                  'se guarda el resto de la ficha. Falta el ALTER TABLE.')
     ;({ data, error } = await escribir(sinLaColumna))
   }

@@ -67,6 +67,155 @@ async function irAlFormulador(page) {
   await expect(page.getByText("Formular la ración")).toBeVisible();
 }
 
+// ─── EL SELECTOR: POR CATEGORÍAS, Y SE EXCLUYE SIN SALIR ────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (11 septiembre), las dos mitades:
+//
+//   «la lista de ingredientes a seleccionar no está dividida por categorias
+//    /carne muscular /verduras /vísceras... y debería, para que no aparezca
+//    una lista infinita, y dentro de eso pues que aparezca por ejemplo pollo,
+//    se entre dentro de pollo y aparezca todo lo que sea de pollo»
+//
+//   «lo de excluir un alimento o un grupo de alimentos se tiene que poder
+//    hacer desde el mismo generador de menú, porque igual quiere hacer pruebas
+//    y tener que salir y volver a entrar es un coñazo»
+//
+// Antes esto era SOLO un buscador: sin escribir no se veía nada, así que para
+// encontrar un alimento había que saber ya cómo se llama. Son 163 en 14
+// categorías.
+test("el selector se navega por categoría y por especie, sin escribir nada", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+
+  // Las categorías, sin buscar nada.
+  const carne = page.getByRole("button", { name: /^Carne muscular/ });
+  await expect(carne, "sin escribir no se ve ninguna categoría: el selector sigue siendo solo " +
+                      "un buscador, y para encontrar algo hay que saber ya cómo se llama")
+    .toBeVisible();
+  // Y lo de dentro, plegado.
+  await expect(page.getByRole("button", { name: /^Carne muscular de pollo/ })).toHaveCount(0);
+
+  await carne.click();
+  // Dentro, las ESPECIES, no la lista entera.
+  await expect(page.getByRole("button", { name: /^Pollo/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Vaca/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Carne muscular de pollo/ }),
+    "al abrir la categoría salen ya todos los alimentos: falta el nivel de especie")
+    .toHaveCount(0);
+
+  await page.getByRole("button", { name: /^Pollo/ }).click();
+  await expect(page.getByRole("button", { name: /^Carne muscular de pollo/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Muslo de pollo sin piel/ })).toBeVisible();
+  // Y lo de la otra especie sigue sin salir.
+  await expect(page.getByRole("button", { name: /^Carne muscular de vaca/ })).toHaveCount(0);
+});
+
+test("una categoría sin especie no mete un nivel de más", async ({ page, request }) => {
+  // La verdura y los suplementos vienen con `especie: null` de la API de
+  // verdad. Meterles un escalón que dice «null» sería peor que no tenerlo.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByRole("button", { name: /^Verduras y frutas/ }).click();
+  await expect(page.getByRole("button", { name: /^Zanahoria/ })).toBeVisible();
+});
+
+test("se deja fuera una categoría entera sin salir del generador", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByRole("button", { name: "Dejar fuera Hueso carnoso" }).click();
+
+  // Se ve que está fuera, y se puede volver a meter. Un filtro que no se ve es
+  // un filtro que explica por qué no sale el menú sin que nadie pueda saberlo.
+  await expect(page.getByText("Fuera de esta prueba", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Volver a meter Hueso carnoso" }).first())
+    .toBeVisible();
+
+  // Y viaja al motor en la siguiente llamada.
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const ultima = peticionesFormular[peticionesFormular.length - 1];
+    return (ultima?.categorias_excluidas || []).includes("Hueso carnoso");
+  }, { message: "la categoría que el veterinario ha dejado fuera no viaja al motor: la " +
+                "excluye en la pantalla y el motor se la sigue metiendo" })
+    .toBe(true);
+});
+
+test("lo excluido en la ficha del paciente no se puede quitar desde aquí", async ({ page, request }) => {
+  // ⚠️ Regla 4 del proyecto: «las alergias y las categorías excluidas a mano
+  // no se tocan jamás, pueden ser médicas». Quitar desde un generador la
+  // exclusión que alguien anotó en la ficha es exactamente lo que esa regla
+  // previene -- y ahora que desde aquí se puede excluir, hay que comprobar que
+  // NO se puede desexcluir lo de la ficha.
+  await comoVeterinario(page, request, {
+    perros: [{ ...PERRO_DE_PRUEBA, categorias_excluidas_si: "si",
+               categorias_excluidas: ["Hueso carnoso"] }],
+  });
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await expect(page.getByText("fuera por su ficha")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Volver a meter Hueso carnoso" }),
+    "se puede quitar desde el generador una exclusión de la ficha, que puede ser médica")
+    .toHaveCount(0);
+});
+
+// ─── LOS OBJETIVOS QUE PONE EL VETERINARIO ──────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (11 septiembre): «para ciertas patologias el veterinario
+// debe poder decidir en que porcentaje quiere dejar la grasa, la proteina, lo
+// que sea... y eso hay que aplicarlo tambien».
+//
+// Y la regla que los limita, suya del mismo dia: «los requisitos se respetan
+// SIEMPRE, eso no se negocia». Lo que recorta es el motor; lo que se comprueba
+// aqui es que el numero VIAJA y que lo recortado SE VE.
+test("lo que fija el veterinario viaja al motor", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+  // ⚠️ La etiqueta lleva la unidad POR 1000 KCAL desde el 11 de septiembre: el
+// objetivo viaja en la unidad del motor, y quien escriba 2 creyendo que son
+// gramos cuando son miligramos aprieta mil veces de más.
+  await page.getByLabel("Máximo de Grasa (g/1000 kcal)").fill("30");
+  await page.getByLabel("Mínimo de Proteína (g/1000 kcal)").fill("80");
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.objetivos_del_profesional || null;
+  }, { message: "el objetivo que escribe el veterinario no llega al motor: lo teclea, lo ve en " +
+                "pantalla y el menú sale igual que sin él" })
+    .toEqual({ grasa: { max: 30 }, proteina: { min: 80 } });
+});
+
+test("lo que el motor recorta contra FEDIAF se ve", async ({ page, request }) => {
+  // ⚠️ Esto es lo que impide el fallo de verdad: aplicar el número de FEDIAF en
+  // lugar del suyo EN SILENCIO le deja firmando algo que no escribió, con su
+  // nombre y su número de colegiado debajo.
+  await comoVeterinario(page, request, {
+    objetivosAjustados: [{
+      nutriente: "Proteína_total", que_ha_pasado: "suelo_subido", tuyo: 5.0, de_fediaf: 52.1,
+      explicacion: "Tu suelo de 5.0 queda por debajo del minimo de FEDIAF (52.1), asi que manda " +
+                   "FEDIAF. Los requisitos no se negocian.",
+    }],
+  });
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect(page.getByText("Lo que no se ha podido aplicar tal cual")).toBeVisible();
+  await expect(page.getByText(/queda por debajo del minimo de FEDIAF/),
+    "el motor dice que ha recortado el objetivo y la pantalla no lo enseña: el veterinario firma " +
+    "una ración creyendo que lleva el número que él escribió")
+    .toBeVisible();
+});
+
+test("sin objetivos, no se manda el campo", async ({ page, request }) => {
+  // Un campo vacío que viaja igual es ruido que un día se lee como un cero.
+  await comoVeterinario(page, request);
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u ? ("objetivos_del_profesional" in u) : null;
+  }).toBe(false);
+});
+
 test("un veterinario formula: no hay automático ni personalizar", async ({ page, request }) => {
   await comoVeterinario(page, request);
   await expect(page.getByRole("button", { name: /^Automático/ })).toHaveCount(0);
@@ -140,7 +289,7 @@ test("un tope de patología roto se ve aunque FEDIAF diga verde", async ({ page,
   // enseñara solo el semáforo, el veterinario formularía en verde algo que
   // el motor va a rechazar al final.
   await comoVeterinario(page, request, {
-    perros: [{ ...PERRO_DE_PRUEBA, patologia_si: true, patologias: ["renal"] }],
+    perros: [{ ...PERRO_DE_PRUEBA, patologia_si: "si", patologias: ["renal"] }],
   });
   await page.getByRole("button", { name: /Añadir alimento/ }).click();
   await page.getByLabel("Buscar alimento").fill("pollo");
@@ -316,10 +465,10 @@ test("los menús de TODOS sus pacientes, y se pueden buscar", async ({ page, req
   // La pantalla de un dueño enseña los menús DEL perro en el que está,
   // porque un dueño entra ya dentro de su perro. Un veterinario entra a
   // buscar, y lo que busca puede ser de cualquiera de sus pacientes.
-  const NALA = { ...PERRO_DE_PRUEBA, nombre: "Nala", raza: "Pastor alemán",
+  const NALA = { ...PERRO_DE_PRUEBA, nombre: "Nala", raza: "Pastor Alemán",
                  tutor_nombre: "María López" };
   const CAIRO = { ...PERRO_DE_PRUEBA, id: "22222222-2222-4222-8222-222222222222",
-                  nombre: "Cairo", raza: "Bulldog francés", tutor_nombre: "Juan Pérez" };
+                  nombre: "Cairo", raza: "Bulldog Francés", tutor_nombre: "Juan Pérez" };
   await configurar(request, {
     rolProfesional: true, rolVerificado: true,
     perros: [NALA, CAIRO],
@@ -365,4 +514,195 @@ test("los menús de TODOS sus pacientes, y se pueden buscar", async ({ page, req
   await expect(filaDe("Cairo")).toBeVisible();
   await buscador.fill("pastor aleman");   // sin tilde, como se escribe en un móvil
   await expect(filaDe("Nala")).toBeVisible();
+});
+
+// ─── LO QUE LA FICHA RECOGE TIENE QUE LLEGAR TAMBIÉN DESDE AQUÍ ──────────────
+//
+// ⚠️ POR QUÉ EXISTE, y es una corrección (11 de septiembre de 2026)
+//
+// Elena, probándolo ella: «por eso te dije que todo lo tienes que probar dentro
+// de la app con los usuarios que tienes para comprobar que funciona, y no lo
+// has hecho en nada, ni con todo lo que hemos aplicado para el perfil de
+// veterinario hoy ni para el de usuarios».
+//
+// Y el perfil de veterinario tenía el fallo entero: `formulador.jsx` no mandaba
+// NI la actividad NI el nivel de premios en ninguna de sus llamadas a
+// `/formular/*`. El generador del tutor sí los mandaba, porque el conversor de
+// actividad vivía dentro de `App.jsx`; esta pantalla no puede importar de allí
+// sin hacer un ciclo, así que se quedó sin ellos y nadie lo vio.
+//
+// QUÉ SE PERDÍA, que es lo que lo hace un fallo y no una omisión:
+//   · Sin `premios_nivel`, al paciente al que su dueño le da un 20 % de las
+//     calorías en premios se le formula la ración como si no tomara ninguno --
+//     y esas calorías se suman POR ENCIMA de la ración que el veterinario FIRMA.
+//   · Sin `actividad`, el motor tiene que deducirla del cociente DER/peso^0,75,
+//     que confunde al Gran Danés (su cifra es POR RAZA, no por actividad).
+//
+// Es la misma familia que `premios-en-cada-peticion.spec.js` y
+// `actividad-en-cada-peticion.spec.js`, que vigilaban los cinco cuerpos de
+// App.jsx y no este, que es el SEXTO.
+test.describe("los datos de la ficha llegan desde el formulador", () => {
+  for (const [nivel, actividadGuardada, claveEsperada] of [
+    ["mas_del_maximo", "trabajo", "trabajo"],
+    ["ninguno", "baja", "sedentario"],
+  ]) {
+    test(`premios «${nivel}» y actividad «${actividadGuardada}» viajan a /formular`,
+      async ({ page, request }) => {
+        await comoVeterinario(page, request, {
+          perros: [{ ...PERRO_DE_PRUEBA, premios_nivel: nivel, actividad: actividadGuardada }],
+        });
+        await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+        await expect.poll(async () => {
+          const { peticionesFormular } = await leer(request);
+          const u = peticionesFormular[peticionesFormular.length - 1];
+          return { premios: u?.premios_nivel ?? null, actividad: u?.actividad ?? null };
+        }, { message: "la pantalla del veterinario formula sin el nivel de premios o sin la " +
+                      "actividad del paciente. La ración que va a FIRMAR está calculada con " +
+                      "datos que la ficha sí tiene" })
+          .toEqual({ premios: nivel, actividad: claveEsperada });
+      });
+  }
+});
+
+// ─── LA SEMANA DEL PACIENTE, PROBADA EN LA APP ───────────────────────────────
+//
+// ⚠️ POR QUÉ EXISTE, y es la segunda corrección del mismo día (11 de septiembre
+// de 2026). Elena: «de la lista de cosas que teníamos que hacer hoy de
+// veterinario no se han completado todas».
+//
+// El presupuesto semanal de seguridad crónica para el formulador se construyó
+// hoy en TRES piezas, y la primera estaba desconectada:
+//
+//   1. `App.jsx` tenía que pasarle al formulador las raciones ya puestas
+//      → NO LE PASABA NADA. El prop se quedaba en su `[]` por defecto.
+//   2. `formulador.jsx` las manda como `raciones_ya_puestas`  ✔ hecho
+//   3. El motor resta y se lo pasa al solver como restricción DURA  ✔ BLOQUE 92
+//
+// O sea: medido en el motor, funcionando en el motor, y en la app no llegaba
+// ninguna ración. Esto lo vigila desde la app, que es donde faltaba.
+test("las raciones ya puestas viajan al motor con sus días", async ({ page, request }) => {
+  // Un menú que el PROFESIONAL ya formuló para este paciente, con sus días.
+  // Es la forma exacta que guarda `onGuardar`: `menus_data[]` con `menu`,
+  // `formulado_por_el_profesional` y `dias`.
+  await comoVeterinario(page, request, {
+    menus: [{
+      id: "m-semana-1",
+      perro_id: PERRO_DE_PRUEBA.id,
+      nombre: "Ración de lunes a miércoles",
+      created_at: "2026-09-10T10:00:00.000Z",
+      menus_data: [{
+        factible: true,
+        formulado_por_el_profesional: true,
+        dias: 3,
+        menu: { "Carne muscular de pollo": 400, "Hueso carnoso de pollo": 140 },
+      }],
+    }],
+  });
+
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.raciones_ya_puestas || null;
+  }, { message: "el formulador del veterinario formula SIN las raciones que ya hay puestas en la " +
+                "semana. El presupuesto semanal de seguridad crónica está construido en el motor " +
+                "y no se está usando: cada ración se calcula como si fuera la semana entera" })
+    .toEqual([{ gramos: { "Carne muscular de pollo": 400, "Hueso carnoso de pollo": 140 }, dias: 3 }]);
+});
+
+// Y los días de ESTA ración, que es la otra mitad: sin ellos el servidor no
+// sabe por cuánto multiplicar lo que se va a llevar del presupuesto.
+test("los días que cubre esta ración viajan en cada llamada", async ({ page, request }) => {
+  await comoVeterinario(page, request);
+  await page.getByLabel("Días que cubre esta ración").fill("4");
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.dias_de_esta_racion ?? null;
+  }, { message: "los días que el veterinario ha dicho que cubre esta ración no llegan al motor" })
+    .toBe(4);
+});
+
+// ─── LOS NUTRIENTES QUE SE PUEDEN FIJAR LOS ENUMERA EL MOTOR ────────────────
+//
+// ⚠️ POR QUÉ EXISTE (11 de septiembre de 2026). El panel «Tus objetivos» tenía
+// OCHO nutrientes escritos a mano dentro de `formulador.jsx`. El motor acepta
+// los 46 que verifica: la clave viaja tal cual y `_objetivos_dentro_de_fediaf`
+// la busca en `verificar.MAPA`. O sea que los otros 38 no faltaban por el
+// motor, faltaban porque esta pantalla decidía la lista -- que es justo lo que
+// `GET /vocabulario` existe para impedir, y la cadena es FUENTE manda, MOTOR la
+// implementa, APP la ofrece.
+//
+// SE SIEMBRAN NOMBRES INVENTADOS a propósito, como en `vocabulario.spec.js`:
+// con los nombres de verdad, «la app lo ha leído del motor» y «la app está
+// pintando sus ocho de respaldo» se ven EXACTAMENTE IGUAL en pantalla, y la
+// prueba pasaría en verde con la petición entera comentada.
+const OBJETIVOS_INVENTADOS = {
+  objetivos_del_profesional: {
+    de_donde: "inventado por tests/formulador.spec.js",
+    cuantos: 3,
+    nutrientes: [
+      { clave: "proteina", nombre_del_requisito: "Proteína_total", unidad: "g",
+        por: "1000 kcal", de_la_tabla_III_3b: true,
+        dueno: null, veterinario: { titulo: "Zumbito total (g/1000 kcal)", detalle: null } },
+      { clave: "selenio", nombre_del_requisito: "Selenio", unidad: "µg",
+        por: "1000 kcal", de_la_tabla_III_3b: true,
+        dueno: null, veterinario: { titulo: "Farfalio (µg/1000 kcal)", detalle: null } },
+      { clave: "triptofano", nombre_del_requisito: "Triptofano", unidad: "g",
+        por: "1000 kcal", de_la_tabla_III_3b: true,
+        dueno: null, veterinario: { titulo: "Merluzina (g/1000 kcal)", detalle: null } },
+    ],
+  },
+};
+
+test("los nutrientes que se pueden fijar salen de /vocabulario, no de la app", async ({ page, request }) => {
+  await comoVeterinario(page, request, { vocabulario: OBJETIVOS_INVENTADOS });
+
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+
+  // La palabra inventada del motor, en pantalla. Si saliera «Proteína (g)» es
+  // que se está pintando el respaldo con la petición hecha.
+  await expect(page.getByText("Zumbito total (g/1000 kcal)")).toBeVisible();
+  await expect(page.getByText("Merluzina (g/1000 kcal)")).toBeVisible();
+  await expect(page.getByText("Proteína (g/1000 kcal)")).toHaveCount(0);
+
+  // Y el recuento sale de la misma lista que se pinta, no de un número aparte.
+  await expect(page.getByText("3 nutrientes · los que verifica el motor")).toBeVisible();
+});
+
+// El buscador: 46 filas de dos casillas no se recorren a ojo. Filtra lo que se
+// PINTA y nada más -- lo ya fijado sigue viajando al motor aunque se esconda,
+// que es lo contrario de lo que haría un filtro que tocara los datos.
+test("el buscador de objetivos filtra el pintado y no lo fijado", async ({ page, request }) => {
+  await comoVeterinario(page, request, { vocabulario: OBJETIVOS_INVENTADOS });
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+
+  await page.getByLabel("Mínimo de Zumbito total (g/1000 kcal)").fill("90");
+  await page.getByLabel("Buscar nutriente").fill("merluz");
+
+  await expect(page.getByText("Zumbito total (g/1000 kcal)")).toHaveCount(0);
+  await expect(page.getByText("Merluzina (g/1000 kcal)")).toBeVisible();
+
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const u = peticionesFormular[peticionesFormular.length - 1];
+    return u?.objetivos_del_profesional || null;
+  }, { message: "el objetivo que el buscador esconde ha dejado de viajar al motor. El filtro es " +
+                "de pintado: esconder una fila no puede borrar lo que el profesional ya escribió" })
+    .toEqual({ proteina: { min: 90 } });
+});
+
+// Y el respaldo, que tiene que seguir sirviendo: Render duerme a los 15 minutos
+// y sin `/vocabulario` la pantalla no puede quedarse sin panel de objetivos.
+test("sin /vocabulario se pintan los ocho de respaldo y no un hueco", async ({ page, request }) => {
+  await comoVeterinario(page, request);   // sin sembrar vocabulario: la API da 404
+  await page.getByRole("button", { name: /Tus objetivos/ }).click();
+
+  await expect(page.getByText("Proteína (g/1000 kcal)")).toBeVisible();
+  await expect(page.getByText("8 nutrientes · los que verifica el motor")).toBeVisible();
 });
