@@ -1,3 +1,24 @@
+// ─── LA APP CONTRA LA API DESPLEGADA, CON EL RELOJ DE PRODUCCIÓN ─────────────
+//
+// ⚠️ ESTA ES LA QUE ENCONTRÓ EL FALLO DEL 12 DE SEPTIEMBRE DE 2026, y por eso
+// se queda en el repo.
+//
+// `playwright.real.config.js` levanta el motor AQUÍ, en esta máquina, y aquí
+// el motor va rápido. La usuaria no usa esta máquina: usa Render, que va
+// varias veces más lento. Con esta configuración -- la app apuntando a
+// `canislab-api.onrender.com` y con los 45 s de la app de verdad -- las tres
+// pruebas de punta a punta se caían, y en pantalla salía «No hemos encontrado
+// un menú que cumpla» para cualquier perro.
+//
+// ⚠️ NO LA EJECUTA NADIE AUTOMÁTICAMENTE, y es a propósito: habla con el
+// servidor de producción, tarda minutos y su resultado depende de si Render
+// está dormido. Se corre A MANO cuando algo «funciona aquí y no allí»:
+//
+//     npx playwright test --config playwright.produccion.config.js
+//
+// Lo que sí está vigilado en cada suite es la aritmética del reloj, sin red:
+// `tests/el-reloj-de-la-semana.spec.js`.
+
 // ─── La única prueba que habla con la API DE VERDAD ──────────────────────────
 //
 // POR QUÉ EXISTE (28 de agosto). Hay 30 pruebas de navegador y **25 hablan con
@@ -109,21 +130,8 @@ export default defineConfig({
         VITE_SUPABASE_URL: `http://127.0.0.1:${PUERTO_SUPABASE}`,
         VITE_SUPABASE_ANON_KEY: "clave-anon-de-mentira",
         // LA DIFERENCIA CON playwright.config.js: aquí apunta a la API REAL.
-        VITE_API_BASE: `http://127.0.0.1:${PUERTO_API}`,
-        // ⚠️ EL MISMO TIEMPO QUE PRODUCCIÓN, NI UNO MÁS (12 de septiembre de
-        // 2026), y esto es la corrección de un fallo que costó caro.
-        //
-        // Aquí ponía 120000 con el motivo de que «el motor tarda de verdad».
-        // Es verdad que tarda, pero la app REAL corta a los 45 s, así que esta
-        // prueba -- la única que habla con el motor de verdad, la que existe
-        // para cazar desacuerdos entre las dos mitades -- se estaba dando un
-        // tiempo que el producto no se da. Y tapó exactamente eso: la semana
-        // entera tarda 70,5 s en la API desplegada y NUNCA cabía en los 45 s
-        // de la app, con la pantalla contándolo como si el perro no tuviera
-        // menú posible. La usuaria lo vio en producción; la prueba, no.
-        //
-        // Una prueba no puede darse más margen que el producto. Si el motor
-        // local tarda más que esto, es una señal, no un estorbo.
+        VITE_API_BASE: "https://canislab-api.onrender.com",
+        // El motor tarda de verdad; con 3 s no le daría tiempo ni a empezar.
         VITE_TIMEOUT_API_MS: "45000",
         VITE_SENTRY_DSN: "",
       },

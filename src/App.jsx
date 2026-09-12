@@ -37,7 +37,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
          condicionDesdeBcs, bcsVigente } from "./bcs";
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
-import { API_BASE, fetchConTimeout } from "./api.js";
+import { API_BASE, fetchConTimeout, tiempoParaVariosMenus } from "./api.js";
 import { useVocabulario, alLlegarVocabulario, ACTIVIDAD_API, claveDeActividad } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
@@ -8379,11 +8379,15 @@ function RawkuOnboardingInterna({
           peso_adulto_esperado_kg: pesoAdultoEsperado || null,
             tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
           };
+          // ⚠️ EL TIEMPO SE CALCULA CON CUÁNTOS MENÚS SE PIDEN, no es el de
+          // siempre. Con los 45 s de siempre la semana entera NUNCA cabía
+          // -- medido: 70,5 s en la API desplegada -- y se abortaba a mitad.
+          // Ver `tiempoParaVariosMenus` en `api.js`.
           const res = await fetchConTimeout(`${API_BASE}/menu/semana?numero_de_menus=${cuantos}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(conTokenProfesional(cuerpoBase)),
-          });
+          }, tiempoParaVariosMenus(cuantos));
           let cuerpo;
           try {
             cuerpo = await res.json();
@@ -8405,7 +8409,7 @@ function RawkuOnboardingInterna({
           // ya existía, pero era código muerto: como aquí se capturaba
           // todo, nunca le llegaba nada que reintentar.
           if (err?.esTimeout) throw err;
-          ultimoError = { motivo: "La semana no se pudo calcular por un problema de conexión." };
+          ultimoError = { motivo: "La semana no se pudo calcular por un problema de conexión.", esDeConexion: true };
           registro.push({ intento: 1, resultado: "error de red", motivo: String(err?.message || err) });
         }
         setDiagnosticoMenus({ pedidos: cuantos, conseguidos: resultados.length, registro });
@@ -8462,7 +8466,7 @@ function RawkuOnboardingInterna({
         } catch (err) {
           // Igual que arriba: el timeout sube al bucle de reintentos.
           if (err?.esTimeout) throw err;
-          ultimoError = { motivo: "Uno de los menús no se pudo calcular por un problema de conexión." };
+          ultimoError = { motivo: "Uno de los menús no se pudo calcular por un problema de conexión.", esDeConexion: true };
           registro.push({ intento: i + 1, resultado: "error de red", motivo: String(err?.message || err) });
         }
       }
@@ -11625,9 +11629,17 @@ function RawkuOnboardingInterna({
           <BotonMenu onClick={() => setMenuLigeroAbierto(true)} color={VIOLETA} className="absolute top-10 left-6 p-1" />
           <AlertCircle size={36} strokeWidth={1.4} style={{ color: ROSA }} />
           <p className="mt-4 mb-2" style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 18 }}>
+            {/* ⚠️ TARDAR NO ES INCUMPLIR (12 de septiembre de 2026). Un fallo
+                de red o un tiempo agotado se enseñaba con el mismo titular que
+                «este perro no tiene menú posible», y son cosas opuestas: una se
+                arregla volviendo a probar y la otra quitando restricciones.
+                Decirlas igual mandó a buscar un fallo de nutrición donde había
+                un reloj -- a la usuaria y a mí. */}
             {necesitaVeterinario
               ? "Esto lo tiene que pautar tu veterinario"
-              : "No hemos encontrado un menú que cumpla"}
+              : (detalleDelFallo?.esDeConexion
+                  ? "El servidor ha tardado demasiado"
+                  : "No hemos encontrado un menú que cumpla")}
           </p>
           <p className="text-sm mb-4" style={{ color: MALVA, fontFamily: fontBody }}>{menuError}</p>
 
@@ -11678,7 +11690,7 @@ function RawkuOnboardingInterna({
               seguridad, y prefiere no dar menú a dar uno que no cumple.
               Sin esta explicación, "no se pudo calcular" se lee como una
               app rota, cuando en realidad es la app haciendo su trabajo. */}
-          {!necesitaVeterinario && (
+          {!necesitaVeterinario && !detalleDelFallo?.esDeConexion && (
             <div className="rounded-xl p-4 mb-6 text-left" style={{ background: "#F0ECF7", maxWidth: 340 }}>
               <p className="text-xs mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
                 Esto no es un fallo de la app
@@ -11693,6 +11705,19 @@ function RawkuOnboardingInterna({
               <p className="text-xs" style={{ color: MALVA, fontFamily: fontBody }}>
                 Suele arreglarse quitando alguna restricción (alergias,
                 categorías excluidas) o dejando más alimentos disponibles.
+              </p>
+            </div>
+          )}
+
+          {detalleDelFallo?.esDeConexion && (
+            <div className="rounded-xl p-4 mb-6 text-left" style={{ background: "#F0ECF7", maxWidth: 340 }}>
+              <p className="text-xs mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 700 }}>
+                Esto no dice nada de tu perro
+              </p>
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                No es que no haya menú posible: es que el servidor no ha
+                contestado a tiempo. Suele pasar la primera vez del día, cuando
+                lleva un rato dormido. Vuelve a darle y normalmente sale.
               </p>
             </div>
           )}
