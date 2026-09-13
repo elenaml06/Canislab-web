@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { ACTIVIDAD_EN_LA_BASE_DE_DATOS } from './vocabulario.js'
 import { esProfesional as esProfesionalSegunPerfil } from './rol.js'
 
 // Se pueden sobreescribir por variable de entorno (VITE_SUPABASE_URL /
@@ -306,7 +307,18 @@ export async function getPerros(userId) {
 // LOS TRES PRIMEROS NO SE RENOMBRAN, a proposito: hay fichas guardadas con
 // «baja», «media» y «alta» desde el primer dia, y renombrarlos las romperia
 // todas. Los dos nuevos se anaden detras.
-const ACTIVIDAD_POR_INDICE = ['baja', 'media', 'alta', 'muy_alta', 'trabajo']
+// ⚠️ ESTA TRADUCCIÓN LA MANDA EL MOTOR DESDE EL 13 DE SEPTIEMBRE DE 2026, y
+// era de las peores que quedaban viviendo solo aquí: es la que decide con qué
+// nombre se GUARDA la actividad de un perro. La ficha guarda un índice (0-4),
+// el motor usa `sedentario`/`normal`/… y la base de datos usa
+// `baja`/`media`/… -- tres vocabularios para lo mismo, y la tabla que los
+// traducía estaba escrita aquí y en ningún sitio más.
+//
+// El día que el motor añadiera un nivel o cambiara el orden, esto seguiría
+// traduciendo por el índice viejo y un perro volvería de la base de datos con
+// OTRA actividad, o sea con otras kcal, sin dar ningún error y con el menú
+// saliendo verde. Es exactamente la familia de fallos de `guardarPerro` que
+// describe el CLAUDE.md del motor: se ve bien en pantalla y está mal guardado.
 
 function fechaNacimientoISO(perfil) {
   if (perfil.fechaNacimiento) return perfil.fechaNacimiento   // forma antigua
@@ -362,7 +374,7 @@ export function filaDePerro(userId, perfil, extras = {}) {
     tamano: perfil.raza?.tamano || perfil.tamanoManual || perfil.tamano || null,
     sexo: perfil.sexo,
     castrado: perfil.castrado ?? (perfil.esterilizado === 'si'),
-    actividad: perfil.actividad ?? ACTIVIDAD_POR_INDICE[perfil.actividadIdx ?? 1] ?? 'media',
+    actividad: perfil.actividad ?? ACTIVIDAD_EN_LA_BASE_DE_DATOS[perfil.actividadIdx ?? 1] ?? 'media',
     // ⚠️ AÑADIDO (11 de septiembre de 2026) — LOS PREMIOS.
     // Ettinger 8a ed. cap. 192: dar mas de un 10 % de las kcal del dia en
     // alimentos desequilibrados «produce una dilucion de nutrientes, y los

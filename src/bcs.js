@@ -239,7 +239,18 @@ export const ESCALA_BCS = [
 //
 // Y no es una interpretación: es la columna que la propia guía imprime al lado
 // de sus descriptores, adaptada de Laflamme 1995/1997. Lo vigila el BLOQUE 63.
-export const BCS_DESDE_CONDICION = { 0: 1, 1: 3, 2: 5, 3: 7, 4: 9 };
+// ⚠️ RESPALDO: lo sirve el motor en `condicion_corporal.escalones_del_dueno`,
+// y hoy dice exactamente esto. Es la traducción entre los cinco escalones que
+// ve el dueño y los nueve puntos de BCS de FEDIAF, y de ella sale el peso
+// objetivo: si el motor cambiara la banda ideal y esta copia no, el peso
+// objetivo saldría de otro punto de la escala sin que nada lo dijera.
+const BCS_DESDE_CONDICION_RESPALDO = { 0: 1, 1: 3, 2: 5, 3: 7, 4: 9 };
+export let BCS_DESDE_CONDICION = BCS_DESDE_CONDICION_RESPALDO;
+
+alLlegarVocabulario((v) => {
+  const e = v?.condicion_corporal?.escalones_del_dueno;
+  if (e && Object.keys(e).length) BCS_DESDE_CONDICION = e;
+});
 
 // Y de vuelta: al BCS que ponga el veterinario le corresponde un escalón,
 // para que la ficha siga entendiéndose desde el lado del dueño (una ficha

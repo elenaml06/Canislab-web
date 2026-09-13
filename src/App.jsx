@@ -630,14 +630,41 @@ let CONDICIONES = CONDICIONES_RESPALDO;
 // Las seis categorías de comida del catálogo, tal como las nombra el motor.
 // Si un nombre no coincide EXACTAMENTE, la exclusión no hace nada y el menú
 // sale igual -- sin error y sin aviso. Por eso están escritas una sola vez.
-const CATEGORIAS_QUE_PUEDE_EXCLUIR = [
+// ⚠️ RESPALDO: las manda el motor en `categorias_que_elige_el_usuario`. Es la
+// regla 5 de su CLAUDE.md, y ya falló una vez: durante tres semanas el motor
+// respetaba TRES de las seis y 15 de cada 36 menús personalizados metían algo
+// que nadie había pedido, callando, porque el menú salía verde igual.
+const CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO = [
   { key: "Carne muscular", label: "Carne muscular" },
   { key: "Hueso carnoso", label: "Hueso carnoso" },
   { key: "Pescados y mariscos", label: "Pescados y mariscos" },
   { key: "Vísceras", label: "Vísceras" },
   { key: "Hígado", label: "Hígado" },
   { key: "Verduras y frutas", label: "Verduras y frutas" },
-];
+];let CATEGORIAS_QUE_PUEDE_EXCLUIR = CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO;
+
+// ⚠️ RESPALDO: el peso del perro de muestra de cada tamaño lo sirve el motor en
+// `tamanos.tamanos[].peso_kg_del_menu_de_muestra`, que es el mismo con el que
+// genera los menús precalculados de la vista previa. Tenerlo escrito aquí era
+// una segunda copia que nadie comparaba.
+const PESO_ADULTO_POR_TAMANO_RESPALDO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, Grande: 32, Gigante: 55 };
+let PESO_ADULTO_POR_TAMANO_DEL_MOTOR = PESO_ADULTO_POR_TAMANO_RESPALDO;
+
+alLlegarVocabulario((v) => {
+  const cats = v?.categorias_que_elige_el_usuario?.categorias;
+  if (Array.isArray(cats) && cats.length) {
+    CATEGORIAS_QUE_PUEDE_EXCLUIR = cats.map((c) => ({ key: c, label: c }));
+  }
+  const tam = v?.tamanos?.tamanos;
+  if (Array.isArray(tam) && tam.length) {
+    const m = {};
+    for (const t of tam) {
+      if (t.clave && t.peso_kg_del_menu_de_muestra) m[t.clave] = t.peso_kg_del_menu_de_muestra;
+    }
+    if (Object.keys(m).length) PESO_ADULTO_POR_TAMANO_DEL_MOTOR = m;
+  }
+});
+
 
 const BANDERA_DE = {
   alergias: "alergiaSi",
@@ -1934,7 +1961,7 @@ function calcularEdad(dia, mesIdx, anio) {
            totalMeses: Math.floor(meses / 12) * 12 + (meses % 12) };
 }
 
-const PESO_ADULTO_POR_TAMANO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, Grande: 32, Gigante: 55 };
+// (la de arriba: `PESO_ADULTO_POR_TAMANO_DEL_MOTOR`, que el motor rellena)
 // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: al elegir "mestizo
 // / no lo sé", el usuario tiene que elegir un tamaño a ciegas sin saber
 // qué kilos representa cada palabra. Rangos calculados de verdad a
@@ -5054,7 +5081,7 @@ function perfilDesdeSupabase(p) {
     // ⚠️ CORREGIDO (21 agosto) — estos dos volvían SIEMPRE en null, y el
     // tamaño no es decorativo: para un mestizo (sin raza) es de donde
     // sale su peso adulto esperado, y de ahí la etapa y las kcal. Ver
-    // datosDeUnPerro: usa PESO_ADULTO_POR_TAMANO[perfil.tamanoManual].
+    // datosDeUnPerro: usa PESO_ADULTO_POR_TAMANO_DEL_MOTOR[perfil.tamanoManual].
     // Con null caía al valor por defecto de 25 kg, fuera el perro un Toy
     // de 3 kg o un Gigante de 55 -- en cada recarga, sin avisar.
     //
@@ -5081,7 +5108,7 @@ function datosDeUnPerro(perfil) {
   // SU sexo si la fuente lo separa. En el Kuvasz son 55 kg en macho y 43,5 en
   // hembra contra los 49,5 de la unión.
   const pesoAdultoMedioRaza = pesoDeRaza(perfil.raza, perfil.sexo)?.pesoMedio
-    || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+    || PESO_ADULTO_POR_TAMANO_DEL_MOTOR[perfil.tamanoManual] || 25;
   // ⚠️ SIN EL RANGO DE LA RAZA (12 de septiembre, noche): aquí se le pasaban
   // `pesoMin` y `pesoMax` para recortar la estimación, y ese recorte ya no
   // existe -- el peso adulto lo decide la curva del propio cachorro. La tabla
