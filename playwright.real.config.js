@@ -61,7 +61,13 @@ if (!fs.existsSync(path.join(RUTA_API, "main.py"))) {
 
 export default defineConfig({
   testDir: "./tests",
-  testMatch: /de-punta-a-punta\.spec\.js/,
+  // ⚠️ DOS FICHEROS, Y EL SEGUNDO ES DEL 13 DE SEPTIEMBRE. `de-punta-a-punta`
+  // comprueba que las dos mitades hablan del MISMO perro (la costura);
+  // `todos-los-perros-contra-el-motor-real` comprueba que **todo perro que se
+  // puede escribir en la ficha obtiene menú**, que es otra cosa y es la que
+  // faltaba: el día que Cairo se quedó sin comer, esta configuración existía y
+  // solo probaba UN perro.
+  testMatch: /(de-punta-a-punta|todos-los-perros-contra-el-motor-real)\.spec\.js/,
   fullyParallel: false,
   workers: 1,
   reporter: [["list"]],
@@ -96,7 +102,19 @@ export default defineConfig({
       command: `python3 -m uvicorn main:app --host 127.0.0.1 --port ${PUERTO_API} --log-level warning`,
       cwd: RUTA_API,
       url: `http://127.0.0.1:${PUERTO_API}/verificar`,
-      reuseExistingServer: !process.env.CI,
+      // ⚠️ NO SE REUTILIZA NUNCA (13 de septiembre de 2026). Con
+      // `reuseExistingServer` puesto, un uvicorn levantado por una ejecucion
+      // ANTERIOR se queda escuchando y Playwright se lo queda -- asi que la
+      // prueba habla con el motor de HACE UN RATO, no con el del disco.
+      //
+      // Paso el mismo dia que se escribio esta bateria: se arreglo el fallo del
+      // senior, se volvio a ejecutar, y siguio roja contra la API vieja. Es la
+      // trampa del `.pyc` cacheado del CLAUDE.md con otra cara, y la peor clase
+      // de fallo posible en una bateria: **afirma algo del motor que el codigo
+      // no dice**. En la otra direccion taparia un arreglo o un destrozo.
+      //
+      // Levantar uno nuevo cuesta unos segundos. Mentir sale mucho mas caro.
+      reuseExistingServer: false,
       timeout: 120_000,
       stdout: "pipe",
       env: { PYTHONPATH: `${RUTA_API}:${path.join(RUTA_API, "motor")}` },
