@@ -125,6 +125,29 @@ const VOCABULARIO_INVENTADO = {
       veterinario: { titulo: clave, detalle: `clinico de ${clave}` },
     })),
   },
+  // Las etapas, con su OTRO nombre. La clave de la ficha es la que sale de
+  // `determinarEtapa` y no se puede inventar -- si se cambiara, la app dejaria
+  // de encontrarla y caeria al respaldo, que es lo contrario de lo que se
+  // quiere probar --, asi que lo inventado es el sufijo de la API: lo que
+  // viaja al motor en `etapa_requisitos`.
+  etapas: {
+    etapas: [
+      { clave: "EtapaDelMotorA", clave_en_la_ficha: "cachorro_joven", la_calcula_la_ficha: true,
+        dueno: { titulo: "A", detalle: "a" }, veterinario: { titulo: "A", detalle: "a" } },
+      { clave: "EtapaDelMotorB", clave_en_la_ficha: "cachorro_crecimiento",
+        la_calcula_la_ficha: true,
+        dueno: { titulo: "B", detalle: "b" }, veterinario: { titulo: "B", detalle: "b" } },
+      { clave: "EtapaDelMotorC", clave_en_la_ficha: "adulto", la_calcula_la_ficha: true,
+        dueno: { titulo: "C", detalle: "c" }, veterinario: { titulo: "C", detalle: "c" } },
+      { clave: "EtapaDelMotorD", clave_en_la_ficha: "senior", la_calcula_la_ficha: true,
+        dueno: { titulo: "D", detalle: "d" }, veterinario: { titulo: "D", detalle: "d" } },
+      { clave: "Lactante", clave_en_la_ficha: "lactante", la_calcula_la_ficha: false,
+        dueno: { titulo: "L", detalle: "l" }, veterinario: { titulo: "L", detalle: "l" } },
+    ],
+    los_dos_nombres: { la_ficha_calcula: ["cachorro_joven", "cachorro_crecimiento",
+                                          "adulto", "senior"],
+                       la_ficha_no_pregunta: ["lactante"] },
+  },
   condicion_corporal: {
     escala: "1 a 9",
     ideal: 5,
@@ -137,7 +160,17 @@ const VOCABULARIO_INVENTADO = {
         bcs,
         ofrecido_al_dueno: delDueno,
         dueno: delDueno ? { titulo: COND_DUENO[bcs], detalle: `detalle ${bcs}` } : null,
-        veterinario: { titulo: `BCS ${bcs}/9 del motor`, detalle: `clinico ${bcs}` },
+        veterinario: { titulo: `BCS ${bcs}/9 — Zarangollo ${bcs}`, detalle: `clinico ${bcs}` },
+        // La Tabla VII-1: como se RECONOCE el punto. Palabras inventadas por lo
+        // de siempre -- con «Costillas palpables» de verdad, «lo ha leido del
+        // motor» y «esta pintando ESCALA_BCS_RESPALDO» se ven igual.
+        como_se_reconoce: {
+          bcs,
+          nombre: `Zarangollo ${bcs}`,
+          en_castellano: { costillas: `Fistrillo ${bcs} en las costillas`,
+                           abdomen: `Pispajo ${bcs} de perfil`,
+                           base_de_la_cola: `Rebullo ${bcs} en la cola` },
+        },
       };
     }),
   },
@@ -175,6 +208,17 @@ const configurar = async (request, opciones) => {
   expect(res.ok()).toBeTruthy();
   return res.json();
 };
+
+// Leer el estado del servidor de mentira sin tocarlo: `{}` no cambia nada y
+// devuelve lo que lleva visto, las peticiones incluidas.
+const leer = async (request) => {
+  const res = await request.post(`${SUPABASE_FALSO}/__control`, { data: {} });
+  expect(res.ok()).toBeTruthy();
+  return res.json();
+};
+
+const abrirMenuLateral = (page) =>
+  page.getByRole("button", { name: "Menú", exact: true }).click();
 
 const entrar = async (page) => {
   await page.goto("/");
@@ -355,6 +399,37 @@ test.describe("las palabras que se ven salen del motor", () => {
       `la fila de peso y condicion no dice «${COND_DUENO[5]}». Si dice «Ideal», la app esta ` +
       `pintando CONDICIONES_RESPALDO y lo servido no se usa -- y en pantalla se ve igual`)
       .toContainText(COND_DUENO[5]);
+  });
+
+  // ⚠️ Y COMO SE RECONOCE CADA PUNTO, que es la OTRA tabla de FEDIAF y no la
+  // misma. La VII-2, que ya venia del motor, dice CUANTO se desvia del peso
+  // ideal cada punto -- de ahi salen las kcal. La VII-1 dice como se reconoce,
+  // o sea que numero escribe quien esta delante del perro con la mano encima,
+  // y ese numero es el que entra en la otra cuenta.
+  //
+  // Vivia en `ESCALA_BCS` de `src/bcs.js`, escrita a mano y SIN FUENTE, siendo
+  // una parafrasis de una tabla que FEDIAF publica entera.
+  test("cómo se reconoce cada punto de BCS lo dice el motor", async ({ page, request }) => {
+    await configurar(request, {
+      rolProfesional: true, rolVerificado: true,
+      perros: [PERRO_DE_PRUEBA],
+      accesos: [{ perro_id: PERRO_DE_PRUEBA.id, estado: "activo" }],
+      menus: [], vocabulario: VOCABULARIO_INVENTADO,
+    });
+    await entrar(page);
+    await esperarElPaciente(page);
+
+    // El nombre del punto sale de la etiqueta del motor, sin el «BCS 5/9 —».
+    await expect(page.getByText("Zarangollo 5").first(),
+      "la escala de BCS no pinta el nombre que sirve el motor: sigue con ESCALA_BCS_RESPALDO")
+      .toBeVisible();
+    // Y la descripcion, de la Tabla VII-1.
+    await expect(page.getByText(/Fistrillo 5 en las costillas/).first(),
+      "la descripcion de cada punto no sale del motor. Con las palabras de verdad esto se veria " +
+      "igual estando la peticion entera comentada, que es por lo que se siembran inventadas")
+      .toBeVisible();
+    // Y lo que habia escrito a mano, no.
+    await expect(page.getByText("Obeso mórbido")).toHaveCount(0);
   });
 
   // ⚠️ EL RANGO DE PESO DE CADA TAMAÑO. Aqui las claves no se inventan (son las
@@ -562,8 +637,13 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     // estaba mandando sus peticiones SIN actividad. Esta prueba se actualiza,
     // no se borra: sigue comparando las claves contra `der.py` del motor.
     const app = fs.readFileSync(path.resolve(AQUI, "../src/vocabulario.js"), "utf-8");
-    const i = app.indexOf("export const ACTIVIDAD_API = [");
-    expect(i, "falta ACTIVIDAD_API en vocabulario.js").toBeGreaterThan(-1);
+    // ⚠️ Y SE LLAMA `_RESPALDO` DESDE EL 13 DE SEPTIEMBRE, porque la lista viva
+    // la sirve ahora el motor en `niveles_de_actividad.los_tres_nombres`. Lo
+    // que se compara sigue siendo lo mismo: que el respaldo diga las claves de
+    // `der.BASE_ACTIVIDAD` y en el mismo orden, porque es lo que se usa
+    // mientras Render despierta.
+    const i = app.indexOf("export const ACTIVIDAD_API_RESPALDO = [");
+    expect(i, "falta ACTIVIDAD_API_RESPALDO en vocabulario.js").toBeGreaterThan(-1);
     const claveApp = [...app.slice(i, app.indexOf("]", i)).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
     expect(claveApp,
       "ACTIVIDAD_API ya no dice las mismas claves que BASE_ACTIVIDAD, o no en el mismo orden. " +
@@ -874,11 +954,12 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     const claves = (texto) => [...texto.matchAll(/\{ key: "([a-z0-9_]+)"/g)].map((m) => m[1]);
     const ofrece = new Set([
       ...claves(trozo("const PATOLOGIAS_RESPALDO = [", "\n];")),
-      // ⚠️ `let` y no `const` desde el 11 de septiembre: la lista la sirve el
-      // motor y esta tabla es el RESPALDO. Se sigue leyendo de aquí a
-      // propósito -- el respaldo es lo que se pinta cuando la API duerme, así
-      // que también tiene que ofrecer las claves que el motor conoce.
-      ...claves(trozo("let FAMILIAS_PATOLOGIA = {", "\n};")),
+      // ⚠️ SE LEE EL RESPALDO, no la lista viva: la sirve el motor desde el 11
+      // de septiembre y desde el 13 se llama `_RESPALDO`, como todas. Se sigue
+      // leyendo de aquí a propósito -- el respaldo es lo que se pinta cuando la
+      // API duerme, así que también tiene que ofrecer las claves que el motor
+      // conoce.
+      ...claves(trozo("const FAMILIAS_PATOLOGIA_RESPALDO = {", "\n};")),
     ]);
 
     const sinCasilla = [...delMotor].filter((k) => !ofrece.has(k)).sort();
@@ -915,5 +996,47 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
           .toContain(etiqueta);
       }
     }
+  });
+});
+
+// ─── LOS DOS NOMBRES DE CADA ETAPA ──────────────────────────────────────────
+//
+// ⚠️ POR QUÉ EXISTE (13 de septiembre de 2026). La misma etapa se llama de dos
+// maneras dentro del motor: `calcular_der` la recibe en minúsculas con guion
+// bajo (`cachorro_joven`) y la tabla de FEDIAF la indexa en CamelCase
+// (`CachorroJoven`). La traducción entre las dos vivía SOLO en
+// `ETAPA_A_SUFIJO_API` de `src/App.jsx`, escrita a mano.
+//
+// Y este fallo NO SE VE: si el motor le cambia el nombre a una etapa, la app
+// sigue traduciendo con su tabla vieja, manda una etapa que el motor no conoce,
+// y el motor cae a «Adulto» sin dar error. Un cachorro comparado contra los
+// requisitos de un adulto sale VERDE -- que es la familia de `guardarPerro`.
+//
+// Se mira la PETICIÓN y no la pantalla, porque la etapa no se pinta en ningún
+// sitio: viaja en `etapa_requisitos`.
+test.describe("los dos nombres de cada etapa", () => {
+  test("la etapa que viaja a /analizar es la que dice el motor", async ({ page, request }) => {
+    await configurar(request, {
+      perros: [PERRO_DE_PRUEBA], menus: [], premium: true,
+      vocabulario: VOCABULARIO_INVENTADO,
+    });
+    await entrar(page);
+    await esperarLaFicha(page);
+
+    await abrirMenuLateral(page);
+    await page.getByRole("button", { name: /Analizar la dieta actual/ }).click();
+    await page.getByRole("button", { name: "Carne muscular: añadir alimento" }).click();
+    // «Pato» es un alimento directo, sin submenú de tipos: un clic.
+    await page.getByRole("button", { name: "Pato (carne sin hueso)" }).click();
+    await page.locator("input[type=number]").first().fill("300");
+    await page.getByRole("button", { name: /Analizar esta dieta/ }).click();
+
+    await expect.poll(async () => {
+      const { peticionesAnalizar } = await leer(request);
+      return peticionesAnalizar[peticionesAnalizar.length - 1]?.etapa_requisitos || null;
+    }, { message: "la etapa que viaja a /analizar no es la que sirve el motor: la app sigue con " +
+                  "ETAPA_A_SUFIJO_API_RESPALDO. En pantalla se ve exactamente igual, y el motor " +
+                  "cae a «Adulto» sin dar error" })
+      .toBe("EtapaDelMotorC");
   });
 });

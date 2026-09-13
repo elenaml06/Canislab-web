@@ -171,6 +171,7 @@ export function crearFakeSupabase(opciones = {}) {
     menus: [],
     // Lo que ha recibido el formulador, para poder afirmar sobre ello.
     peticionesFormular: [],
+    peticionesAnalizar: [],
     // Lo que ha recibido /pauta/firmar y lo que se ha llegado a guardar.
     peticionesFirmar: [],
     pautasFirmadas: [],
@@ -356,6 +357,7 @@ export function crearFakeSupabase(opciones = {}) {
       estado.pautaNoSeFirma = cfg.pautaNoSeFirma === true;
       if (cfg.olvidarFormular) {
         estado.peticionesFormular = [];
+        estado.peticionesAnalizar = [];
         estado.peticionesFirmar = [];
         estado.pautasFirmadas = [];
       }
@@ -464,6 +466,7 @@ export function crearFakeSupabase(opciones = {}) {
         peticionesCasa: estado.peticionesCasa.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesMenu: estado.peticionesMenu.map((p) => ({ ...p })),
         peticionesFormular: estado.peticionesFormular.map((p) => JSON.parse(JSON.stringify(p))),
+        peticionesAnalizar: estado.peticionesAnalizar.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesFirmar: estado.peticionesFirmar.map((p) => JSON.parse(JSON.stringify(p))),
         pautasFirmadas: estado.pautasFirmadas.map((p) => JSON.parse(JSON.stringify(p))),
         // Lo que quedó GUARDADO de la clínica, para poder comprobarlo sin
@@ -1150,6 +1153,13 @@ export function crearFakeSupabase(opciones = {}) {
     }
 
     if (ruta.startsWith("/revisar") || ruta.startsWith("/analizar")) {
+      // Se GUARDA lo que se pide, no solo se contesta: la etapa que viaja en
+      // `etapa_requisitos` decide contra qué columna de FEDIAF se compara la
+      // dieta, y una etapa que el motor no conozca cae a «Adulto» sin dar
+      // error. Eso no se ve en pantalla: hay que mirar la petición.
+      if (req.method !== "GET") {
+        estado.peticionesAnalizar.push({ ruta, ...JSON.parse(cuerpo || "{}") });
+      }
       return responder(200, { factible: true, problemas: [] });
     }
 

@@ -195,7 +195,20 @@ export function salvedadDelBcs(bcs) {
 // palabras de consulta: lo que se palpa, lo que se ve desde arriba y lo que
 // se ve de perfil. Sin adjetivos cariñosos: esta pantalla la lee un
 // profesional.
-export const ESCALA_BCS = [
+//
+// ⚠️ Y ESTO ERA UNA PARÁFRASIS NUESTRA DE UNA TABLA PUBLICADA (13 de
+// septiembre de 2026). FEDIAF trae la escala entera en su Tabla VII-1 --
+// «Guide to 9-point and 5-point Body Condition Scores in dogs» --, con las
+// tres casillas de cada punto (costillas, abdomen y base de la cola) y el
+// porcentaje de grasa estimado. Aquí estaba reescrita a mano y sin citar de
+// dónde salía, que es la regla 6 rota dos veces: nada que la app pinte se
+// decide en la app, y si lo dice el manual se aplica lo que dice el manual.
+//
+// Ahora vive en `bcs_tabla_VII_1.json` del motor, con la frase LITERAL de
+// FEDIAF al lado de nuestra traducción -- y `auditar_citas.py` comprueba las
+// 26 contra el texto del PDF. Esto de abajo es el RESPALDO para cuando Render
+// duerme.
+export const ESCALA_BCS_RESPALDO = [
   { n: 1, titulo: "Caquéctico",
     detalle: "Costillas, lumbares y pelvis visibles a distancia. Sin grasa palpable. Pérdida evidente de masa muscular." },
   { n: 2, titulo: "Muy delgado",
@@ -247,9 +260,43 @@ export const ESCALA_BCS = [
 const BCS_DESDE_CONDICION_RESPALDO = { 0: 1, 1: 3, 2: 5, 3: 7, 4: 9 };
 export let BCS_DESDE_CONDICION = BCS_DESDE_CONDICION_RESPALDO;
 
+// La lista viva. `let` porque la sustituye el motor en cuanto llega el
+// vocabulario; el respaldo se queda para el arranque en frío.
+export let ESCALA_BCS = ESCALA_BCS_RESPALDO;
+
 alLlegarVocabulario((v) => {
   const e = v?.condicion_corporal?.escalones_del_dueno;
   if (e && Object.keys(e).length) BCS_DESDE_CONDICION = e;
+
+  // Los nueve puntos, con el nombre que ya resuelve el motor y la descripción
+  // de la Tabla VII-1 traducida.
+  const puntos = v?.condicion_corporal?.puntos;
+  if (!Array.isArray(puntos)) return;
+  const filas = puntos.map((p) => {
+    const titulo = p?.veterinario?.titulo || "";
+    const c = p?.como_se_reconoce?.en_castellano || null;
+    if (!p?.bcs || !titulo || !c) return null;
+    return {
+      n: p.bcs,
+      // «BCS 5/9 — Ideal» -> «Ideal»: el número ya va en su propia casilla.
+      // ⚠️ Y el 4 sale «Ideal (extremo delgado de la banda)» y no
+      // «Ligeramente por debajo de peso», que es como lo llama la Tabla VII-1:
+      // esa contradicción aparente la resuelve el motor, porque §7.1.3 y
+      // §7.2.4.1 de FEDIAF dicen que la banda ideal es 4 a 5. Por eso el
+      // título sale de la etiqueta y no del nombre de la tabla.
+      titulo: titulo.replace(/^BCS\s*\d+\s*\/\s*9\s*[—–-]\s*/, ""),
+      // Las casillas de la fila, en el orden en que se exploran. El 8 y el 9
+      // no tienen «abdomen»: FEDIAF la cambia por «general», y por eso se
+      // filtra en vez de dejar un hueco.
+      detalle: [c.costillas, c.abdomen, c.base_de_la_cola, c.general]
+        .filter(Boolean).join(" "),
+    };
+  });
+  // Media escala sería peor que el respaldo: un punto sin descripción es un
+  // botón que no dice qué se está eligiendo.
+  if (filas.length === ESCALA_BCS_RESPALDO.length && filas.every(Boolean)) {
+    ESCALA_BCS = filas;
+  }
 });
 
 // Y de vuelta: al BCS que ponga el veterinario le corresponde un escalón,

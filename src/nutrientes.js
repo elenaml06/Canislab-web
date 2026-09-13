@@ -14,11 +14,28 @@
 // esto calculara por su cuenta si algo falta, sería el fallo del DER
 // calculado en dos sitios -- la pantalla diciendo una cosa y el motor otra.
 //
+import { alLlegarVocabulario } from "./vocabulario.js";
+
 // ⚠️ SI EL MOTOR AÑADE UN NUTRIENTE Y AQUÍ NO ESTÁ, no desaparece: cae en
 // "Otros" y se ve. Se prefiere un grupo feo a un nutriente escondido, que es
 // justo lo que pasaría con un filtro por lista blanca.
+//
+// ⚠️ Y ESO ÚLTIMO ERA UN CAJÓN DE PASO QUE SE HABÍA VUELTO PERMANENTE
+// (13 de septiembre de 2026). Aquí había 42 nutrientes escritos a mano; el
+// motor sirve 46 y la ficha trae además DOS RELACIONES, o sea 48 filas
+// posibles. Las seis que faltaban -- Fibra, Taurina, L-carnitina, EPA, los
+// omega-3 totales y la relación linoleico:linolénico -- llevaban en "Otros"
+// desde que existe la ficha, y nadie se enteró porque "Otros" se ve y no da
+// error. Es la regla 6: nada que la app pinte se decide en la app.
+//
+// Ahora los grupos los dice el motor, en
+// `objetivos_del_profesional.grupos.lista` de `GET /vocabulario`, y esto de
+// abajo es el RESPALDO para cuando Render duerme. El cajón "Otros" se queda
+// puesto, porque un respaldo caducado tiene el mismo problema que tenía esta
+// lista; lo que ya no puede pasar es que caduque en silencio -- lo comprueban
+// el BLOQUE 99 del motor y `tests/la-ley-del-motor.spec.js`.
 
-export const GRUPOS = [
+export const GRUPOS_RESPALDO = [
   {
     titulo: "Macronutrientes",
     nutrientes: ["Proteína_total", "Grasa_total"],
@@ -57,11 +74,30 @@ export const GRUPOS = [
   },
 ];
 
-const GRUPO_DE = (() => {
+// La lista viva. Empieza siendo el respaldo y la sustituye el motor en cuanto
+// llega el vocabulario. `let` y no `const` por eso.
+export let GRUPOS = GRUPOS_RESPALDO;
+
+let GRUPO_DE = mapaDeGrupos(GRUPOS);
+
+function mapaDeGrupos(grupos) {
   const m = new Map();
-  for (const g of GRUPOS) for (const n of g.nutrientes) m.set(n, g.titulo);
+  for (const g of grupos) for (const n of g.nutrientes || []) m.set(n, g.titulo);
   return m;
-})();
+}
+
+alLlegarVocabulario((v) => {
+  const lista = v?.objetivos_del_profesional?.grupos?.lista;
+  if (!Array.isArray(lista) || lista.length === 0) return;
+  // Un grupo sin nutrientes no se instala: dejaría la ficha entera en "Otros",
+  // que es peor que el respaldo. Y el formato que se guarda es el que ya
+  // usaba la app -- { titulo, nutrientes } --, para no tocar lo de abajo.
+  const buenos = lista.filter((g) => g?.titulo && Array.isArray(g.nutrientes)
+                                     && g.nutrientes.length > 0);
+  if (buenos.length === 0) return;
+  GRUPOS = buenos.map((g) => ({ titulo: g.titulo, nutrientes: g.nutrientes }));
+  GRUPO_DE = mapaDeGrupos(GRUPOS);
+});
 
 // Cómo se escribe un nutriente en pantalla. Las claves vienen con guiones
 // bajos porque son las de la tabla de FEDIAF.

@@ -263,12 +263,26 @@ function restriccionesDeEspecie(modo, configPersonalizar) {
 // multivitamínico correcto hasta ahora. Ahora se manda "Senior" tal
 // cual, dejando que el backend decida -- que es justo para lo que ya
 // estaba preparado.
-const ETAPA_A_SUFIJO_API = {
+//
+// ⚠️ Y ESTA TABLA VIVÍA SOLO AQUÍ (13 de septiembre de 2026). La misma etapa se
+// llama de dos maneras dentro del motor -- `calcular_der` la recibe en
+// minúsculas con guion bajo y la tabla de FEDIAF la indexa en CamelCase -- y la
+// traducción entre las dos estaba escrita a mano en este fichero. Es la misma
+// forma de fallo que `ACTIVIDAD_POR_INDICE`: si el motor añade una etapa o le
+// cambia el nombre, esto sigue traduciendo con su tabla vieja, manda una etapa
+// que el motor no conoce, y el motor cae a «Adulto» SIN DAR ERROR. Un cachorro
+// verificado contra los requisitos de un adulto sale verde.
+//
+// Ahora la sirve `GET /vocabulario` en `etapas.etapas[].clave_en_la_ficha`, y
+// esto es el respaldo.
+const ETAPA_A_SUFIJO_API_RESPALDO = {
   cachorro_joven: "CachorroJoven",
   cachorro_crecimiento: "CachorroCrecimiento",
   adulto: "Adulto",
   senior: "Senior",
 };
+
+let ETAPA_A_SUFIJO_API = ETAPA_A_SUFIJO_API_RESPALDO;
 
 const VIOLETA = "#5A4088";
 const ROSA = "#FF6F91";
@@ -763,6 +777,26 @@ function instalarVocabulario(vocab) {
   if (!vocab) return null;
   const razas = vocab?.razas?.razas;
   if (Array.isArray(razas) && razas.length > 0) RAZAS = razas;
+
+  // Los dos nombres de cada etapa. Solo las que la ficha CALCULA: la gestación
+  // y la lactancia el motor las sabe recibir y esta ficha todavía no las
+  // pregunta, y meterlas aquí sería ofrecer una traducción de algo que nadie
+  // puede elegir. Ese hueco lo declara el propio motor en
+  // `etapas.los_dos_nombres.la_ficha_no_pregunta`.
+  const etapas = vocab?.etapas?.etapas;
+  if (Array.isArray(etapas)) {
+    const mapa = {};
+    for (const e of etapas) {
+      if (e?.la_calcula_la_ficha && e.clave_en_la_ficha && e.clave) {
+        mapa[e.clave_en_la_ficha] = e.clave;
+      }
+    }
+    // Igual que las demás: media tabla es peor que el respaldo. Una etapa sin
+    // traducir se manda tal cual y el motor cae a «Adulto» sin decir nada.
+    if (Object.keys(mapa).length === Object.keys(ETAPA_A_SUFIJO_API_RESPALDO).length) {
+      ETAPA_A_SUFIJO_API = mapa;
+    }
+  }
 
   const tam = vocab?.tamanos?.tamanos;
   if (Array.isArray(tam) && tam.length > 0) {
@@ -1492,7 +1526,11 @@ function patologiasDelVocabulario(vocab) {
 // la cabecera (y a cualquier otra hermana) en `perfil.patologias` -- el
 // array que ve el backend nunca lleva dos claves de la misma familia a
 // la vez.
-let FAMILIAS_PATOLOGIA = {
+// ⚠️ RESPALDO, y lo era ya: lo rellena `rehacerFamiliasDePatologia()` con lo
+// que sirve `GET /vocabulario` en `preguntas_por_patologia.por_patologia`. Lo
+// único que faltaba era llamarlo por su nombre, porque una lista que se llama
+// como la de verdad no se distingue de una que nadie sustituye.
+const FAMILIAS_PATOLOGIA_RESPALDO = {
   cardiopatia: {
     pregunta: "¿Sabes el estadio ACVIM?",
     opciones: [
@@ -1544,6 +1582,8 @@ let FAMILIAS_PATOLOGIA = {
     ],
   },
 };
+let FAMILIAS_PATOLOGIA = FAMILIAS_PATOLOGIA_RESPALDO;
+
 // ⚠️ LA LISTA LA SIRVE EL MOTOR (11 de septiembre de 2026, noche).
 //
 // Lo de arriba es el RESPALDO. Las preguntas, sus respuestas y a qué clave
@@ -1573,7 +1613,7 @@ function familiasDelVocabulario(vocab) {
     if (!info?.la_hace_la_app) continue;
     const respuestas = Array.isArray(info.respuestas) ? info.respuestas : [];
     if (respuestas.length < 2) continue;   // una sola respuesta no es una pregunta
-    const local = FAMILIAS_RESPALDO[cabecera];
+    const local = FAMILIAS_PATOLOGIA_RESPALDO[cabecera];
     salida[cabecera] = {
       pregunta: info.pregunta || local?.pregunta || "",
       // ⚠️ LA FORMA VIENE DEL MOTOR Y NO SE DEDUCE. Hay dos, y se aplican al
@@ -1609,7 +1649,6 @@ function familiasDelVocabulario(vocab) {
 // vocabulario: si se quedara con las claves del respaldo, elegir un estadio
 // nuevo dejaría DOS claves de la misma familia en el array y el motor
 // aplicaría el `min()` de las dos sin que nadie lo pidiera.
-const FAMILIAS_RESPALDO = FAMILIAS_PATOLOGIA;
 let FAMILIA_DE_CLAVE = {};
 let OPCIONES_DE_FAMILIA_POR_CLAVE = {};
 
