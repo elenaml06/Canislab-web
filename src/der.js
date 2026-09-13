@@ -285,10 +285,37 @@ export function pesoAdultoDesdeCurvaFediaf(pesoActualKg, meses,
   return Math.round(estimado * 10) / 10;
 }
 
+const AJUSTE_BCS_CACHORRO = 0.10;
+
+// ⚠️ LA BANDA IDEAL, COPIADA A PROPÓSITO. `bcs.js` la tiene en `BCS_IDEAL_MIN`,
+// pero este fichero no importa nada: es el que corre el contrato de
+// `der_casos.json` en los dos repos, y encadenarlo a `bcs.js` lo ataría a
+// `vocabulario.js` y a la red. La banda es de FEDIAF (§7.1.3 y §7.2.4.1: «the
+// ideal BCS should therefore be between 4/9 and 5/9») y cambia el día que
+// cambie FEDIAF, no antes.
+const BCS_IDEAL_MIN_DER = 4;
+
+/**
+ * El factor que multiplica la ración de un CACHORRO según su BCS. 1,0 dentro de
+ * la banda ideal de FEDIAF (4 a 5), 0,9 por encima y 1,1 por debajo. Sin BCS no
+ * se toca nada: no saberlo no es lo mismo que estar bien, y ajustar a ciegas
+ * sería inventarse el dato.
+ *
+ * ⚠️ TIENE QUE SEGUIR SIENDO IDÉNTICO a
+ * `der.ajuste_por_condicion_en_crecimiento` del motor. El DER se calcula en los
+ * dos sitios y lo único que lo vigila es `der_casos.json`.
+ */
+export function ajustePorCondicionEnCrecimiento(bcs) {
+  const b = Number(bcs);
+  if (!Number.isFinite(b) || b <= 0) return 1.0;
+  if (b >= BCS_IDEAL_MIN_DER && b <= 5) return 1.0;
+  return b > 5 ? 1.0 - AJUSTE_BCS_CACHORRO : 1.0 + AJUSTE_BCS_CACHORRO;
+}
+
 function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones = {}) {
   if (!pesoActualKg || pesoActualKg <= 0) return null;
   const { pesoAdultoKg, pesoIdealKg, raza, nCachorros, semanaLactancia = 3,
-          machoEntero = false, conOtrosPerros = false, mesesEdad } = opciones;
+          machoEntero = false, conOtrosPerros = false, mesesEdad, bcs } = opciones;
   const enCrecimiento = etapa === "cachorro_joven" || etapa === "cachorro_crecimiento";
 
   let pesoCalculo = pesoActualKg, subirPorDelgadez = false;
@@ -311,7 +338,29 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
       pAdulto = pesoAdultoDesdeCurvaFediaf(pesoActualKg, mesesEdad);
     }
     if (pAdulto > 0) {
-      const frac = Math.min(pesoActualKg / pAdulto, 1.0);
+      let frac = Math.min(pesoActualKg / pAdulto, 1.0);
+      // ⚠️ UN SUELO PASADOS LOS 12 MESES (13 de septiembre de 2026), que es
+      // donde la ecuación de FEDIAF deja de valer y el peso adulto vuelve a
+      // salir de la TABLA DE RAZAS -- el único tramo donde eso sigue pasando,
+      // y el 75 % de las razas (202 de 270) sigue creciendo ahí.
+      //
+      // No es un número nuevo: es la propia Tabla VII-8a aplicada en la última
+      // edad en que ella misma dice que vale. A los 12 meses da 100 % hasta 7
+      // kg, 97,5 % hasta 15, 97,0 % hasta 27,5, 90,0 % hasta 47,5 y 82,4 % por
+      // encima; y la curva solo sube, así que un perro MÁS viejo no puede
+      // estar por debajo. Si la cuenta da menos, lo que está mal es el peso
+      // adulto supuesto, no el perro.
+      //
+      // Y las dos fuentes coinciden ahí: SACN5 Tabla 17-2 da 125-140
+      // kcal/kg^0,75 para «>=80% of adult BW», y Klein entre el 85 y el 95 %
+      // da 139,3 y 125,8. Medido sobre las 270 razas en ese tramo: mueve 209
+      // de 496 casos, mediana -3,0 %, peor -5,6 %, todos hacia abajo. Y donde
+      // sirve: a un perro de 45 kg a los 14 meses al que el respaldo le supone
+      // 76 de adulto se le daba un +39 % de kcal; con el suelo, +13 %.
+      if (mesesEdad != null && mesesEdad > CURVA_FEDIAF_MESES_MAX) {
+        const suelo = pctPesoAdultoFediaf(CURVA_FEDIAF_MESES_MAX, pAdulto);
+        if (suelo && frac < suelo) frac = suelo;
+      }
       coef = Math.max((KLEIN_A - KLEIN_B * frac) * MJ_A_KCAL, 98.0);
     } else if (mesesEdad != null && mesesEdad < CRECIMIENTO_SACN5_MESES) {
       coef = CRECIMIENTO_ANTES_4M;
@@ -319,6 +368,21 @@ function calcularDER(pesoActualKg, etapa, actividadIdx, esterilizado, opciones =
       coef = CRECIMIENTO_DESDE_4M;
     }
     der = coef * Math.pow(pesoActualKg, 0.75);
+    // ⚠️ Y EL AJUSTE POR CONDICIÓN CORPORAL (13 de septiembre de 2026). Hasta
+    // hoy el BCS de un cachorro NO MOVÍA NADA: la corrección por peso ideal
+    // está detrás de un `!enCrecimiento`, así que un cachorro en BCS 3, en 5 o
+    // en 7 recibía exactamente las mismas kcal. La fuente dice lo contrario --
+    // SACN5 cap.17: «The most practical indicator of whether or not a puppy's
+    // growth rate is healthy is its BCS» -- y da la cifra en su Tabla 17-5:
+    // «monitored regularly (at least every two weeks) and the amount fed should
+    // be increased or decreased by 10%, depending on body condition score».
+    //
+    // Un ESCALÓN y no la cuenta del adulto: al adulto se le corrige dividiendo
+    // por el exceso para llegar a un peso objetivo, y un cachorro no tiene
+    // diana quieta -- su ideal de hoy depende de lo que vaya a pesar de adulto,
+    // que es lo que estamos estimando. Por eso BCS 6 y BCS 9 reciben el mismo
+    // -10 %: lo que cierra la diferencia es repetirlo cada dos semanas.
+    der *= ajustePorCondicionEnCrecimiento(bcs);
   } else if (etapa === "gestante_temprana" || etapa === "gestante_tardia") {
     der = 132 * Math.pow(pesoCalculo, 0.75);
     if (etapa === "gestante_tardia") der += 26 * pesoCalculo;

@@ -15,7 +15,7 @@ import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // comentario de cabecera de almacen.js — ahí está decidido cuándo se da
 // de alta el usuario y por qué.
 import {
-  guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
+  guardarPerro, apuntarPesada, getPesadas, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
   getMenusDelProfesional,
   USUARIO_LOCAL, estaSinCuenta, entrarSinCuenta, salirDeSinCuenta,
   hayDatosLocales, migrarLocalACuenta, vaciarLocal, esProfesional, getAccesos,
@@ -2250,6 +2250,35 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
+/**
+ * El peso REAL que le toca a un mes de la gráfica de crecimiento.
+ *
+ * ⚠️ CADA PESADA CAE EN EL MES QUE TENIA EL PERRO CUANDO SE HIZO, no en el mes
+ * del calendario: la gráfica es «meses de vida», no «enero, febrero…». Se
+ * calcula restando la fecha de la pesada a la de hoy y quitandole esos meses a
+ * la edad actual -- si no, un perro nacido en octubre tendria su primera pesada
+ * en el mes 10 de la grafica.
+ *
+ * Si hay varias del mismo mes se coge la ULTIMA, que es la que describe cómo
+ * acabó ese mes. Y el peso de hoy se pinta aunque no haya pesada guardada
+ * todavía: el primer día, con la tabla recién creada, la gráfica se vería
+ * vacía y parecería rota.
+ */
+function pesoRealDelMes(mes, pesadas, perfil, edad) {
+  const hoyMes = edad?.totalMeses;
+  let valor = null;
+  for (const p of pesadas || []) {
+    const cuando = new Date(p.fecha);
+    if (Number.isNaN(cuando.getTime()) || !Number.isFinite(hoyMes)) continue;
+    const mesesAtras = Math.round((Date.now() - cuando.getTime()) / 86400000 / 30.44);
+    if (hoyMes - mesesAtras === mes) valor = Number(p.peso_kg);
+  }
+  if (valor === null && mes === hoyMes && Number(perfil?.pesoActual) > 0) {
+    valor = Number(perfil.pesoActual);
+  }
+  return valor;
+}
+
 function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, pesoObjetivoKg = null, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null, onMenuEditado = null, onAbrirPanel = null,
   // ⚠️ AÑADIDO (26 agosto) — los tres puntos de CADA menú de la semana.
   // Pedido expreso: "se tiene que poder borrar y editar desde dentro y desde
@@ -2311,6 +2340,21 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // muerto. Se retoma el día que exista de verdad la gestión de varias
   // mascotas.
   const [seccionActiva, setSeccionActiva] = useState(soloSeccion);
+
+  // ⚠️ EL HISTORIAL DE PESADAS (13 de septiembre de 2026). Esta pantalla se
+  // llama «Evolución y crecimiento» y dibujaba la curva esperada con UN SOLO
+  // punto real -- el de hoy -- aunque llevaras un año pesándolo, porque no se
+  // guardaba ninguna pesada. Prometía una serie que no existía.
+  //
+  // Se pide solo al abrir la sección, no al montar la vista de menús: es una
+  // consulta que la mayoría de las veces no hace falta.
+  const [pesadas, setPesadas] = useState([]);
+  useEffect(() => {
+    if (seccionActiva !== "evolucion" || !perfil?._id) return;
+    let vivo = true;
+    getPesadas(perfil._id).then((filas) => { if (vivo) setPesadas(filas || []); });
+    return () => { vivo = false; };
+  }, [seccionActiva, perfil?._id]);
 
   // ⚠️ CASO REAL ENCONTRADO (25 agosto): "desde analizar la dieta actual
   // también hay ciertas pantallas a las que no puedo ir". Era esto, y no
@@ -4149,10 +4193,16 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           >
           <div className="rounded-2xl p-4 mb-5" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
             <ResponsiveContainer width="100%" height={200}>
+              {/* ⚠️ LA SERIE REAL SALE DEL HISTORIAL (13 de septiembre de
+                  2026). Aquí ponía `i + 1 === edad.totalMeses ? pesoActual :
+                  null`, o sea UN SOLO punto: el de hoy. Ahora cada pesada cae
+                  en el mes que tenía el perro cuando se hizo, y la de hoy se
+                  pinta igual aunque no esté guardada todavía -- para que el
+                  primer día no se vea una gráfica vacía. */}
               <LineChart data={Array.from({ length: 12 }, (_, i) => ({
                 mes: i + 1,
                 esperado: pesoEsperado(i + 1, pesoAdultoEsperado),
-                real: i + 1 === (edad?.totalMeses || 0) ? Number(perfil?.pesoActual) : null,
+                real: pesoRealDelMes(i + 1, pesadas, perfil, edad),
               }))}>
                 <CartesianGrid stroke="#F0ECF7" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: MALVA }} />
@@ -4266,6 +4316,17 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                              return { etapa: d.etapaCalculada, pesoAdultoEsperado: d.pesoAdultoEsperado }; })())
                     .then((perroGuardado) => { if (perroGuardado?.id) onPerroGuardado(perroGuardado); })
                     .catch(console.error);
+                  // ⚠️ Y SE APUNTA LA PESADA (13 de septiembre de 2026). Hasta
+                  // hoy `peso_actual` se sobrescribía y no quedaba rastro: la
+                  // pantalla «Evolución y crecimiento» pintaba la curva
+                  // esperada con UN SOLO punto real, el de hoy, aunque
+                  // llevaras un año pesándolo. Y no es una pantalla bonita --
+                  // SACN5 cap.17 pide pesar y mirar la condición «at least
+                  // every two weeks», y con dos o más puntos el peso adulto de
+                  // un cachorro sale de SU trayectoria y no de la tabla de
+                  // razas. Este es justo el sitio donde ocurre esa pesada.
+                  apuntarPesada(usuario.id, perfil._id, nuevoPeso,
+                                bcsDesdeCondicion(perfil.condicionIdx)).catch(console.error);
                 }
               }
             }}
@@ -5174,6 +5235,18 @@ function datosDeUnPerro(perfil) {
         // 110 en el de 3-7) no puede aplicarse, porque `calcularDER` no sabía la
         // edad. La entrada existía en `AJUSTE_EDAD` y era código muerto.
         mesesEdad: edad?.totalMeses,
+        // ⚠️ AÑADIDO (13 de septiembre de 2026): EL BCS, que hasta hoy no movía
+        // NADA en un cachorro. `calcularDER` aplica la corrección por peso
+        // ideal solo `if (!enCrecimiento)`, así que un cachorro en BCS 3, en 5
+        // o en 7 recibía exactamente las mismas kcal -- y la fuente dice que el
+        // BCS es «the most practical indicator» de si un cachorro crece sano
+        // (SACN5 cap.17). En crecimiento no hay peso objetivo que pasar, así
+        // que el dato tiene que viajar como BCS: el ±10 % de la Tabla 17-5 se
+        // aplica sobre la ración, no sobre el peso.
+        //
+        // El BCS exacto del veterinario manda sobre el escalón del dueño, igual
+        // que en el resto de la app.
+        bcs: perfil.bcs ?? bcsDesdeCondicion(perfil.condicionIdx),
       });
 
   return {

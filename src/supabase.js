@@ -450,6 +450,65 @@ export async function guardarPerro(userId, perfil, extras = {}) {
   return data
 }
 
+// ─── EL HISTORIAL DE PESADAS ────────────────────────────────────────────────
+//
+// ⚠️ POR QUE EXISTE (13 de septiembre de 2026). Hasta hoy no se guardaba NI UNA
+// pesada: `perros.peso_actual` se sobrescribia, y «Evolución y crecimiento»
+// pintaba la curva esperada con UN SOLO punto real -- el de hoy -- aunque
+// llevaras un año pesandolo.
+//
+// Y no es una pantalla bonita. SACN5 cap.17 pide reevaluar peso y condicion
+// corporal «at least every two weeks», y dice que eso da «more immediate
+// feedback about optimal nutritional status than using body weights based on
+// estimated adult size» -- o sea que pone esto POR ENCIMA de estimar el peso
+// adulto, que es lo unico que teniamos. Con dos o mas puntos, el peso adulto de
+// un cachorro sale de su propia trayectoria, que es lo que hacen las curvas de
+// WALTHAM y lo que hace MyVetDiet.
+//
+// UNA POR PERRO Y DIA: sin eso, tocar el peso tres veces en la misma pantalla
+// mete tres filas del mismo dia y la curva sale con escalones que no son del
+// perro. Lo resuelve el indice unico de `supabase/migracion-pesos.sql` con un
+// `upsert`: la ultima del dia pisa a la anterior.
+export async function apuntarPesada(userId, perroId, pesoKg, bcs = null) {
+  if (!userId || !perroId) return null
+  const peso = Number(pesoKg)
+  if (!Number.isFinite(peso) || peso <= 0) return null
+  const fila = {
+    perro_id: perroId,
+    user_id: userId,
+    fecha: new Date().toISOString().slice(0, 10),
+    peso_kg: Math.round(peso * 100) / 100,
+    bcs: Number.isFinite(Number(bcs)) ? Number(bcs) : null,
+  }
+  const { data, error } = await supabase
+    .from('pesos').upsert(fila, { onConflict: 'perro_id,fecha' }).select().single()
+  // ⚠️ NO SE PROPAGA EL ERROR, a proposito, y es la misma decision que
+  // `COLUMNAS_NUEVAS` de arriba: si falta el `CREATE TABLE` -- codigo en
+  // produccion antes que la migracion, que ya ha pasado dos veces -- perder una
+  // pesada es molesto, y que no se pueda guardar la ficha es que la app no
+  // sirve. La pesada es un apunte, no el dato con el que se calcula: ese sigue
+  // siendo `perros.peso_actual`.
+  if (error) {
+    console.warn('[rawku] no se ha podido apuntar la pesada:', error.message,
+                 '-- ¿falta supabase/migracion-pesos.sql?')
+    return null
+  }
+  return data
+}
+
+/** Las pesadas de un perro, de la más vieja a la más nueva. */
+export async function getPesadas(perroId) {
+  if (!perroId) return []
+  const { data, error } = await supabase
+    .from('pesos').select('fecha, peso_kg, bcs')
+    .eq('perro_id', perroId).order('fecha', { ascending: true }).limit(400)
+  if (error) {
+    console.warn('[rawku] no se ha podido leer el historial de pesadas:', error.message)
+    return []
+  }
+  return data || []
+}
+
 export async function eliminarPerro(perroId) {
   // ⚠️ Los menús NO se borran solos al borrar su perro: la tabla `menus`
   // no tiene borrado en cascada sobre `perros`. Cuando esto se hacía a
