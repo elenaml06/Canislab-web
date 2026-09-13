@@ -38,7 +38,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout, tiempoParaVariosMenus } from "./api.js";
-import { useVocabulario, alLlegarVocabulario, ACTIVIDAD_API, claveDeActividad } from "./vocabulario.js";
+import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
@@ -917,7 +917,21 @@ function ListaDeEspecies({ porEspecie, onElegir, onAbrir, fondo = "#FFFFFF", ocu
   );
 }
 
-const CATEGORIAS_ALIMENTO = {
+// ⚠️ ESTO ES UN RESPALDO, NO LA LISTA (12 de septiembre de 2026, noche).
+//
+// LA LEY, dicha por Elena: «NADA VIVA SOLO EN LA APP, TIENE QUE LLAMAR A COSAS
+// QUE VIVAN EN EL MOTOR PARA QUE CUANDO SE CAMBIE ALGO SE APLIQUE Y LA APP LO
+// PILLE DIRECTO. PARA TODO». Lo que se pinta aquí sale de `GET /alimentos`, que
+// sirve las ocho pantallas con su segundo nivel ya montado; esto solo se usa
+// mientras el motor no contesta, que en Render son los ~50 s de arrancar.
+//
+// EL CASO QUE LO PROVOCÓ: el aceite de salmón Pets Purest entró al catálogo del
+// motor el 7 de septiembre con la foto de su etiqueta, el motor lo usa en 23 de
+// los 216 menús precalculados, y en la app no aparecía. Medido: esta lista
+// tenía EXACTAMENTE los mismos alimentos que el motor MENOS ese. Una copia a
+// mano que se quedó parada el día que se escribió, como las 47 patologías, los
+// cinco niveles de actividad y las 255 razas.
+const CATEGORIAS_ALIMENTO_RESPALDO = {
   "Carne muscular": {
     // ⚠️ CORREGIDO (5 agosto, madrugada) — segunda pasada: lengua y
     // pulmón TAMPOCO segregan, así que también van con la carne
@@ -1117,6 +1131,34 @@ const CATEGORIAS_ALIMENTO = {
     "Yodo": ["Yoduro potásico (comprimidos 200 µg)"],
   },
 };
+// La que se usa. La rellena `alimentosDelMotor()` en cuanto contesta
+// `GET /alimentos`; hasta entonces, y si el motor no responde, el respaldo.
+let CATEGORIAS_ALIMENTO = CATEGORIAS_ALIMENTO_RESPALDO;
+
+// En cuanto conteste el motor, esta es la lista. Antes de eso, el respaldo.
+pedirAlimentos();
+alLlegarAlimentos((datos) => {
+  const arbol = alimentosDelMotor(datos);
+  if (arbol) CATEGORIAS_ALIMENTO = arbol;
+});
+
+// El árbol que manda el motor -> la forma que pinta la app.
+// `pantallas[].grupos` ya viene con el segundo nivel resuelto: la especie en
+// las seis categorías de comida (la misma que el motor usa para las alergias),
+// la categoría del motor en los suplementos, y el grupo escrito en Extras.
+function alimentosDelMotor(datos) {
+  if (!datos || !Array.isArray(datos.pantallas) || datos.pantallas.length === 0) return null;
+  const arbol = {};
+  for (const p of datos.pantallas) {
+    const grupos = {};
+    for (const [grupo, lista] of Object.entries(p.grupos || {})) {
+      grupos[grupo] = lista.map((a) => a.nombre);
+    }
+    if (Object.keys(grupos).length) arbol[p.clave] = grupos;
+  }
+  return Object.keys(arbol).length ? arbol : null;
+}
+
 
 
 
@@ -2271,8 +2313,11 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
     fetchConTimeout(`${API_BASE}/alimentos`)
       .then((res) => res.json())
       .then((data) => {
+        // ⚠️ LA RESPUESTA CAMBIÓ DE FORMA el 12 de septiembre por la noche: ya
+        // no es {categoria: [...]} sino {por_categoria, pantallas,
+        // sin_pantalla}, porque ahora el motor manda también CÓMO se enseña.
         const mapa = {};
-        for (const lista of Object.values(data)) {
+        for (const lista of Object.values(data.por_categoria || {})) {
           for (const a of lista) mapa[a.nombre] = a.kcal_100g;
         }
         setEnergiaAlimentos(mapa);

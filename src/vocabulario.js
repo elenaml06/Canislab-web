@@ -61,6 +61,45 @@ export function pedirVocabulario() {
   return _pedido
 }
 
+// ─── EL CATÁLOGO DE ALIMENTOS, POR LA MISMA PUERTA ───────────────────────────
+//
+// ⚠️ AÑADIDO EL 12 DE SEPTIEMBRE DE 2026, POR LA NOCHE, y es LA LEY dicha por
+// Elena: «NADA VIVA SOLO EN LA APP, TIENE QUE LLAMAR A COSAS QUE VIVAN EN EL
+// MOTOR PARA QUE CUANDO SE CAMBIE ALGO SE APLIQUE Y LA APP LO PILLE DIRECTO.
+// PARA TODO».
+//
+// El catálogo no cabe en `/vocabulario` -- son 163 alimentos con sus kcal --,
+// así que va por `GET /alimentos`, que desde hoy manda las tres alturas:
+// pantalla -> grupo -> alimentos, con la especie ya resuelta por el motor (la
+// misma que usa para las alergias) y los títulos en los dos registros.
+//
+// EL CASO QUE LO PROVOCÓ: el aceite de salmón Pets Purest entró al catálogo el
+// 7 de septiembre y el motor lo usa en 23 de los 216 menús precalculados, pero
+// en la app no salía, porque la app pintaba su propia lista.
+let _pedidoAlimentos = null
+const _alLlegarAlimentos = []
+
+export function alLlegarAlimentos(fn) {
+  _alLlegarAlimentos.push(fn)
+  if (_pedidoAlimentos) _pedidoAlimentos.then((v) => { if (v) fn(v) })
+}
+
+export function pedirAlimentos() {
+  if (!_pedidoAlimentos) {
+    _pedidoAlimentos = fetchConTimeout(`${API_BASE}/alimentos`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((v) => {
+        if (v) for (const fn of _alLlegarAlimentos) { try { fn(v) } catch { /* nada */ } }
+        return v
+      })
+      .catch(() => null)
+  }
+  return _pedidoAlimentos
+}
+
+/** Para las pruebas: dejar la caché como estaba. */
+export function olvidarAlimentos() { _pedidoAlimentos = null }
+
 export function useVocabulario() {
   const [vocab, setVocab] = useState(null)
   useEffect(() => {
