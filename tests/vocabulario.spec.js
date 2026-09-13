@@ -694,7 +694,19 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
     //
     // Lo que sigue siendo estricto es lo que importa: las MISMAS razas, ni una
     // mas ni una menos, y los cinco numeros identicos.
-    const QUE_USA_LA_APP = ["nombre", "tamano", "pesoMin", "pesoMax", "pesoMedio"];
+    // ⚠️ Y `porSexo` DESDE EL 12 DE SEPTIEMBRE POR LA NOCHE. La FCI y el BOE dan
+    // machos y hembras por separado en 44 de las 85 razas con fuente -- el
+    // Kuvasz son 48-62 kg en machos y 37-50 en hembras -- y la app lo PINTA y
+    // lo usa para el peso adulto de respaldo, así que tiene que estar en el
+    // respaldo igual que los otros cinco. Si se queda fuera, a la dueña de una
+    // Kuvasz hembra se le vuelve a enseñar «37-62» en cuanto Render duerma.
+    const QUE_USA_LA_APP = ["nombre", "tamano", "pesoMin", "pesoMax", "pesoMedio",
+                            "porSexo"];
+    // `porSexo` solo lo tienen 44 de las 270 -- las razas cuya fuente da un
+    // intervalo de verdad para cada sexo --, así que es opcional: lo que no
+    // puede pasar es que esté y diga otra cosa, o que el motor lo tenga y la
+    // app no. `soloLoQueUsa` compara `undefined` con `undefined` en las demás.
+    const OBLIGATORIOS = ["nombre", "tamano", "pesoMin", "pesoMax", "pesoMedio"];
     const soloLoQueUsa = (r) => Object.fromEntries(QUE_USA_LA_APP.map((k) => [k, r[k]]));
     const porNombre = new Map(delMotor.map((r) => [r.nombre, r]));
     for (const r of delaApp) {
@@ -702,10 +714,35 @@ test.describe("la app y el motor cuentan los mismos niveles", () => {
       expect(m, `«${r.nombre}» esta en la app y no en razas.json del motor`).toBeTruthy();
       expect(soloLoQueUsa(m), `«${r.nombre}» dice cosas distintas en la app y en el motor`)
         .toEqual(soloLoQueUsa(r));
-      expect(Object.keys(r).sort(),
-        `«${r.nombre}» lleva en la app campos que el motor no le da`)
-        .toEqual(QUE_USA_LA_APP.slice().sort());
+      for (const k of OBLIGATORIOS) {
+        expect(Object.keys(r), `a «${r.nombre}» le falta «${k}» en la app`).toContain(k);
+      }
+      for (const k of Object.keys(r)) {
+        expect(QUE_USA_LA_APP, `«${r.nombre}» lleva en la app el campo «${k}», que el motor no le da`)
+          .toContain(k);
+      }
     }
+  });
+
+  test("el peso de la raza que se enseña y el de respaldo son los del SEXO del perro", () => {
+    // ⚠️ QUE EL DATO ESTÉ NO ES QUE SE USE. `porSexo` puede llegar entero del
+    // motor, estar en el respaldo y no pintarse en ningún sitio, y entonces a
+    // la dueña de una Kuvasz hembra se le sigue enseñando «37-62kg», que es la
+    // unión de los dos sexos. Es la misma forma de fallo que las categorías de
+    // Personalizar: el dato viajaba y nadie lo leía.
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    expect(app, "falta el ayudante que elige el peso del sexo del perro")
+      .toContain("function pesoDeRaza(raza, sexo)");
+    // los DOS sitios donde se usa el peso de la raza
+    expect(app, "el peso adulto de respaldo tiene que salir del sexo del perro")
+      .toContain("pesoDeRaza(perfil.raza, perfil.sexo)?.pesoMedio");
+    expect(app, "la ficha tiene que ENSEÑAR el rango del sexo del perro")
+      .toContain("pesoDeRaza(perfil.raza, perfil.sexo).pesoMin");
+    // y que no haya vuelto el de antes, que es la unión de los dos
+    expect(app.includes("{perfil.raza.pesoMin}–{perfil.raza.pesoMax}kg"),
+      "la ficha ha vuelto a pintar la unión de los dos sexos").toBe(false);
+    expect(app.includes("const pesoAdultoMedioRaza = perfil.raza?.pesoMedio"),
+      "el peso adulto de respaldo ha vuelto a ser el de la unión").toBe(false);
   });
 
   // Y las que escriben las PRUEBAS, que es donde se coló la ficción.
