@@ -43,6 +43,8 @@ import {
   esProfesional as esProfesionalRemoto,
   getAccesos as getAccesosRemotos,
   marcarComoPaciente as marcarComoPacienteRemoto,
+  apuntarPesada as apuntarPesadaRemota,
+  getPesadas as getPesadasRemotas,
 } from './supabase'
 
 // El usuario de mentira que representa "estoy usando la app sin cuenta".
@@ -53,6 +55,12 @@ export const USUARIO_LOCAL = { id: ID_LOCAL, local: true, email: null }
 
 const CLAVE_PERROS = 'rawku.local.perros'
 const CLAVE_MENUS = 'rawku.local.menus'
+// ⚠️ Las pesadas también sin cuenta (13 de septiembre de 2026). Si solo se
+// guardaran con cuenta, quien usa la app sin registrarse -- que es el camino
+// por defecto -- no tendría historial, y la curva de crecimiento es justo lo
+// que más falta hace en las primeras semanas de un cachorro. Y al crear la
+// cuenta suben con lo demás: ver `migrarLocalACuenta`.
+const CLAVE_PESADAS = 'rawku.local.pesadas'
 const CLAVE_SIN_CUENTA = 'rawku.local.sinCuenta'
 
 // Las filas locales llevan el prefijo en el id. Así, funciones como
@@ -107,6 +115,11 @@ export function vaciarLocal() {
   try {
     window.localStorage.removeItem(CLAVE_PERROS)
     window.localStorage.removeItem(CLAVE_MENUS)
+    // ⚠️ Y LAS PESADAS, que si no se quedan aquí para siempre: se han subido
+    // justo antes en `migrarLocalACuenta`, y dejarlas haría que un perro
+    // borrado de la cuenta reapareciera con historial al volver a usar la app
+    // sin cuenta en el mismo navegador.
+    window.localStorage.removeItem(CLAVE_PESADAS)
   } catch {
     /* si no se puede borrar, peor es dejar de funcionar */
   }
@@ -146,8 +159,37 @@ export async function guardarPerro(userId, perfil, extras = {}) {
   return creado
 }
 
+// ─── LAS PESADAS ──────────────────────────────────────────────────────────────
+//
+// Una por perro y día: tocar el peso tres veces en la misma pantalla no puede
+// meter tres puntos en la curva. En Supabase lo resuelve el índice único; aquí
+// se resuelve pisando la fila del mismo día, que es lo mismo con otra forma.
+export async function apuntarPesada(userId, perroId, pesoKg, bcs = null) {
+  if (!esUsuarioLocal(userId)) return apuntarPesadaRemota(userId, perroId, pesoKg, bcs)
+  const peso = Number(pesoKg)
+  if (!perroId || !Number.isFinite(peso) || peso <= 0) return null
+  const fila = {
+    perro_id: perroId,
+    fecha: new Date().toISOString().slice(0, 10),
+    peso_kg: Math.round(peso * 100) / 100,
+    bcs: Number.isFinite(Number(bcs)) ? Number(bcs) : null,
+  }
+  const lista = leer(CLAVE_PESADAS, []).filter(
+    (x) => !(x.perro_id === perroId && x.fecha === fila.fecha))
+  escribir(CLAVE_PESADAS, [...lista, fila])
+  return fila
+}
+
+export async function getPesadas(perroId) {
+  if (!esIdLocal(perroId)) return getPesadasRemotas(perroId)
+  return leer(CLAVE_PESADAS, [])
+    .filter((x) => x.perro_id === perroId)
+    .sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)))
+}
+
 export async function eliminarPerro(perroId) {
   if (!esIdLocal(perroId)) return eliminarPerroRemoto(perroId)
+  escribir(CLAVE_PESADAS, leer(CLAVE_PESADAS, []).filter((x) => x.perro_id !== perroId))
   // Mismo orden que en Supabase: primero sus menús, luego el perro. Al
   // revés quedarían menús huérfanos, invisibles y para siempre.
   escribir(CLAVE_MENUS, menusLocales().filter((m) => m.perro_id !== perroId))
@@ -374,6 +416,19 @@ export async function migrarLocalACuenta(userId) {
     subidos += 1
   }
 
+  // ⚠️ Y LAS PESADAS (13 de septiembre de 2026). Sin esto, quien usa la app sin
+  // cuenta durante las semanas que más importan -- las de un cachorro -- y
+  // luego se registra, perdería justo el historial con el que se estima el peso
+  // adulto de su propia trayectoria. Es la misma familia que el peso objetivo y
+  // el nivel de premios de aquí arriba: se pierde EN SILENCIO y en el salto.
+  let pesadasSubidas = 0
+  for (const x of leer(CLAVE_PESADAS, [])) {
+    const perroNuevo = equivalencias.get(x.perro_id)
+    if (!perroNuevo) continue
+    const subida = await apuntarPesadaRemota(userId, perroNuevo, x.peso_kg, x.bcs)
+    if (subida) pesadasSubidas += 1
+  }
+
   let menusSubidos = 0
   for (const m of menus) {
     const perroNuevo = equivalencias.get(m.perro_id)
@@ -391,5 +446,5 @@ export async function migrarLocalACuenta(userId) {
 
   vaciarLocal()
   salirDeSinCuenta()
-  return { perros: subidos, menus: menusSubidos, noSubidos }
+  return { perros: subidos, menus: menusSubidos, pesadas: pesadasSubidas, noSubidos }
 }

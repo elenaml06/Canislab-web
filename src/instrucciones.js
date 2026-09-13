@@ -1,3 +1,4 @@
+import { alLlegarAlimentos } from './vocabulario.js';
 // ─── CÓMO SE PREPARA CADA COSA ────────────────────────────────────────────────
 //
 // ⚠️ SACADO DE App.jsx (23 agosto) para poder COMPROBARLO ENTERO.
@@ -46,7 +47,7 @@
 //
 // Lo vigila `tests/instrucciones-y-motor.spec.js`.
 
-export const INSTRUCCIONES_POR_CATEGORIA = {
+const INSTRUCCIONES_POR_CATEGORIA_RESPALDO = {
   "Carne muscular": "Cruda. En trozos, no picada — picada tiene más riesgo bacteriano.",
   "Vísceras": "Crudas, en trozos pequeños.",
   "Hígado": "Crudo, en trozos pequeños — se da en poca cantidad, no hace falta trocear más de la cuenta.",
@@ -71,7 +72,7 @@ export const INSTRUCCIONES_POR_CATEGORIA = {
   "Suplementos comerciales": "Los gramos que te damos aquí YA están calculados respetando el límite máximo seguro del fabricante para el peso de tu perro — no hace falta que sigas la dosis del envase por tu cuenta, dale la cantidad que te mostramos. Se añaden al final, junto con los extras.",
 };
 
-export const COMO_DAR_ALIMENTO = {
+const COMO_DAR_ALIMENTO_RESPALDO = {
   // ⚠️ AÑADIDO (5 agosto, madrugada) — CASO REAL, pedido expreso: se
   // vende en comprimidos, no a granel -- pesoComprimido (0.25 g, según
   // la ficha del fabricante) permite convertir los gramos reales del
@@ -171,3 +172,43 @@ export const COMO_DAR_ALIMENTO = {
   "Tomate (puré)": { como: "SOLO maduro (nunca verde ni la planta) — el tomate verde contiene solanina, tóxica. Ya viene en puré, se añade directamente." },
   "Zanahoria": { como: "Rallada o muy troceada, cruda — con piel, bien lavada." },
 };
+
+// ⚠️ LAS DOS DE ARRIBA SON RESPALDO, NO LA LISTA (13 de septiembre de 2026).
+//
+// LA LEY, de Elena: «NADA VIVA SOLO EN LA APP, TIENE QUE LLAMAR A COSAS QUE
+// VIVAN EN EL MOTOR PARA QUE CUANDO SE CAMBIE ALGO SE APLIQUE Y LA APP LO PILLE
+// DIRECTO. PARA TODO».
+//
+// `COMO_DAR_ALIMENTO` estaba indexada POR NOMBRE DE ALIMENTO, que es la forma
+// que se desincroniza sola cada vez que el catálogo cambia. MEDIDO al moverla al
+// motor: tenía 77 entradas para los 163 alimentos, y **12 eran de comida que el
+// motor ya no tiene** -- ala de pollo, carcasa de pavo, cabeza de conejo... y la
+// BORRAJA, que se sacó del catálogo entero y tiene un bloque de la batería
+// vigilando que no vuelva, con sus instrucciones todavía aquí dentro.
+//
+// Ahora las manda `GET /alimentos`: el texto de la categoría en
+// `como_se_da_por_categoria`, y el del alimento dentro de cada alimento, que es
+// donde no se puede desincronizar.
+export let INSTRUCCIONES_POR_CATEGORIA = INSTRUCCIONES_POR_CATEGORIA_RESPALDO;
+export let COMO_DAR_ALIMENTO = COMO_DAR_ALIMENTO_RESPALDO;
+
+alLlegarAlimentos((datos) => {
+  if (datos?.como_se_da_por_categoria && Object.keys(datos.como_se_da_por_categoria).length) {
+    INSTRUCCIONES_POR_CATEGORIA = datos.como_se_da_por_categoria;
+  }
+  const porAlimento = {};
+  for (const p of datos?.pantallas || []) {
+    for (const lista of Object.values(p.grupos || {})) {
+      for (const a of lista) {
+        if (!a.como_se_da) continue;
+        // el motor escribe en snake_case; la pantalla espera estos dos nombres
+        porAlimento[a.nombre] = {
+          ...a.como_se_da,
+          esComprimido: a.como_se_da.es_comprimido,
+          pesoComprimido: a.como_se_da.peso_comprimido_g,
+        };
+      }
+    }
+  }
+  if (Object.keys(porAlimento).length) COMO_DAR_ALIMENTO = porAlimento;
+});

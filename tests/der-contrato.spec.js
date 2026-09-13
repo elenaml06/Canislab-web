@@ -59,6 +59,10 @@ contrato.casos.forEach((caso, i) => {
         // de «adulto joven» de la Tabla VII-6 de FEDIAF, que hasta ese día era
         // código muerto en los dos repos.
         mesesEdad: o.mesesEdad,
+        // ⚠️ AÑADIDO (13 sep): sin el BCS, el contrato no podía cubrir el ±10 %
+        // por condición corporal de la Tabla 17-5 de SACN5, que hasta ese día
+        // era un dato que en crecimiento no movía NADA en los dos repos.
+        bcs: o.bcs,
       });
     // 1 kcal de margen: las dos implementaciones redondean al final y un
     // decimal distinto en coma flotante no es una divergencia real.

@@ -171,6 +171,8 @@ export function crearFakeSupabase(opciones = {}) {
     menus: [],
     // Lo que ha recibido el formulador, para poder afirmar sobre ello.
     peticionesFormular: [],
+    peticionesAnalizar: [],
+    pesos: [],
     // Lo que ha recibido /pauta/firmar y lo que se ha llegado a guardar.
     peticionesFirmar: [],
     pautasFirmadas: [],
@@ -349,6 +351,12 @@ export function crearFakeSupabase(opciones = {}) {
         estado.perros = cfg.sinPerro ? [] : [{ ...PERRO_DE_PRUEBA }];
       }
       if (Array.isArray(cfg.menus)) estado.menus = cfg.menus.map((m) => ({ ...m }));
+      // ⚠️ Las pesadas se SIEMBRAN o se VACÍAN, nunca se heredan: si una prueba
+      // monta su escenario con `perros` y no dice nada de pesos, tiene que
+      // empezar sin historial. Heredar las de la prueba anterior haría que
+      // «la app leyó el historial» y «quedaban filas de antes» se vieran igual.
+      if (Array.isArray(cfg.pesos)) estado.pesos = cfg.pesos.map((x) => ({ ...x }));
+      else if (Array.isArray(cfg.perros) || cfg.perro) estado.pesos = [];
       // No pegajoso, como los demás interruptores que cambian una respuesta.
       estado.formularNoCuadra = cfg.formularNoCuadra === true;
       estado.objetivosAjustados = Array.isArray(cfg.objetivosAjustados)
@@ -356,6 +364,7 @@ export function crearFakeSupabase(opciones = {}) {
       estado.pautaNoSeFirma = cfg.pautaNoSeFirma === true;
       if (cfg.olvidarFormular) {
         estado.peticionesFormular = [];
+        estado.peticionesAnalizar = [];
         estado.peticionesFirmar = [];
         estado.pautasFirmadas = [];
       }
@@ -464,6 +473,8 @@ export function crearFakeSupabase(opciones = {}) {
         peticionesCasa: estado.peticionesCasa.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesMenu: estado.peticionesMenu.map((p) => ({ ...p })),
         peticionesFormular: estado.peticionesFormular.map((p) => JSON.parse(JSON.stringify(p))),
+        peticionesAnalizar: estado.peticionesAnalizar.map((p) => JSON.parse(JSON.stringify(p))),
+        pesos: estado.pesos.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesFirmar: estado.peticionesFirmar.map((p) => JSON.parse(JSON.stringify(p))),
         pautasFirmadas: estado.pautasFirmadas.map((p) => JSON.parse(JSON.stringify(p))),
         // Lo que quedó GUARDADO de la clínica, para poder comprobarlo sin
@@ -1150,6 +1161,13 @@ export function crearFakeSupabase(opciones = {}) {
     }
 
     if (ruta.startsWith("/revisar") || ruta.startsWith("/analizar")) {
+      // Se GUARDA lo que se pide, no solo se contesta: la etapa que viaja en
+      // `etapa_requisitos` decide contra qué columna de FEDIAF se compara la
+      // dieta, y una etapa que el motor no conozca cae a «Adulto» sin dar
+      // error. Eso no se ve en pantalla: hay que mirar la petición.
+      if (req.method !== "GET") {
+        estado.peticionesAnalizar.push({ ruta, ...JSON.parse(cuerpo || "{}") });
+      }
       return responder(200, { factible: true, problemas: [] });
     }
 
@@ -1277,6 +1295,36 @@ export function crearFakeSupabase(opciones = {}) {
         rol_verificado_en: estado.rolVerificado ? "2026-08-28T10:00:00.000Z" : null,
       };
       return responder(200, unSoloObjeto ? perfil : [perfil]);
+    }
+
+    // ─── LAS PESADAS ────────────────────────────────────────────────────
+    //
+    // ⚠️ AÑADIDO (13 de septiembre de 2026). Tabla nueva: el historial de
+    // pesadas. Se filtra DE VERDAD por `perro_id` y se respeta el
+    // `on_conflict=perro_id,fecha` del upsert, porque las dos cosas son lo
+    // que la prueba tiene que poder distinguir: una pesada guardada en el
+    // perro equivocado y tres pesadas del mismo día se ven igual de bien en
+    // pantalla y rompen la curva de crecimiento.
+    if (ruta === "/rest/v1/pesos") {
+      if (req.method === "GET") {
+        const f = url.searchParams.get("perro_id");
+        const perroId = f && f.startsWith("eq.") ? f.slice(3) : null;
+        let filas = estado.pesos;
+        if (perroId) filas = filas.filter((x) => x.perro_id === perroId);
+        filas = [...filas].sort((a, b) => String(a.fecha).localeCompare(String(b.fecha)));
+        return responder(200, unSoloObjeto ? (filas[0] || null) : filas);
+      }
+      const entrantes = [].concat(JSON.parse(cuerpo || "[]"));
+      const guardadas = [];
+      for (const fila of entrantes) {
+        const yaEsta = estado.pesos.findIndex(
+          (x) => x.perro_id === fila.perro_id && x.fecha === fila.fecha);
+        const nueva = { id: `peso-${estado.pesos.length + 1}`, ...fila };
+        if (yaEsta >= 0) estado.pesos[yaEsta] = { ...estado.pesos[yaEsta], ...fila };
+        else estado.pesos.push(nueva);
+        guardadas.push(yaEsta >= 0 ? estado.pesos[yaEsta] : nueva);
+      }
+      return responder(201, unSoloObjeto ? (guardadas[0] || null) : guardadas);
     }
 
     if (ruta === "/rest/v1/menus") {

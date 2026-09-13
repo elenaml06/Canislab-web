@@ -697,6 +697,50 @@ test("el buscador de objetivos filtra el pintado y no lo fijado", async ({ page,
     .toEqual({ proteina: { min: 90 } });
 });
 
+// ─── Y CÓMO SE AGRUPAN, TAMBIÉN LO DICE EL MOTOR ───────────────────────────
+//
+// ⚠️ POR QUÉ EXISTE (13 de septiembre de 2026). El orden y el título de cada
+// grupo de la ficha vivían SOLO en `src/nutrientes.js`, con 42 nutrientes
+// escritos a mano. El motor sirve 46 y la ficha trae además DOS RELACIONES, o
+// sea 48 filas: las seis que faltaban -- Fibra, Taurina, L-carnitina, EPA, los
+// omega-3 totales y la relación linoleico:linolénico -- caían en el cajón
+// «Otros», que está puesto a propósito para que nada desaparezca... y por eso
+// mismo nadie se enteró. «Otros» se ve y no da error.
+//
+// Título inventado, por lo de siempre: con «Minerales» de verdad, «lo ha leído
+// del motor» y «está pintando su respaldo» se ven exactamente igual.
+const GRUPOS_INVENTADOS = {
+  objetivos_del_profesional: {
+    ...OBJETIVOS_INVENTADOS.objetivos_del_profesional,
+    grupos: {
+      de_donde: "inventado por tests/formulador.spec.js",
+      cuantos: 1,
+      lista: [
+        { clave: "chirimbolos", titulo: "Chirimbolos del perro",
+          nutrientes: ["Proteína_total", "Grasa_total", "Calcio", "Fósforo"] },
+      ],
+    },
+  },
+};
+
+test("los grupos de la ficha salen de /vocabulario, no de la app", async ({ page, request }) => {
+  await comoVeterinario(page, request, { vocabulario: GRUPOS_INVENTADOS });
+  await page.getByRole("button", { name: /Añadir alimento/ }).click();
+  await page.getByLabel("Buscar alimento").fill("pollo");
+  await page.getByRole("button", { name: /Carne muscular de pollo/ }).click();
+
+  // La cabecera inventada, en pantalla. Si saliera «Macronutrientes» es que se
+  // está pintando el respaldo con la petición hecha.
+  await expect(page.getByText("Chirimbolos del perro")).toBeVisible();
+  await expect(page.getByText("Macronutrientes")).toHaveCount(0);
+
+  // Y lo que el grupo sembrado no nombra sigue viéndose: el cajón «Otros» no se
+  // quita al traer los grupos del motor. Un respaldo caducado tendría el mismo
+  // problema que tenía la lista escrita a mano, y se prefiere un grupo feo a un
+  // nutriente escondido.
+  await expect(page.getByText("Otros")).toBeVisible();
+});
+
 // Y el respaldo, que tiene que seguir sirviendo: Render duerme a los 15 minutos
 // y sin `/vocabulario` la pantalla no puede quedarse sin panel de objetivos.
 test("sin /vocabulario se pintan los ocho de respaldo y no un hueco", async ({ page, request }) => {

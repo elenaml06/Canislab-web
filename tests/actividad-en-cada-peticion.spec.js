@@ -167,9 +167,15 @@ test.describe("ningún camino se queda sin mandarla", () => {
     // Se movió de App.jsx porque `formulador.jsx` la necesita y no puede
     // importar de allí sin hacer un ciclo -- y por eso la pantalla del
     // veterinario llevaba mandando sus peticiones SIN actividad.
+    //
+    // ⚠️ Y SE LLAMA `_RESPALDO` DESDE EL 13 DE SEPTIEMBRE: la lista viva la
+    // sirve el motor en `niveles_de_actividad.los_tres_nombres`. Lo que se
+    // vigila aquí es lo mismo de antes -- que el respaldo tenga las cinco
+    // claves y EN ESE ORDEN --, porque el índice que manda la app se traduce
+    // con él mientras Render despierta. Esta prueba se actualiza, no se borra.
     const vocab = fs.readFileSync(path.resolve(AQUI, "../src/vocabulario.js"), "utf-8");
-    expect(vocab, "falta la constante ACTIVIDAD_API en vocabulario.js")
-      .toContain('export const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]');
+    expect(vocab, "falta la constante ACTIVIDAD_API_RESPALDO en vocabulario.js")
+      .toContain('export const ACTIVIDAD_API_RESPALDO = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]');
     const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
     // El orden importa: el índice de la lista es el que se usa para indexar.
     //

@@ -15,7 +15,7 @@ import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // comentario de cabecera de almacen.js — ahí está decidido cuándo se da
 // de alta el usuario y por qué.
 import {
-  guardarPerro, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
+  guardarPerro, apuntarPesada, getPesadas, guardarMenu, esPremium, getPerros, getMenus, eliminarMenu, actualizarMenu, eliminarPerro,
   getMenusDelProfesional,
   USUARIO_LOCAL, estaSinCuenta, entrarSinCuenta, salirDeSinCuenta,
   hayDatosLocales, migrarLocalACuenta, vaciarLocal, esProfesional, getAccesos,
@@ -263,12 +263,26 @@ function restriccionesDeEspecie(modo, configPersonalizar) {
 // multivitamínico correcto hasta ahora. Ahora se manda "Senior" tal
 // cual, dejando que el backend decida -- que es justo para lo que ya
 // estaba preparado.
-const ETAPA_A_SUFIJO_API = {
+//
+// ⚠️ Y ESTA TABLA VIVÍA SOLO AQUÍ (13 de septiembre de 2026). La misma etapa se
+// llama de dos maneras dentro del motor -- `calcular_der` la recibe en
+// minúsculas con guion bajo y la tabla de FEDIAF la indexa en CamelCase -- y la
+// traducción entre las dos estaba escrita a mano en este fichero. Es la misma
+// forma de fallo que `ACTIVIDAD_POR_INDICE`: si el motor añade una etapa o le
+// cambia el nombre, esto sigue traduciendo con su tabla vieja, manda una etapa
+// que el motor no conoce, y el motor cae a «Adulto» SIN DAR ERROR. Un cachorro
+// verificado contra los requisitos de un adulto sale verde.
+//
+// Ahora la sirve `GET /vocabulario` en `etapas.etapas[].clave_en_la_ficha`, y
+// esto es el respaldo.
+const ETAPA_A_SUFIJO_API_RESPALDO = {
   cachorro_joven: "CachorroJoven",
   cachorro_crecimiento: "CachorroCrecimiento",
   adulto: "Adulto",
   senior: "Senior",
 };
+
+let ETAPA_A_SUFIJO_API = ETAPA_A_SUFIJO_API_RESPALDO;
 
 const VIOLETA = "#5A4088";
 const ROSA = "#FF6F91";
@@ -630,14 +644,41 @@ let CONDICIONES = CONDICIONES_RESPALDO;
 // Las seis categorías de comida del catálogo, tal como las nombra el motor.
 // Si un nombre no coincide EXACTAMENTE, la exclusión no hace nada y el menú
 // sale igual -- sin error y sin aviso. Por eso están escritas una sola vez.
-const CATEGORIAS_QUE_PUEDE_EXCLUIR = [
+// ⚠️ RESPALDO: las manda el motor en `categorias_que_elige_el_usuario`. Es la
+// regla 5 de su CLAUDE.md, y ya falló una vez: durante tres semanas el motor
+// respetaba TRES de las seis y 15 de cada 36 menús personalizados metían algo
+// que nadie había pedido, callando, porque el menú salía verde igual.
+const CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO = [
   { key: "Carne muscular", label: "Carne muscular" },
   { key: "Hueso carnoso", label: "Hueso carnoso" },
   { key: "Pescados y mariscos", label: "Pescados y mariscos" },
   { key: "Vísceras", label: "Vísceras" },
   { key: "Hígado", label: "Hígado" },
   { key: "Verduras y frutas", label: "Verduras y frutas" },
-];
+];let CATEGORIAS_QUE_PUEDE_EXCLUIR = CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO;
+
+// ⚠️ RESPALDO: el peso del perro de muestra de cada tamaño lo sirve el motor en
+// `tamanos.tamanos[].peso_kg_del_menu_de_muestra`, que es el mismo con el que
+// genera los menús precalculados de la vista previa. Tenerlo escrito aquí era
+// una segunda copia que nadie comparaba.
+const PESO_ADULTO_POR_TAMANO_RESPALDO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, Grande: 32, Gigante: 55 };
+let PESO_ADULTO_POR_TAMANO_DEL_MOTOR = PESO_ADULTO_POR_TAMANO_RESPALDO;
+
+alLlegarVocabulario((v) => {
+  const cats = v?.categorias_que_elige_el_usuario?.categorias;
+  if (Array.isArray(cats) && cats.length) {
+    CATEGORIAS_QUE_PUEDE_EXCLUIR = cats.map((c) => ({ key: c, label: c }));
+  }
+  const tam = v?.tamanos?.tamanos;
+  if (Array.isArray(tam) && tam.length) {
+    const m = {};
+    for (const t of tam) {
+      if (t.clave && t.peso_kg_del_menu_de_muestra) m[t.clave] = t.peso_kg_del_menu_de_muestra;
+    }
+    if (Object.keys(m).length) PESO_ADULTO_POR_TAMANO_DEL_MOTOR = m;
+  }
+});
+
 
 const BANDERA_DE = {
   alergias: "alergiaSi",
@@ -736,6 +777,26 @@ function instalarVocabulario(vocab) {
   if (!vocab) return null;
   const razas = vocab?.razas?.razas;
   if (Array.isArray(razas) && razas.length > 0) RAZAS = razas;
+
+  // Los dos nombres de cada etapa. Solo las que la ficha CALCULA: la gestación
+  // y la lactancia el motor las sabe recibir y esta ficha todavía no las
+  // pregunta, y meterlas aquí sería ofrecer una traducción de algo que nadie
+  // puede elegir. Ese hueco lo declara el propio motor en
+  // `etapas.los_dos_nombres.la_ficha_no_pregunta`.
+  const etapas = vocab?.etapas?.etapas;
+  if (Array.isArray(etapas)) {
+    const mapa = {};
+    for (const e of etapas) {
+      if (e?.la_calcula_la_ficha && e.clave_en_la_ficha && e.clave) {
+        mapa[e.clave_en_la_ficha] = e.clave;
+      }
+    }
+    // Igual que las demás: media tabla es peor que el respaldo. Una etapa sin
+    // traducir se manda tal cual y el motor cae a «Adulto» sin decir nada.
+    if (Object.keys(mapa).length === Object.keys(ETAPA_A_SUFIJO_API_RESPALDO).length) {
+      ETAPA_A_SUFIJO_API = mapa;
+    }
+  }
 
   const tam = vocab?.tamanos?.tamanos;
   if (Array.isArray(tam) && tam.length > 0) {
@@ -1465,7 +1526,11 @@ function patologiasDelVocabulario(vocab) {
 // la cabecera (y a cualquier otra hermana) en `perfil.patologias` -- el
 // array que ve el backend nunca lleva dos claves de la misma familia a
 // la vez.
-let FAMILIAS_PATOLOGIA = {
+// ⚠️ RESPALDO, y lo era ya: lo rellena `rehacerFamiliasDePatologia()` con lo
+// que sirve `GET /vocabulario` en `preguntas_por_patologia.por_patologia`. Lo
+// único que faltaba era llamarlo por su nombre, porque una lista que se llama
+// como la de verdad no se distingue de una que nadie sustituye.
+const FAMILIAS_PATOLOGIA_RESPALDO = {
   cardiopatia: {
     pregunta: "¿Sabes el estadio ACVIM?",
     opciones: [
@@ -1517,6 +1582,8 @@ let FAMILIAS_PATOLOGIA = {
     ],
   },
 };
+let FAMILIAS_PATOLOGIA = FAMILIAS_PATOLOGIA_RESPALDO;
+
 // ⚠️ LA LISTA LA SIRVE EL MOTOR (11 de septiembre de 2026, noche).
 //
 // Lo de arriba es el RESPALDO. Las preguntas, sus respuestas y a qué clave
@@ -1546,7 +1613,7 @@ function familiasDelVocabulario(vocab) {
     if (!info?.la_hace_la_app) continue;
     const respuestas = Array.isArray(info.respuestas) ? info.respuestas : [];
     if (respuestas.length < 2) continue;   // una sola respuesta no es una pregunta
-    const local = FAMILIAS_RESPALDO[cabecera];
+    const local = FAMILIAS_PATOLOGIA_RESPALDO[cabecera];
     salida[cabecera] = {
       pregunta: info.pregunta || local?.pregunta || "",
       // ⚠️ LA FORMA VIENE DEL MOTOR Y NO SE DEDUCE. Hay dos, y se aplican al
@@ -1582,7 +1649,6 @@ function familiasDelVocabulario(vocab) {
 // vocabulario: si se quedara con las claves del respaldo, elegir un estadio
 // nuevo dejaría DOS claves de la misma familia en el array y el motor
 // aplicaría el `min()` de las dos sin que nadie lo pidiera.
-const FAMILIAS_RESPALDO = FAMILIAS_PATOLOGIA;
 let FAMILIA_DE_CLAVE = {};
 let OPCIONES_DE_FAMILIA_POR_CLAVE = {};
 
@@ -1934,7 +2000,7 @@ function calcularEdad(dia, mesIdx, anio) {
            totalMeses: Math.floor(meses / 12) * 12 + (meses % 12) };
 }
 
-const PESO_ADULTO_POR_TAMANO = { Toy: 3, Mini: 6, "Pequeño": 12, Mediano: 22, Grande: 32, Gigante: 55 };
+// (la de arriba: `PESO_ADULTO_POR_TAMANO_DEL_MOTOR`, que el motor rellena)
 // ⚠️ AÑADIDO (5 agosto, madrugada) — pedido expreso: al elegir "mestizo
 // / no lo sé", el usuario tiene que elegir un tamaño a ciegas sin saber
 // qué kilos representa cada palabra. Rangos calculados de verdad a
@@ -2184,6 +2250,35 @@ function BotonAtras({ onClick, texto = "Atrás" }) {
 // generado -- son la ficha de peso y el analizador de dieta -- pero
 // estaban programadas aquí dentro, así que desde el perfil no había forma
 // de llegar a ellas. Esto es lo que hace de puerta.
+/**
+ * El peso REAL que le toca a un mes de la gráfica de crecimiento.
+ *
+ * ⚠️ CADA PESADA CAE EN EL MES QUE TENIA EL PERRO CUANDO SE HIZO, no en el mes
+ * del calendario: la gráfica es «meses de vida», no «enero, febrero…». Se
+ * calcula restando la fecha de la pesada a la de hoy y quitandole esos meses a
+ * la edad actual -- si no, un perro nacido en octubre tendria su primera pesada
+ * en el mes 10 de la grafica.
+ *
+ * Si hay varias del mismo mes se coge la ULTIMA, que es la que describe cómo
+ * acabó ese mes. Y el peso de hoy se pinta aunque no haya pesada guardada
+ * todavía: el primer día, con la tabla recién creada, la gráfica se vería
+ * vacía y parecería rota.
+ */
+function pesoRealDelMes(mes, pesadas, perfil, edad) {
+  const hoyMes = edad?.totalMeses;
+  let valor = null;
+  for (const p of pesadas || []) {
+    const cuando = new Date(p.fecha);
+    if (Number.isNaN(cuando.getTime()) || !Number.isFinite(hoyMes)) continue;
+    const mesesAtras = Math.round((Date.now() - cuando.getTime()) / 86400000 / 30.44);
+    if (hoyMes - mesesAtras === mes) valor = Number(p.peso_kg);
+  }
+  if (valor === null && mes === hoyMes && Number(perfil?.pesoActual) > 0) {
+    valor = Number(perfil.pesoActual);
+  }
+  return valor;
+}
+
 function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitados, patologias, nombrePerro, necesitaTransicion, dietaActual, categoriasDisponibles, perfil, derReal, etapaLabel, etapaCalculada, especiesExcluidas, pesoAdultoEsperado, pesoObjetivoKg = null, edad, set, setFase, avisoNoForzado, diagnosticoPersonalizar, avisoExtraEspecie, premium, onMostrarSuscripcion, onRegenerarConAlimentos, usuario = null, onPerroGuardado = () => {}, onCrearCuenta = () => {}, burbuja = null, burbujaClara = null, onAbrirLaCompra = null, onMenuEditado = null, onAbrirPanel = null,
   // ⚠️ AÑADIDO (26 agosto) — los tres puntos de CADA menú de la semana.
   // Pedido expreso: "se tiene que poder borrar y editar desde dentro y desde
@@ -2245,6 +2340,21 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // muerto. Se retoma el día que exista de verdad la gestión de varias
   // mascotas.
   const [seccionActiva, setSeccionActiva] = useState(soloSeccion);
+
+  // ⚠️ EL HISTORIAL DE PESADAS (13 de septiembre de 2026). Esta pantalla se
+  // llama «Evolución y crecimiento» y dibujaba la curva esperada con UN SOLO
+  // punto real -- el de hoy -- aunque llevaras un año pesándolo, porque no se
+  // guardaba ninguna pesada. Prometía una serie que no existía.
+  //
+  // Se pide solo al abrir la sección, no al montar la vista de menús: es una
+  // consulta que la mayoría de las veces no hace falta.
+  const [pesadas, setPesadas] = useState([]);
+  useEffect(() => {
+    if (seccionActiva !== "evolucion" || !perfil?._id) return;
+    let vivo = true;
+    getPesadas(perfil._id).then((filas) => { if (vivo) setPesadas(filas || []); });
+    return () => { vivo = false; };
+  }, [seccionActiva, perfil?._id]);
 
   // ⚠️ CASO REAL ENCONTRADO (25 agosto): "desde analizar la dieta actual
   // también hay ciertas pantallas a las que no puedo ir". Era esto, y no
@@ -4083,10 +4193,16 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           >
           <div className="rounded-2xl p-4 mb-5" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
             <ResponsiveContainer width="100%" height={200}>
+              {/* ⚠️ LA SERIE REAL SALE DEL HISTORIAL (13 de septiembre de
+                  2026). Aquí ponía `i + 1 === edad.totalMeses ? pesoActual :
+                  null`, o sea UN SOLO punto: el de hoy. Ahora cada pesada cae
+                  en el mes que tenía el perro cuando se hizo, y la de hoy se
+                  pinta igual aunque no esté guardada todavía -- para que el
+                  primer día no se vea una gráfica vacía. */}
               <LineChart data={Array.from({ length: 12 }, (_, i) => ({
                 mes: i + 1,
                 esperado: pesoEsperado(i + 1, pesoAdultoEsperado),
-                real: i + 1 === (edad?.totalMeses || 0) ? Number(perfil?.pesoActual) : null,
+                real: pesoRealDelMes(i + 1, pesadas, perfil, edad),
               }))}>
                 <CartesianGrid stroke="#F0ECF7" />
                 <XAxis dataKey="mes" tick={{ fontSize: 11, fill: MALVA }} />
@@ -4200,6 +4316,17 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                              return { etapa: d.etapaCalculada, pesoAdultoEsperado: d.pesoAdultoEsperado }; })())
                     .then((perroGuardado) => { if (perroGuardado?.id) onPerroGuardado(perroGuardado); })
                     .catch(console.error);
+                  // ⚠️ Y SE APUNTA LA PESADA (13 de septiembre de 2026). Hasta
+                  // hoy `peso_actual` se sobrescribía y no quedaba rastro: la
+                  // pantalla «Evolución y crecimiento» pintaba la curva
+                  // esperada con UN SOLO punto real, el de hoy, aunque
+                  // llevaras un año pesándolo. Y no es una pantalla bonita --
+                  // SACN5 cap.17 pide pesar y mirar la condición «at least
+                  // every two weeks», y con dos o más puntos el peso adulto de
+                  // un cachorro sale de SU trayectoria y no de la tabla de
+                  // razas. Este es justo el sitio donde ocurre esa pesada.
+                  apuntarPesada(usuario.id, perfil._id, nuevoPeso,
+                                bcsDesdeCondicion(perfil.condicionIdx)).catch(console.error);
                 }
               }
             }}
@@ -5054,7 +5181,7 @@ function perfilDesdeSupabase(p) {
     // ⚠️ CORREGIDO (21 agosto) — estos dos volvían SIEMPRE en null, y el
     // tamaño no es decorativo: para un mestizo (sin raza) es de donde
     // sale su peso adulto esperado, y de ahí la etapa y las kcal. Ver
-    // datosDeUnPerro: usa PESO_ADULTO_POR_TAMANO[perfil.tamanoManual].
+    // datosDeUnPerro: usa PESO_ADULTO_POR_TAMANO_DEL_MOTOR[perfil.tamanoManual].
     // Con null caía al valor por defecto de 25 kg, fuera el perro un Toy
     // de 3 kg o un Gigante de 55 -- en cada recarga, sin avisar.
     //
@@ -5081,7 +5208,7 @@ function datosDeUnPerro(perfil) {
   // SU sexo si la fuente lo separa. En el Kuvasz son 55 kg en macho y 43,5 en
   // hembra contra los 49,5 de la unión.
   const pesoAdultoMedioRaza = pesoDeRaza(perfil.raza, perfil.sexo)?.pesoMedio
-    || PESO_ADULTO_POR_TAMANO[perfil.tamanoManual] || 25;
+    || PESO_ADULTO_POR_TAMANO_DEL_MOTOR[perfil.tamanoManual] || 25;
   // ⚠️ SIN EL RANGO DE LA RAZA (12 de septiembre, noche): aquí se le pasaban
   // `pesoMin` y `pesoMax` para recortar la estimación, y ese recorte ya no
   // existe -- el peso adulto lo decide la curva del propio cachorro. La tabla
@@ -5108,6 +5235,18 @@ function datosDeUnPerro(perfil) {
         // 110 en el de 3-7) no puede aplicarse, porque `calcularDER` no sabía la
         // edad. La entrada existía en `AJUSTE_EDAD` y era código muerto.
         mesesEdad: edad?.totalMeses,
+        // ⚠️ AÑADIDO (13 de septiembre de 2026): EL BCS, que hasta hoy no movía
+        // NADA en un cachorro. `calcularDER` aplica la corrección por peso
+        // ideal solo `if (!enCrecimiento)`, así que un cachorro en BCS 3, en 5
+        // o en 7 recibía exactamente las mismas kcal -- y la fuente dice que el
+        // BCS es «the most practical indicator» de si un cachorro crece sano
+        // (SACN5 cap.17). En crecimiento no hay peso objetivo que pasar, así
+        // que el dato tiene que viajar como BCS: el ±10 % de la Tabla 17-5 se
+        // aplica sobre la ración, no sobre el peso.
+        //
+        // El BCS exacto del veterinario manda sobre el escalón del dueño, igual
+        // que en el resto de la app.
+        bcs: perfil.bcs ?? bcsDesdeCondicion(perfil.condicionIdx),
       });
 
   return {

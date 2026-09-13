@@ -25,6 +25,7 @@
 // bloque informativo no puede tirar la pantalla donde se da de alta a un
 // paciente.
 import { useEffect, useState } from 'react'
+import { alLlegarVocabulario } from './vocabulario.js'
 import { API_BASE, fetchConTimeout } from './api.js'
 import { useVocabulario } from './vocabulario.js'
 
@@ -63,7 +64,13 @@ export function cargarTopesDePatologias() {
 // Para las pruebas: dejar la caché como estaba.
 export function olvidarTopesDePatologias() { cache = null; enVuelo = null }
 
-const NOMBRE_NUTRIENTE = {
+// ⚠️ RESPALDO: los nombres de los nutrientes los sirve el motor en
+// `objetivos_del_profesional.nutrientes`, con su título para el dueño y para el
+// veterinario. Esta lista tenía 31 y el motor verifica 46, así que los que
+// faltaban salían en pantalla con su clave interna -- «acidoPantotenico» en vez
+// de «Ácido pantoténico». Es el mismo fallo que tenía el formulador con sus
+// ocho nutrientes escritos a mano.
+const NOMBRE_NUTRIENTE_RESPALDO = {
   proteina: 'Proteína', grasa: 'Grasa', calcio: 'Calcio', fosforo: 'Fósforo',
   potasio: 'Potasio', sodio: 'Sodio', cloruro: 'Cloruro', magnesio: 'Magnesio',
   cobre: 'Cobre', yodo: 'Yodo', hierro: 'Hierro', manganeso: 'Manganeso',
@@ -74,6 +81,18 @@ const NOMBRE_NUTRIENTE = {
   linolenico: 'Linolénico (ω-3)', araquidonico: 'Araquidónico', epa_dha: 'EPA + DHA',
   fibra: 'Fibra', purinas: 'Purinas',
 }
+let NOMBRE_NUTRIENTE = NOMBRE_NUTRIENTE_RESPALDO
+
+alLlegarVocabulario((v) => {
+  const ns = v?.objetivos_del_profesional?.nutrientes
+  if (!Array.isArray(ns) || !ns.length) return
+  const m = {}
+  for (const n of ns) {
+    const titulo = n?.dueno?.titulo || n?.veterinario?.titulo
+    if (n?.clave && titulo) m[n.clave] = titulo
+  }
+  if (Object.keys(m).length) NOMBRE_NUTRIENTE = m
+})
 
 const nombreDe = (clave) => NOMBRE_NUTRIENTE[clave] || clave
 

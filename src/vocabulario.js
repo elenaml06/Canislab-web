@@ -130,7 +130,29 @@ export function olvidarVocabulario() { _pedido = null }
 // El ORDEN importa: lo que viaja es la clave en la posición del índice que
 // guarda la ficha (`actividadIdx`). Lo compara con `der.BASE_ACTIVIDAD` del
 // repo del motor `tests/vocabulario.spec.js`.
-export const ACTIVIDAD_API = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]
+export const ACTIVIDAD_API_RESPALDO = ["sedentario", "normal", "activo", "muy_activo", "trabajo"]
+
+// ⚠️ Y LA QUE SE USA LA MANDA EL MOTOR (13 de septiembre de 2026). Un nivel de
+// actividad se llama de TRES formas -- el índice 0-4 que guarda la ficha, la
+// clave que viaja al motor, y la clave con la que se escribe en la base de
+// datos, que NO es la misma (`sedentario` se guarda como `baja`) --, y esa
+// traducción vivía solo aquí y en `supabase.js`. Si el motor añade un nivel o
+// cambia el orden, traducimos por el índice viejo y un perro vuelve de la base
+// de datos con OTRA actividad, o sea con otras kcal, sin error y con el menú en
+// verde. Es la familia de `guardarPerro`: se ve bien y está mal guardado.
+export let ACTIVIDAD_API = ACTIVIDAD_API_RESPALDO
+export const ACTIVIDAD_EN_LA_BASE_DE_DATOS_RESPALDO = ["baja", "media", "alta", "muy_alta", "trabajo"]
+export let ACTIVIDAD_EN_LA_BASE_DE_DATOS = ACTIVIDAD_EN_LA_BASE_DE_DATOS_RESPALDO
+
+alLlegarVocabulario((v) => {
+  const tres = v?.niveles_de_actividad?.los_tres_nombres
+  if (!Array.isArray(tres) || tres.length === 0) return
+  const enOrden = [...tres].sort((a, b) => a.indice - b.indice)
+  if (enOrden.every((x) => x.clave_motor)) ACTIVIDAD_API = enOrden.map((x) => x.clave_motor)
+  if (enOrden.every((x) => x.clave_base_de_datos)) {
+    ACTIVIDAD_EN_LA_BASE_DE_DATOS = enOrden.map((x) => x.clave_base_de_datos)
+  }
+})
 
 export function claveDeActividad(perfil) {
   const i = perfil?.actividadIdx
