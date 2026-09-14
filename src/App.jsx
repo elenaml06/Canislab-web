@@ -8188,14 +8188,45 @@ function RawkuOnboardingInterna({
   };
 
   const set = (campo, valor) => setPerfil((p) => ({ ...p, [campo]: valor }));
-  const siguiente = () => setPaso((p) => {
-    const nuevo = Math.min(TOTAL_PASOS + 1, p + 1);
-    // Pasar del último paso al resumen es TERMINAR el asistente. A partir
-    // de aquí la ficha ya está hecha, así que la próxima vez que se abra
-    // será para editarla. Ver `editandoLaFicha`.
-    if (nuevo > TOTAL_PASOS) setEditandoLaFicha(false);
-    return nuevo;
-  });
+
+  // ⚠️ CASO REAL, 14 de septiembre de 2026, contado por Elena: «cuando se
+  // selecciona en el perfil del perro lo de la actividad, el estado corporal
+  // del perro y eso SE ABRE EL TECLADO DEL MÓVIL y no debería».
+  //
+  // Los dos controles que nombra son `<input type="range">`, y un deslizador
+  // NO abre ningún teclado. El teclado no se abre: SE QUEDA ABIERTO. En el
+  // paso 4 hay un `<input type="number">` -- el peso actual -- justo encima
+  // del deslizador de condición corporal, y en Safari del iPhone tocar otra
+  // cosa NO le quita el foco: a diferencia de Chrome, pulsar un botón o un
+  // deslizador allí no mueve el foco. Así que se escribe el peso, se arrastra
+  // el deslizador que está dos dedos más abajo, y el teclado sigue tapando
+  // media pantalla encima de la silueta que hay que mirar.
+  //
+  // ⚠️ DÓNDE SÍ Y DÓNDE NO, y está medido con la prueba: en los DESLIZADORES
+  // sí hace falta, porque el campo del peso sigue montado y conserva el foco.
+  // Al cambiar de PASO no, porque el campo se desmonta y desmontar lo que
+  // tiene el foco ya lo suelta -- ponerlo ahí sería código que parece que
+  // arregla algo y no arregla nada, que es peor que no tenerlo.
+  //
+  // Va en `onPointerDown` y no en `onFocus` a propósito: con `onFocus` se
+  // rompería el teclado físico, que es como se recorre esto con el tabulador;
+  // un puntero es un dedo o un ratón.
+  const quitarElTeclado = () => {
+    if (typeof document === "undefined") return;
+    const activo = document.activeElement;
+    if (activo && typeof activo.blur === "function" && activo !== document.body) activo.blur();
+  };
+
+  const siguiente = () => {
+    setPaso((p) => {
+      const nuevo = Math.min(TOTAL_PASOS + 1, p + 1);
+      // Pasar del último paso al resumen es TERMINAR el asistente. A partir
+      // de aquí la ficha ya está hecha, así que la próxima vez que se abra
+      // será para editarla. Ver `editandoLaFicha`.
+      if (nuevo > TOTAL_PASOS) setEditandoLaFicha(false);
+      return nuevo;
+    });
+  };
   const atras = () => setPaso((p) => Math.max(1, p - 1));
 
   const resultadosRaza = useMemo(() => {
@@ -9942,6 +9973,7 @@ function RawkuOnboardingInterna({
             </div>
             <input
               type="range" className="cnl-slider mb-3" min={0} max={4} step={1} value={perfil.condicionIdx}
+              onPointerDown={quitarElTeclado}
               onChange={(e) => {
                 const idx = Number(e.target.value);
                 set("condicionIdx", idx);
@@ -9998,6 +10030,7 @@ function RawkuOnboardingInterna({
             </div>
             <input
               type="range" className="cnl-slider mb-3" min={0} max={4} step={1} value={perfil.actividadIdx}
+              onPointerDown={quitarElTeclado}
               onChange={(e) => { set("actividadIdx", Number(e.target.value)); set("actividadTocado", true); }}
             />
             <Puntitos total={5} activo={perfil.actividadIdx} tocado={perfil.actividadTocado} />
