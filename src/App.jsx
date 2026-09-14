@@ -38,7 +38,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout, tiempoParaVariosMenus } from "./api.js";
-import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad } from "./vocabulario.js";
+import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
@@ -1522,15 +1522,23 @@ function patologiasDelVocabulario(vocab) {
       // pregunta de otra. No lo decide la app: lo deriva el motor de las
       // familias que sustituyen a su cabecera.
       dentroDeLaPreguntaDe: p.dentro_de_la_pregunta_de || null,
+      // ⚠️ «Otra cosa» tampoco lleva casilla, y por otro motivo: no es una
+      // condición, es LA SALIDA -- la forma de decir «tiene algo que no está
+      // en vuestra lista», que quita el menú automático. Elena, 14 de
+      // septiembre: «¿y tiene sentido meter otra como patología???». No lo
+      // tiene: entre 46 enfermedades y agrupada por aparato, quien la leía no
+      // tenía forma de saber que marcarla le dejaba sin menú. Lo decide el
+      // motor (`es_la_salida`), no la app.
+      esLaSalida: p.es_la_salida === true,
     };
   });
   const porClave = Object.fromEntries(todas.map((p) => [p.key, p]));
-  const casillas = todas.filter((p) => !p.dentroDeLaPreguntaDe);
+  const casillas = todas.filter((p) => !p.dentroDeLaPreguntaDe && !p.esLaSalida);
   const enGrupos = grupos.map((g) => ({
     titulo: g?.dueno?.titulo || g?.veterinario?.titulo || g.clave,
     tituloVeterinario: g?.veterinario?.titulo || g?.dueno?.titulo || g.clave,
     patologias: (g.patologias || []).map((k) => porClave[k])
-      .filter((p) => p && !p.dentroDeLaPreguntaDe),
+      .filter((p) => p && !p.dentroDeLaPreguntaDe && !p.esLaSalida),
   })).filter((g) => g.patologias.length > 0);
   // Una patología en ningún grupo sería invisible abriendo aparatos y visible
   // solo buscándola. Si el motor sirviera los grupos incompletos, se cae al
@@ -5612,6 +5620,13 @@ function RawkuOnboardingInterna({
   // lista del dueño ya filtrada a 22 el resultado seria una pantalla vacia
   // sin motivo visible.
   const [busquedaPatologiaDueno, setBusquedaPatologiaDueno] = useState("");
+  // ⚠️ LA CASILLA QUE ESTÁ ESPERANDO CONFIRMACIÓN DE DIAGNÓSTICO (14 sep).
+  // Es una sola clave y no un conjunto a propósito: la pregunta se contesta
+  // ahí mismo, y dejar varias abiertas a la vez sería una pantalla llena de
+  // preguntas sin contestar en la que se pulsa «sí» a todo para quitarlas.
+  const [confirmandoPatologia, setConfirmandoPatologia] = useState(null);
+  // Y cuál ha contestado que NO, para poder decirle qué pasa entonces.
+  const [dijoQueNoHayDiagnostico, setDijoQueNoHayDiagnostico] = useState(null);
   const [aparatosAbiertosDueno, setAparatosAbiertosDueno] = useState([]);
 
   // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
@@ -10178,6 +10193,15 @@ function RawkuOnboardingInterna({
                     // marcar: se VE, para que sepa lo que lleva su perro, y no
                     // se puede quitar desde aquí.
                     const deVeterinario = activo && !laPuedeMarcarElDueno(p.key, vocab);
+                    // ⚠️ MARCARLA PIDE DIAGNÓSTICO, NO SOSPECHA (14 sep).
+                    // Elena: «si yo digo, ay, es que creo que mi perro tiene
+                    // colon irritable, y no lo sé, no podría generar un menú».
+                    // Quién la pide lo decide el MOTOR (regla 6), y solo se
+                    // pregunta al MARCAR: desmarcarla nunca pide permiso, que
+                    // sería un muro para quitar algo que se puso por error.
+                    const pideDiagnostico = !activo && !deVeterinario
+                      && pideConfirmacionDeDiagnostico(p.key, vocab);
+                    const confirmando = confirmandoPatologia === p.key;
                     return (
                       <div key={p.key}>
                         <button
@@ -10185,8 +10209,11 @@ function RawkuOnboardingInterna({
                           onClick={() => {
                             if (deVeterinario) return;
                             if (activo) {
+                              setConfirmandoPatologia(null);
                               set("patologias", perfil.patologias.filter(
                                 (k) => k !== p.key && FAMILIA_DE_CLAVE[k] !== p.key));
+                            } else if (pideDiagnostico) {
+                              setConfirmandoPatologia(confirmando ? null : p.key);
                             } else {
                               set("patologias", [...perfil.patologias, p.key]);
                             }
@@ -10197,6 +10224,49 @@ function RawkuOnboardingInterna({
                           <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{p.labelDueno || p.label}</span>
                           {activo && <Check size={16} style={{ color: ROSA }} />}
                         </button>
+                        {confirmando && (
+                          <div className="mt-1.5 mb-1 p-3 rounded-xl flex flex-col gap-2"
+                               data-testid="confirmar-diagnostico"
+                               style={{ background: "#F7F3FD", border: `1px solid #E3DAF0` }}>
+                            <p className="text-xs leading-snug"
+                               style={{ color: TINTA, fontFamily: fontBody }}>
+                              {CONFIRMACION_DIAGNOSTICO.pregunta}
+                            </p>
+                            <div className="flex gap-2 flex-wrap">
+                              {CONFIRMACION_DIAGNOSTICO.respuestas.map((r) => (
+                                <button key={r.clave} type="button"
+                                  onClick={() => {
+                                    if (r.se_marca) {
+                                      set("patologias", [...perfil.patologias, p.key]);
+                                      setConfirmandoPatologia(null);
+                                    } else {
+                                      // El «no» NO marca, y se queda abierto
+                                      // para que se lea por qué. Cerrarlo aquí
+                                      // dejaría la respuesta sin consecuencia
+                                      // visible, y entonces esto sería un
+                                      // «acepto» con dos botones.
+                                      setConfirmandoPatologia(p.key);
+                                      setDijoQueNoHayDiagnostico(p.key);
+                                    }
+                                  }}
+                                  className="px-3 py-2 rounded-lg text-xs"
+                                  style={{ fontFamily: fontBody,
+                                           background: r.se_marca ? VIOLETA : "#FFFFFF",
+                                           color: r.se_marca ? "#FFFFFF" : TINTA,
+                                           border: `1.5px solid ${r.se_marca ? VIOLETA : "#E3DAF0"}` }}>
+                                  {r.texto}
+                                </button>
+                              ))}
+                            </div>
+                            {dijoQueNoHayDiagnostico === p.key && (
+                              <p className="text-[11px] leading-snug"
+                                 data-testid="sin-diagnostico"
+                                 style={{ color: MALVA, fontFamily: fontBody }}>
+                                {CONFIRMACION_DIAGNOSTICO.si_dice_que_no}
+                              </p>
+                            )}
+                          </div>
+                        )}
                         {deVeterinario ? (
                           <p className="text-[11px] leading-snug mt-1 px-1"
                              style={{ color: MALVA, fontFamily: fontBody }}>
@@ -10210,6 +10280,43 @@ function RawkuOnboardingInterna({
                       </div>
                     );
                   };
+                  // ⚠️ LA SALIDA, AL FINAL Y FUERA DE LOS GRUPOS (14 sep).
+                  // Elena: «¿y tiene sentido meter otra como patología???».
+                  // No: `otra` no es una condición, es la forma de decir «tiene
+                  // algo que no está en vuestra lista», y lo que hace es quitar
+                  // el menú automático. Como casilla entre 46 enfermedades,
+                  // quien la leía no sabía que marcarla le dejaba sin menú.
+                  // La pregunta y el texto los manda el motor (regla 6).
+                  const salidaActiva = perfil.patologias.includes(SALIDA_PATOLOGIAS.clave);
+                  const laSalida = (
+                    <div className="mt-1" data-testid="salida-patologias">
+                      <p className="text-xs px-1 mb-1.5"
+                         style={{ color: MALVA, fontFamily: fontBody }}>
+                        {SALIDA_PATOLOGIAS.pregunta}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => set("patologias", salidaActiva
+                          ? perfil.patologias.filter((k) => k !== SALIDA_PATOLOGIAS.clave)
+                          : [...perfil.patologias, SALIDA_PATOLOGIAS.clave])}
+                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-left"
+                        style={{ background: salidaActiva ? VIOLETA : "#FFFFFF",
+                                 border: `1.5px solid ${salidaActiva ? VIOLETA : "#E3DAF0"}` }}>
+                        <span style={{ color: salidaActiva ? "#FFFFFF" : TINTA,
+                                       fontFamily: fontDisplay, fontSize: 15 }}>
+                          {SALIDA_PATOLOGIAS.respuesta}
+                        </span>
+                        {salidaActiva && <Check size={16} style={{ color: ROSA }} />}
+                      </button>
+                      {salidaActiva && (
+                        <p className="text-[11px] leading-snug mt-1.5 px-1"
+                           data-testid="salida-que-pasa"
+                           style={{ color: MALVA, fontFamily: fontBody }}>
+                          {SALIDA_PATOLOGIAS.que_pasa}
+                        </p>
+                      )}
+                    </div>
+                  );
                   const buscador = (
                     <div className="relative">
                       <Search size={16} style={{ position: "absolute", left: 13, top: 14, color: MALVA }} />
@@ -10238,10 +10345,12 @@ function RawkuOnboardingInterna({
                         {buscador}
                         {encontradas.length === 0 ? (
                           <p className="text-xs px-1" style={{ color: MALVA, fontFamily: fontBody }}>
-                            Nada cuadra con «{busquedaPatologiaDueno}». Si lo que tiene no está en la
-                            lista, marca «Otra cosa que no está en esta lista».
+                            Nada cuadra con «{busquedaPatologiaDueno}».
                           </p>
                         ) : encontradas.map(casilla)}
+                        {/* Y la salida también aquí: no encontrar nada es
+                            justo el momento en que hace falta. */}
+                        {laSalida}
                       </div>
                     );
                   }
@@ -10253,7 +10362,9 @@ function RawkuOnboardingInterna({
                   // perro renal marcando «Nada que destacar».
                   if (grupos.length === 0) {
                     return (
-                      <div className="flex flex-col gap-2">{buscador}{visibles.map(casilla)}</div>
+                      <div className="flex flex-col gap-2">
+                        {buscador}{visibles.map(casilla)}{laSalida}
+                      </div>
                     );
                   }
                   return (
@@ -10296,6 +10407,7 @@ function RawkuOnboardingInterna({
                           </div>
                         );
                       })}
+                      {laSalida}
                     </div>
                   );
                 })()}

@@ -158,3 +158,117 @@ export function claveDeActividad(perfil) {
   const i = perfil?.actividadIdx
   return Number.isInteger(i) && ACTIVIDAD_API[i] ? ACTIVIDAD_API[i] : null
 }
+
+// ─── MARCAR UNA PATOLOGÍA PIDE DIAGNÓSTICO, NO SOSPECHA ──────────────────────
+//
+// ⚠️ Elena, 14 de septiembre de 2026: «solo deberíamos dejar marcar patologías
+// si están prescritas por un veterinario, o sea, si un veterinario eso lo ha
+// dicho, porque si yo digo, ay, es que creo que mi perro tiene colon irritable,
+// y no lo sé, no podría generar un menú, ¿entiendes?».
+//
+// Y funcionaba tal cual: la pantalla enseñaba 23 de las 47 casillas y no
+// preguntaba en ningún momento si había diagnóstico. Marcar «colitis» por una
+// corazonada movía la fibra y la grasa de la ración de un perro que quizá no
+// tiene nada.
+//
+// ⚠️ NO ES UNA CASILLA DE «ACEPTO». Son dos respuestas, y el «no» tiene
+// consecuencia: la patología NO se marca. Un «acepto» lo pulsa todo el mundo
+// sin leerlo, y entonces esto no protegería de nada.
+//
+// ⚠️ EL TEXTO LO MANDA EL MOTOR (regla 6): `preguntas_por_patologia.
+// confirmacion_de_diagnostico` de `/vocabulario`. Esto de aquí es el RESPALDO
+// para cuando Render duerme, no la fuente. Y quién la pide tampoco se decide
+// aquí: sale de `pide_confirmacion_de_diagnostico`, que el motor DERIVA de
+// `quien_puede_marcarla`.
+export const CONFIRMACION_DIAGNOSTICO_RESPALDO = {
+  pregunta: "¿Se lo ha diagnosticado un veterinario?",
+  respuestas: [
+    { clave: "si", texto: "Sí, tiene diagnóstico", se_marca: true },
+    { clave: "no", texto: "No, es una sospecha mía", se_marca: false },
+  ],
+  si_dice_que_no: "Entonces mejor no le tocamos el menú por esto. Un menú ajustado a algo que tu "
+    + "perro puede no tener le puede hacer más mal que bien. Coméntaselo a tu veterinario y, si "
+    + "te lo confirma, vuelves y lo marcas.",
+}
+
+export let CONFIRMACION_DIAGNOSTICO = CONFIRMACION_DIAGNOSTICO_RESPALDO
+
+alLlegarVocabulario((v) => {
+  const servida = v?.preguntas_por_patologia?.confirmacion_de_diagnostico?.dueno
+  // Se exige la pregunta Y las dos respuestas: con media servida se pintaría
+  // un diálogo sin salida, que es peor que el respaldo entero.
+  if (servida?.pregunta && Array.isArray(servida.respuestas) && servida.respuestas.length === 2) {
+    CONFIRMACION_DIAGNOSTICO = {
+      pregunta: servida.pregunta,
+      respuestas: servida.respuestas,
+      si_dice_que_no: servida.si_dice_que_no || CONFIRMACION_DIAGNOSTICO_RESPALDO.si_dice_que_no,
+    }
+  }
+})
+
+/**
+ * ¿Esta casilla le pide al dueño que confirme que hay diagnóstico?
+ *
+ * Lo decide el MOTOR, y por TRES caminos antes de mirar nada de la app:
+ *
+ *   1. `pide_confirmacion_de_diagnostico`, que es la respuesta directa.
+ *   2. `quien_puede_marcarla` de `preguntas_por_patologia`, de donde el motor
+ *      la deriva -- así un motor que todavía no sirva el campo nuevo sigue
+ *      mandando él.
+ *   3. El mismo campo en `patologias.lista`, que es la otra puerta por la que
+ *      ya viaja.
+ *
+ * Y solo si no ha llegado nada, el respaldo. Ahí se pide para TODO lo que no
+ * sea de las cinco que se saben sin analítica: con Render dormido, el lado
+ * seguro es preguntar de más, nunca dejar marcar de más.
+ */
+const SIN_ANALITICA_RESPALDO = ["dermatosis_zinc", "obesidad", "otra",
+                               "raza_predispuesta_cobre", "riesgo_gdv"]
+
+export function pideConfirmacionDeDiagnostico(clave, vocab) {
+  const servido = vocab?.preguntas_por_patologia?.por_patologia?.[clave]
+  if (servido && typeof servido.pide_confirmacion_de_diagnostico === "boolean") {
+    return servido.pide_confirmacion_de_diagnostico
+  }
+  const quien = servido?.quien_puede_marcarla
+    || (vocab?.patologias?.lista || []).find((p) => p?.clave === clave)?.quien_puede_marcarla
+  if (quien) return quien === "dueno_con_diagnostico"
+  return !SIN_ANALITICA_RESPALDO.includes(clave)
+}
+
+// ─── «OTRA COSA» NO ES UNA PATOLOGÍA: ES LA SALIDA ───────────────────────────
+//
+// ⚠️ Elena, 14 de septiembre de 2026: «¿y tiene sentido meter otra como
+// patología???».
+//
+// No lo tiene. `otra` no es una condición: es la forma de decir «tiene algo que
+// no está en vuestra lista», y lo que hace es QUITAR el menú automático. Esa
+// función hace falta --sin ella, quien tiene un perro con algo raro genera el
+// menú como si estuviera sano-- pero vivía como una casilla más, con nombre de
+// diagnóstico, entre 46 enfermedades de verdad y agrupada por aparato. Quien la
+// leía no tenía forma de saber que marcarla le dejaba sin menú.
+//
+// Se pinta al final de la pantalla, como lo que es. En el motor no cambia nada:
+// misma clave, mismo `formulable: false`, mismo efecto.
+export const SALIDA_PATOLOGIAS_RESPALDO = {
+  clave: "otra",
+  pregunta: "¿Tiene algo que no está en esta lista?",
+  respuesta: "Sí, tiene otra cosa",
+  que_pasa: "Entonces no te generamos un menú automático. No sabemos ajustarlo a lo que tiene, y "
+    + "darte uno pensado para un perro sano sería peor que no darte ninguno. Háblalo con tu "
+    + "veterinario, que puede pautarle la dieta a tu perro en concreto.",
+}
+
+export let SALIDA_PATOLOGIAS = SALIDA_PATOLOGIAS_RESPALDO
+
+alLlegarVocabulario((v) => {
+  const s = v?.patologias?.salida
+  if (s?.clave && s?.dueno?.pregunta && s?.dueno?.respuesta) {
+    SALIDA_PATOLOGIAS = {
+      clave: s.clave,
+      pregunta: s.dueno.pregunta,
+      respuesta: s.dueno.respuesta,
+      que_pasa: s.dueno.que_pasa || SALIDA_PATOLOGIAS_RESPALDO.que_pasa,
+    }
+  }
+})
