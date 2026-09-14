@@ -31,7 +31,7 @@ import QueCambiaLaPatologia from "./topespatologia.jsx";
 // imprime el DOCUMENTO firmado y no la pantalla.
 import PautaImprimible from "./pautaimprimible.jsx";
 import { perrosDelModo } from "./pacientes";
-import { contiene } from "./texto.js";
+import { contiene, arbolOrdenado } from "./texto.js";
 import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicion,
          salvedadDelBcs,
          condicionDesdeBcs, bcsVigente } from "./bcs";
@@ -1209,15 +1209,25 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     "Yodo": ["Yoduro potásico (comprimidos 200 µg)"],
   },
 };
+// ⚠️ EN ORDEN ALFABÉTICO, LAS DOS (13 de septiembre de 2026, noche). Elena, en
+// Personalizar: «han desaparecido cosas del catálogo... por ejemplo la
+// zanahoria no está», y un minuto después: «ah calla si está, solo q no está
+// por orden alfabético». No faltaba nada y hacía el mismo daño que si faltara.
+//
+// El motor ya sirve sus grupos ordenados desde hoy, así que esto es la otra
+// mitad: el RESPALDO --la lista que se pinta cuando Render duerme-- estaba
+// escrito en el orden en que se fue llenando, y ahí no llega el arreglo del
+// motor. Se ordena al pintar y no a mano en la constante, porque una lista
+// ordenada a mano se desordena en cuanto alguien añade una línea al final.
 // La que se usa. La rellena `alimentosDelMotor()` en cuanto contesta
 // `GET /alimentos`; hasta entonces, y si el motor no responde, el respaldo.
-let CATEGORIAS_ALIMENTO = CATEGORIAS_ALIMENTO_RESPALDO;
+let CATEGORIAS_ALIMENTO = arbolOrdenado(CATEGORIAS_ALIMENTO_RESPALDO);
 
 // En cuanto conteste el motor, esta es la lista. Antes de eso, el respaldo.
 pedirAlimentos();
 alLlegarAlimentos((datos) => {
   const arbol = alimentosDelMotor(datos);
-  if (arbol) CATEGORIAS_ALIMENTO = arbol;
+  if (arbol) CATEGORIAS_ALIMENTO = arbolOrdenado(arbol);
 });
 
 // El árbol que manda el motor -> la forma que pinta la app.
