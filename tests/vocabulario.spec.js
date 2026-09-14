@@ -506,8 +506,15 @@ test.describe("las palabras que se ven salen del motor", () => {
     await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
     await page.getByRole("button", { name: "Sí", exact: true }).last().click();
 
+    // ⚠️ SE BUSCA CADA UNA, NO SE MIRA LA PANTALLA (13 septiembre, noche).
+    // Desde hoy la lista del dueño viene PLEGADA por aparato, así que «no se
+    // ve» y «está dentro de una caja sin abrir» se verían igual, y este test
+    // pasaría en verde con el filtro entero quitado -- que es justo lo que
+    // existe para vigilar. El buscador enseña lo que hay sin abrir nada.
+    const buscar = page.getByLabel("Buscar patología");
     for (const label of ["Insuficiencia renal crónica", "Pancreatitis", "Cardiopatía",
                          "Diabetes mellitus", "Cálculos de oxalato cálcico"]) {
+      await buscar.fill(label);
       await expect(page.getByRole("button", { name: label, exact: true }),
         `al dueño le sale «${label}», que es de veterinario: su cifra depende de un dato ` +
         `clinico que el no tiene`)
@@ -517,6 +524,7 @@ test.describe("las palabras que se ven salen del motor", () => {
     // decir lo que su perro SI tiene.
     for (const label of ["Obesidad / adelgazamiento dirigido", "Artrosis / osteoartritis",
                          "Hipotiroidismo"]) {
+      await buscar.fill(label);
       await expect(page.getByRole("button", { name: label, exact: true }),
         `ha desaparecido «${label}», que el dueño SI puede marcar`)
         .toHaveCount(1);

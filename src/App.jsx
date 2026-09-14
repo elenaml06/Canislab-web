@@ -1081,7 +1081,14 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // pollo, pavo ni conejo -- no se han inventado esas especies.
     // Timo y cerebro dan variedad adicional con datos USDA reales.
     "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero"],
-    "Ternera": ["Pulmón de ternera", "Riñón de ternera", "Timo de ternera", "Cerebro de ternera"],
+    // ⚠️ «Riñón de ternera» YA NO EXISTE (13 septiembre, noche). El motor la
+    // renombró a «Riñón de vaca» sin tocar una cifra: cuadra en TRECE celdas
+    // exactas con la fila de riñón de BUEY de CIQUAL, así que la ficha era de
+    // vaca con nombre de ternera. Es el cuarto caso de la misma familia, con
+    // el bazo, el páncreas y el pulmón. Aquí es respaldo, pero un respaldo que
+    // ofrece un alimento que el motor no tiene manda una petición que el motor
+    // no sabe recibir.
+    "Ternera": ["Pulmón de ternera", "Timo de ternera", "Cerebro de ternera"],
     // ⚠️ AMPLIADO (8 septiembre) — LA MISMA HISTORIA DE AGOSTO, OTRA VEZ.
     // El comentario de arriba cuenta que "Bazo de ternera" y "Páncreas de
     // ternera" pasaron a "de vaca" porque sus datos eran de animal adulto.
@@ -1091,8 +1098,18 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // dos, cada especie con SUS datos, así que aquí entran las tres de vaca.
     // Y la diferencia no es un decimal: el timo de vaca tiene 236 kcal y
     // 20,35 g de grasa, el de ternera 101 y 3,07.
+    // ⚠️ «CEREBRO DE VACA» FUERA, Y NO ES NUTRICIÓN SINO LEY (13 septiembre,
+    // noche). El encéfalo de un bovino de más de 12 meses es material
+    // especificado de riesgo -- Reg. (CE) 999/2001, anexo V, en su versión
+    // consolidada --, o sea material de categoría 1, y la comida para animales
+    // sale de categoría 3. Una vaca pasa de 12 meses por definición. El motor
+    // sacó la ficha; aquí seguía en el respaldo, que es la lista que se pinta
+    // cuando Render duerme. Un respaldo que ofrece un alimento ilegal es peor
+    // que un respaldo desactualizado. La de TERNERA se queda, porque la
+    // ternera española se sacrifica por debajo del año, y su ficha lleva esa
+    // condición escrita y un aviso para quien va a la carnicería.
     "Vaca": ["Bazo de vaca", "Páncreas de vaca", "Timo de vaca",
-             "Pulmón de vaca", "Cerebro de vaca"],
+             "Pulmón de vaca", "Riñón de vaca"],
     // ⚠️ ELIMINADO (5 agosto, madrugada) — CASO REAL GRAVE, pedido
     // expreso: "Cerdo": ["Bazo de cerdo", "Páncreas de cerdo"] quitado
     // por completo -- riesgo real de enfermedad de Aujeszky
@@ -1967,7 +1984,7 @@ const MENUS_EJEMPLO = [
   { id: 2, nombre: "Menú 2", dias: 2, kcal: 1120, items: [
     { categoria: "Carne muscular", Icono: Beef, alimento: "Ternera con grasa", gramos: 490, porque: null },
     { categoria: "Hueso carnoso", Icono: Beef, alimento: "Costillas de ternera", gramos: 75, porque: null },
-    { categoria: "Vísceras", Icono: HeartPulse, alimento: "Riñón de ternera", gramos: 38, porque: null },
+    { categoria: "Vísceras", Icono: HeartPulse, alimento: "Riñón de vaca", gramos: 38, porque: null },
     { categoria: "Hígado", Icono: HeartPulse, alimento: "Hígado de pollo", gramos: 45, porque: "cubre Folato" },
     { categoria: "Verduras y frutas", Icono: Salad, alimento: "Brócoli + Pera", gramos: 75, porque: null },
   ]},
@@ -5579,6 +5596,13 @@ function RawkuOnboardingInterna({
   // `APARATOS`: eran 27 casillas seguidas en medio de la ficha.
   const [busquedaPatologia, setBusquedaPatologia] = useState("");
   const [aparatosAbiertos, setAparatosAbiertos] = useState([]);
+  // ⚠️ APARTE DE LOS DE ARRIBA A PROPOSITO (13 septiembre, noche). Los de
+  // arriba son los de la ficha del VETERINARIO. Compartirlos haria que lo
+  // buscado en una pantalla filtrara la otra al cambiar de modo, y con la
+  // lista del dueño ya filtrada a 22 el resultado seria una pantalla vacia
+  // sin motivo visible.
+  const [busquedaPatologiaDueno, setBusquedaPatologiaDueno] = useState("");
+  const [aparatosAbiertosDueno, setAparatosAbiertosDueno] = useState([]);
 
   // ⚠️ AÑADIDO (25 agosto) — PEDIDO EXPRESO, y la segunda vez con el matiz
   // que hacía falta: "cuando terminas de generar por primera vez el perfil
@@ -10117,45 +10141,154 @@ function RawkuOnboardingInterna({
                     clínico que el dueño no tiene. La lista de quién puede
                     marcar cada una NO se opina aquí: sale de la cita de la
                     fuente de cada patología y llega por `GET /vocabulario`. */}
-                {patologiasQueVeElDueno(vocab, perfil.patologias).map((p) => {
-                  const activo = perfil.patologias.includes(p.key)
-                    || familiaPatologiaActiva(p.key, perfil.patologias);
-                  // Puesta por un veterinario y de las que el dueño no puede
-                  // marcar: se VE, para que sepa lo que lleva su perro, y no
-                  // se puede quitar desde aquí.
-                  const deVeterinario = activo && !laPuedeMarcarElDueno(p.key, vocab);
-                  return (
-                    <div key={p.key}>
-                      <button
-                        disabled={deVeterinario}
-                        onClick={() => {
-                          if (deVeterinario) return;
-                          if (activo) {
-                            set("patologias", perfil.patologias.filter(
-                              (k) => k !== p.key && FAMILIA_DE_CLAVE[k] !== p.key));
-                          } else {
-                            set("patologias", [...perfil.patologias, p.key]);
-                          }
-                        }}
-                        className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-left"
-                        style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
-                      >
-                        <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{p.label}</span>
-                        {activo && <Check size={16} style={{ color: ROSA }} />}
-                      </button>
-                      {deVeterinario ? (
-                        <p className="text-[11px] leading-snug mt-1 px-1"
-                           style={{ color: MALVA, fontFamily: fontBody }}>
-                          Esto lo lleva puesto desde su ficha clínica. Ajusta el menú, y
-                          quitarlo o cambiarlo es cosa de tu veterinario.
-                        </p>
-                      ) : (
-                        <SelectorSubtipoPatologia cabecera={p.key} patologias={perfil.patologias}
-                          onCambiar={(nuevas) => set("patologias", nuevas)} />
-                      )}
+                {/* ─── Y PLEGADA POR APARATO, CON BUSCADOR ─────────────────
+                    ⚠️ PEDIDO EXPRESO (13 septiembre, noche): «para las
+                    patologías de usuario se ve una lista MUUUUY larga y no me
+                    gusta, que sea un desplegable con un buscador o algo así
+                    mejor».
+                    Y era literal: 22 botones seguidos en medio de la ficha,
+                    que es el mismo peñazo que se arregló el 8 de septiembre en
+                    la ficha del VETERINARIO y que aquí se quedó sin arreglar.
+                    Se hace igual que allí -- mismos grupos, mismo buscador --,
+                    con dos diferencias que son las de siempre: aquí se pinta
+                    el registro del DUEÑO (`labelDueno`, «Problema de corazón»
+                    y no «Cardiopatía, estadio ACVIM B2») y la lista está ya
+                    filtrada a lo que el dueño puede marcar.
+                    ⚠️ Los grupos NO se escriben aquí: son los nueve aparatos
+                    que sirve `GET /vocabulario`, filtrados a lo visible. Un
+                    aparato que se quede sin nada visible no se pinta, que
+                    sería un desplegable vacío. */}
+                {(() => {
+                  const visibles = patologiasQueVeElDueno(vocab, perfil.patologias);
+                  const visible = new Set(visibles.map((p) => p.key));
+                  const casilla = (p) => {
+                    const activo = perfil.patologias.includes(p.key)
+                      || familiaPatologiaActiva(p.key, perfil.patologias);
+                    // Puesta por un veterinario y de las que el dueño no puede
+                    // marcar: se VE, para que sepa lo que lleva su perro, y no
+                    // se puede quitar desde aquí.
+                    const deVeterinario = activo && !laPuedeMarcarElDueno(p.key, vocab);
+                    return (
+                      <div key={p.key}>
+                        <button
+                          disabled={deVeterinario}
+                          onClick={() => {
+                            if (deVeterinario) return;
+                            if (activo) {
+                              set("patologias", perfil.patologias.filter(
+                                (k) => k !== p.key && FAMILIA_DE_CLAVE[k] !== p.key));
+                            } else {
+                              set("patologias", [...perfil.patologias, p.key]);
+                            }
+                          }}
+                          className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-left"
+                          style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
+                        >
+                          <span style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{p.labelDueno || p.label}</span>
+                          {activo && <Check size={16} style={{ color: ROSA }} />}
+                        </button>
+                        {deVeterinario ? (
+                          <p className="text-[11px] leading-snug mt-1 px-1"
+                             style={{ color: MALVA, fontFamily: fontBody }}>
+                            Esto lo lleva puesto desde su ficha clínica. Ajusta el menú, y
+                            quitarlo o cambiarlo es cosa de tu veterinario.
+                          </p>
+                        ) : (
+                          <SelectorSubtipoPatologia cabecera={p.key} patologias={perfil.patologias}
+                            onCambiar={(nuevas) => set("patologias", nuevas)} />
+                        )}
+                      </div>
+                    );
+                  };
+                  const buscador = (
+                    <div className="relative">
+                      <Search size={16} style={{ position: "absolute", left: 13, top: 14, color: MALVA }} />
+                      <input
+                        value={busquedaPatologiaDueno}
+                        onChange={(e) => setBusquedaPatologiaDueno(e.target.value)}
+                        placeholder="Buscar (tripa, corazón, piel...)"
+                        aria-label="Buscar patología"
+                        className="w-full py-3 pl-9 pr-4 rounded-xl outline-none"
+                        style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0",
+                                 color: TINTA, fontFamily: fontBody, fontSize: 14 }} />
                     </div>
                   );
-                })}
+                  // Buscando, no hay grupos: hay resultados. Plegarlos por
+                  // aparato obligaría a abrir cajas para ver lo que acabas de
+                  // buscar, que es lo contrario de buscar.
+                  if (busquedaPatologiaDueno.trim()) {
+                    // Se busca en LOS DOS registros: quien escribe «corazón» y
+                    // quien escribe el nombre que le dijo su veterinario tienen
+                    // que encontrar lo mismo.
+                    const encontradas = visibles.filter(
+                      (p) => contiene(p.labelDueno || p.label, busquedaPatologiaDueno)
+                          || contiene(p.labelVeterinario || p.label, busquedaPatologiaDueno));
+                    return (
+                      <div className="flex flex-col gap-2">
+                        {buscador}
+                        {encontradas.length === 0 ? (
+                          <p className="text-xs px-1" style={{ color: MALVA, fontFamily: fontBody }}>
+                            Nada cuadra con «{busquedaPatologiaDueno}». Si lo que tiene no está en la
+                            lista, marca «Otra cosa que no está en esta lista».
+                          </p>
+                        ) : encontradas.map(casilla)}
+                      </div>
+                    );
+                  }
+                  const grupos = PATOLOGIAS_POR_APARATO
+                    .map((g) => ({ ...g, patologias: (g.patologias || []).filter((p) => p && visible.has(p.key)) }))
+                    .filter((g) => g.patologias.length > 0);
+                  // ⚠️ Si los grupos no han llegado (API dormida), se pinta la
+                  // lista de siempre. Una pantalla sin patologías sería un
+                  // perro renal marcando «Nada que destacar».
+                  if (grupos.length === 0) {
+                    return (
+                      <div className="flex flex-col gap-2">{buscador}{visibles.map(casilla)}</div>
+                    );
+                  }
+                  return (
+                    <div className="flex flex-col gap-2">
+                      {buscador}
+                      {grupos.map((grupo) => {
+                        // Un aparato con algo marcado se abre solo: lo que el
+                        // perro TIENE no puede quedarse escondido detrás de un
+                        // clic. Y por eso mismo se cuenta en la cabecera.
+                        const marcadas = grupo.patologias.filter(
+                          (p) => perfil.patologias.includes(p.key)
+                              || familiaPatologiaActiva(p.key, perfil.patologias));
+                        const abierto = aparatosAbiertosDueno.includes(grupo.titulo) || marcadas.length > 0;
+                        return (
+                          <div key={grupo.titulo}>
+                            <button
+                              onClick={() => setAparatosAbiertosDueno((abiertos) =>
+                                abiertos.includes(grupo.titulo)
+                                  ? abiertos.filter((t) => t !== grupo.titulo)
+                                  : [...abiertos, grupo.titulo])}
+                              aria-expanded={abierto}
+                              className="w-full flex items-center justify-between px-4 py-3 rounded-xl text-left"
+                              style={{ background: "#FFFFFF",
+                                       border: `1.5px solid ${marcadas.length ? VIOLETA : "#E3DAF0"}`,
+                                       cursor: "pointer" }}>
+                              <span style={{ color: TINTA, fontFamily: fontDisplay, fontSize: 15 }}>
+                                {grupo.titulo}
+                                {marcadas.length > 0 && (
+                                  <span style={{ color: ROSA, fontWeight: 700 }}> · {marcadas.length}</span>
+                                )}
+                              </span>
+                              <ChevronDown size={16}
+                                style={{ color: MALVA, transform: abierto ? "rotate(180deg)" : "none" }} />
+                            </button>
+                            {abierto && (
+                              <div className="flex flex-col gap-2 mt-2 pl-3">
+                                {grupo.patologias.map(casilla)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
                 {perfil.patologias.some((k) => { const d = datosPatologia(k); return d && !d.segura; }) && (
                   <div className="flex gap-2 items-start p-3 rounded-xl mt-1" style={{ background: "#FFF0F3" }}>
                     <AlertCircle size={16} style={{ color: ROSA, flexShrink: 0, marginTop: 2 }} />
