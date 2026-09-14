@@ -50,3 +50,42 @@ export function contiene(texto, busqueda) {
   if (sinTildes(texto).includes(q)) return true;
   return tambienSinEne(texto).includes(tambienSinEne(busqueda).trim());
 }
+
+/**
+ * Ordenar una lista de nombres como los ordenaría una persona.
+ *
+ * ⚠️ CASO REAL (13 de septiembre de 2026, noche). Elena, en Personalizar: «han
+ * desaparecido cosas del catálogo... por ejemplo la zanahoria no está», y un
+ * minuto después: «ah calla si está, solo q no está por orden alfabético». O
+ * sea que el fallo no dejaba nada fuera y hacía exactamente el mismo daño que
+ * dejarlo: un alimento que no se encuentra es un alimento que no se elige.
+ *
+ * Se usa `localeCompare` con `es` y `sensitivity: "base"`, que es lo que hace
+ * que «Ñ» vaya detrás de «N» y no al final de la lista, y que «Acelga» y
+ * «Ácido» queden juntos. Ordenar por código de carácter manda todo lo que
+ * lleva tilde al final, que es otra forma de esconderlo.
+ */
+export function ordenAlfabetico(a, b) {
+  return String(a || "").localeCompare(String(b || ""), "es", { sensitivity: "base" });
+}
+
+/**
+ * El mismo orden, aplicado a un árbol de dos niveles: categoría -> grupo ->
+ * nombres. Es la forma en la que la app guarda el catálogo.
+ *
+ * ⚠️ VIVE AQUÍ Y NO EN `App.jsx` para que se pueda probar sin levantar la app:
+ * un orden se comprueba mejor con una lista de nombres raros (tildes, eñes,
+ * mayúsculas) que abriendo una pantalla, y así la prueba puede llamar a la
+ * MISMA función que pinta, no a una copia suya.
+ */
+export function arbolOrdenado(arbol) {
+  const salida = {};
+  for (const clave of Object.keys(arbol || {})) {
+    const grupos = arbol[clave] || {};
+    salida[clave] = {};
+    for (const grupo of Object.keys(grupos).sort(ordenAlfabetico)) {
+      salida[clave][grupo] = [...(grupos[grupo] || [])].sort(ordenAlfabetico);
+    }
+  }
+  return salida;
+}

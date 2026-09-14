@@ -148,15 +148,68 @@ test.describe("las patologías vienen del motor", () => {
     await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
     await page.getByRole("button", { name: "Sí", exact: true }).last().click();
 
+    // ⚠️ Y AHORA VA PLEGADA POR APARATO (13 septiembre, noche), así que lo
+    // primero que se ve es el grupo, con el título del registro del DUEÑO.
+    const grupo = page.getByRole("button", { name: /APARATO DOS DEL DUEÑO/ });
+    await expect(grupo, "al dueño no le llegan los aparatos que sirve el motor").toBeVisible();
+    await expect(page.getByRole("button", { name: /APARATO DOS CLINICO/ }),
+      "al dueño se le está pintando el registro del veterinario").toHaveCount(0);
+    await grupo.click();
+
     await expect(page.getByRole("button", { name: "HUESOS INVENTADOS", exact: true }),
       "al dueño no le llega la etiqueta que el motor escribió para él").toBeVisible();
-    // La de veterinario no le sale, y eso lo dice el motor en
-    // `quien_puede_marcarla`, no una tabla de la app.
+    // Y su aparato entero no se pinta, porque las dos que lleva son de
+    // veterinario: un desplegable vacío sería peor que la lista larga.
+    await expect(page.getByRole("button", { name: /APARATO UNO DEL DUEÑO/ }),
+      "se le pinta al dueño un aparato cuyas patologías no puede marcar ninguna")
+      .toHaveCount(0);
+    // Y ninguna de las dos sale por ningún sitio, ni plegada ni buscando. Eso
+    // lo dice el motor en `quien_puede_marcarla`, no una tabla de la app.
+    await page.getByLabel("Buscar patología").fill("INVENTAD");
     for (const nombre of ["PROBLEMA DE FILTRO INVENTADO", "NEFROPATIA INVENTADA"]) {
       await expect(page.getByRole("button", { name: nombre, exact: true }),
         `al dueño le sale «${nombre}», que el motor marca como solo_veterinario`)
         .toHaveCount(0);
     }
+  });
+
+  test("y al dueño la lista le viene plegada, con buscador que entiende los dos registros",
+       async ({ page, request }) => {
+    // ⚠️ POR QUÉ (13 de septiembre de 2026, noche). Elena: «para las patologías
+    // de usuario se ve una lista MUUUUY larga y no me gusta, que sea un
+    // desplegable con un buscador o algo así mejor». Eran 22 botones seguidos.
+    //
+    // Se comprueban las dos mitades, porque una sin la otra no sirve de nada:
+    // que de entrada NO esté todo desplegado, y que buscando salga sin tener
+    // que abrir ninguna caja -- plegar sin buscador solo esconde la lista.
+    await configurar(request, {
+      rolProfesional: false, rolVerificado: false,
+      perros: [PERRO_DE_PRUEBA], accesos: [], menus: [], premium: true,
+      vocabulario: VOCABULARIO,
+    });
+    await entrar(page);
+    await esperarLaFicha(page);
+    await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
+    await page.getByRole("button", { name: "Sí", exact: true }).last().click();
+
+    // 1. Plegada: la patología no se ve hasta abrir su aparato.
+    await expect(page.getByRole("button", { name: "HUESOS INVENTADOS", exact: true }),
+      "la lista sigue saliendo entera desplegada, que es lo que Elena mandó quitar")
+      .toHaveCount(0);
+
+    // 2. El buscador la saca sin abrir nada, y entiende los DOS registros: se
+    //    escribe la palabra del VETERINARIO -- la que le habrá dicho el suyo --
+    //    y tiene que salir la etiqueta del dueño.
+    await page.getByLabel("Buscar patología").fill("ARTROPATIA");
+    await expect(page.getByRole("button", { name: "HUESOS INVENTADOS", exact: true }),
+      "buscando por el nombre clínico no aparece su equivalente en llano")
+      .toBeVisible();
+
+    // 3. Y buscando tampoco se cuela una de veterinario.
+    await page.getByLabel("Buscar patología").fill("NEFROPATIA");
+    await expect(page.getByRole("button", { name: "NEFROPATIA INVENTADA", exact: true }),
+      "el buscador del dueño se salta el filtro de quién puede marcarla")
+      .toHaveCount(0);
   });
 
   test("y si el motor dice que no se puede formular, salta el muro",
@@ -175,6 +228,9 @@ test.describe("las patologías vienen del motor", () => {
     await esperarLaFicha(page);
     await page.getByRole("button", { name: "Editar alergias y patologías" }).click();
     await page.getByRole("button", { name: "Sí", exact: true }).last().click();
+    // La lista viene plegada por aparato desde el 13 de septiembre: hay que
+    // abrir el suyo para llegar a la casilla.
+    await page.getByRole("button", { name: /APARATO DOS DEL DUEÑO/ }).click();
     await page.getByRole("button", { name: "HUESOS INVENTADOS", exact: true }).click();
 
     await expect(page.getByText(/depende de analíticas que la app no puede ver/),

@@ -30,7 +30,12 @@ export default defineConfig({
   // todos los días sin que nadie mire por qué es peor que no tenerla --
   // enseña a ignorar el rojo, que es justo lo contrario de para lo que
   // está. Corre con `playwright.real.config.js`, que sí levanta la API.
-  testIgnore: /de-punta-a-punta\.spec\.js/,
+  // ⚠️ Y LA MATRIZ DE TODOS LOS PERROS TAMPOCO (13 septiembre, noche), por el
+  // mismo motivo y con el mismo coste: habla con la API DESPLEGADA. Se coló
+  // aquí el día que se escribió y puso la batería en rojo con 16 fallos que no
+  // eran de la app -- que es exactamente lo que este comentario avisaba de que
+  // pasaría. Corre con `playwright.real.config.js`, que es quien la levanta.
+  testIgnore: /(de-punta-a-punta|todos-los-perros-contra-el-motor-real)\.spec\.js/,
   // Un bug de orden de carga puede "colar" por suerte una vez. Con esto,
   // si el test pasa por casualidad en vez de por corrección, se nota.
   repeatEach: Number(process.env.REPETIR || 1),
