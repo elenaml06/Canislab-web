@@ -100,6 +100,38 @@ export function pedirAlimentos() {
 /** Para las pruebas: dejar la caché como estaba. */
 export function olvidarAlimentos() { _pedidoAlimentos = null }
 
+// ⚠️ Y LEER DEL MOTOR NO BASTA SI NADIE VUELVE A PINTAR (15 de septiembre de
+// 2026). Elena: «NO VEO EL PETS PUREST EN OMEGA 3 EN SUPLEMENTOS EN
+// PERSONALIZAR MENU!!!».
+//
+// Y el motor SÍ lo sirve -- comprobado contra la API desplegada:
+// `Suplementos comerciales / Omega-3 -> Pets Purest Aceite de Salmón Escocés`.
+// La app también lo pide. Lo que fallaba es lo de en medio: `CATEGORIAS_ALIMENTO`
+// es una variable de MÓDULO que se reasigna dentro del `.then` de esta promesa,
+// y eso NO es estado de React, así que **no vuelve a pintar nada**. Lo que se ve
+// es lo que hubiera en el momento de renderizar -- y con Render dormido (~30 s
+// en despertar) eso es SIEMPRE el respaldo, que no tiene ese aceite.
+//
+// Es la regla 6 en su forma más fina y la que menos se ve: la app no está
+// pintando su respaldo porque no pregunte, sino porque la respuesta llega
+// DESPUÉS de pintar. Las dos puntas que vigilan la regla 6 -- el BLOQUE 99 y
+// `la-ley-del-motor.spec.js` -- no pueden verlo: una comprueba que el motor
+// sirva la lista y la otra que esté declarada, y las dos son ciertas.
+//
+// El vocabulario no tenía este problema porque `useVocabulario` SÍ es estado.
+// Esto es su hermano para los alimentos: no devuelve nada, solo obliga a
+// repintar cuando la lista llega.
+export function useAlimentos() {
+  const [, setLlego] = useState(0)
+  useEffect(() => {
+    let vivo = true
+    // Las funciones de `_alLlegarAlimentos` se registraron antes que este
+    // `.then`, así que cuando esto corre `CATEGORIAS_ALIMENTO` ya está puesto.
+    pedirAlimentos().then(() => { if (vivo) setLlego((n) => n + 1) })
+    return () => { vivo = false }
+  }, [])
+}
+
 export function useVocabulario() {
   const [vocab, setVocab] = useState(null)
   useEffect(() => {
