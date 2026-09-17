@@ -349,6 +349,16 @@ export default function Formulador({
     //
     // Lo vigila `tests/formulador.spec.js`, comprobado con el fallo puesto.
     premios_nivel: perfil?.premiosNivel || null,
+    //   · `con_hidratos` — la respuesta del dueño a si su menú puede llevar
+    //     arroz, patata o avena. El motor la acepta en `/formular/*` desde el
+    //     17 de septiembre de 2026 y aquí no viajaba, que es el MISMO hueco que
+    //     acababa de cerrarse con la actividad y los premios: el motor sirve el
+    //     campo, la ficha lo guarda y el formulador lo tira. Y no es inofensivo
+    //     por ninguno de los dos lados — un «no quiero hidratos» ignorado le
+    //     mete arroz al paciente cuya patología los pida, y un «sí» ignorado
+    //     deja al veterinario formulando sin una herramienta que el dueño le ha
+    //     autorizado.
+    con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
     actividad: claveDeActividad(perfil),
     etapa_requisitos: etapaRequisitos,
     peso_perro_kg: pesoPerroKg ?? null,

@@ -5242,7 +5242,13 @@ function perfilDesdeSupabase(p) {
     // Igual que los premios: si la columna todavía no existe en Supabase vuelve
     // null, y la pantalla lo vuelve a preguntar. Mejor preguntar otra vez que
     // dar por contestado un «no» que el dueño no ha dicho.
-    conHidratos: p.con_hidratos ?? null,
+    // ⚠️ SE NORMALIZA A "si"/"no", NO SE GUARDA EL BOOLEANO (17 de septiembre de
+    // 2026). Supabase devuelve `true`/`false`/`null` y el resto de la app
+    // compara contra las cadenas "si" y "no" —el botón activo, lo que se manda
+    // al motor, el formulador—, así que dejar el booleano hacía que
+    // `true === "si"` fuera FALSO: un «sí quiero hidratos» del dueño se leía
+    // como «no». Lo cazó `tests/formulador.spec.js` con el caso `true`.
+    conHidratos: p.con_hidratos == null ? null : (p.con_hidratos ? "si" : "no"),
     esterilizado: p.castrado ? "si" : "no",
     // ⚠️ LOS CUATRO «SI/NO» SE LEEN NORMALIZADOS (11 de septiembre de 2026).
     //

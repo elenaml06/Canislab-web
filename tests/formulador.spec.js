@@ -563,6 +563,31 @@ test.describe("los datos de la ficha llegan desde el formulador", () => {
           .toEqual({ premios: nivel, actividad: claveEsperada });
       });
   }
+
+  // ⚠️ Y LA TERCERA, DEL 17 DE SEPTIEMBRE DE 2026, por el mismo hueco: el motor
+  // acepta `con_hidratos` en `/formular/*` y esta pantalla no lo mandaba. Las
+  // dos direcciones hacen daño y por eso se prueban las dos: un «no quiero
+  // hidratos» ignorado le mete arroz al paciente cuya patología los pida, y un
+  // «sí» ignorado deja al veterinario formulando sin una herramienta que el
+  // dueño le ha autorizado. ⚠️ Y el tercer estado importa: `null` es «no ha
+  // contestado» y NO es `false`.
+  for (const [guardado, esperado] of [[false, false], [true, true], [null, null]]) {
+    test(`con_hidratos «${guardado}» viaja a /formular`, async ({ page, request }) => {
+      await comoVeterinario(page, request, {
+        perros: [{ ...PERRO_DE_PRUEBA, con_hidratos: guardado }],
+      });
+      await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+      await expect.poll(async () => {
+        const { peticionesFormular } = await leer(request);
+        const u = peticionesFormular[peticionesFormular.length - 1];
+        return u === undefined ? "sin petición" : (u.con_hidratos ?? null);
+      }, { message: "la pantalla del veterinario formula sin la respuesta de los hidratos. Un " +
+                    "«no» ignorado le mete arroz al paciente cuya patología los pida, y un «sí» " +
+                    "ignorado le quita al veterinario una herramienta que el dueño autorizó" })
+        .toEqual(esperado);
+    });
+  }
 });
 
 // ─── LA SEMANA DEL PACIENTE, PROBADA EN LA APP ───────────────────────────────
