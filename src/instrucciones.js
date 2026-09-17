@@ -190,11 +190,44 @@ const COMO_DAR_ALIMENTO_RESPALDO = {
 // `como_se_da_por_categoria`, y el del alimento dentro de cada alimento, que es
 // donde no se puede desincronizar.
 export let INSTRUCCIONES_POR_CATEGORIA = INSTRUCCIONES_POR_CATEGORIA_RESPALDO;
+
+// ⚠️ Y LAS MISMAS EN COCINADO (17 de septiembre de 2026). No es un añadido:
+// era un agujero del modo cocinado. Con un menú hervido delante, esta pantalla
+// —la que se abre justo para saber cómo se prepara— decía «Cruda. En trozos, no
+// picada» sobre un muslo de pollo cocido, «Crudas» sobre un riñón cocido y
+// «Crudo SOLO si se ha congelado antes» sobre un salmón recién hervido.
+//
+// Solo hay texto para las CUATRO categorías animales, que son las únicas en las
+// que el modo cambia algo; el resto se sirve de la de crudo, que es lo correcto
+// — y el hueso carnoso no aparece porque en cocinado no existe.
+//
+// El respaldo va VACÍO a propósito y no es un descuido: si Render duerme, la
+// app cae al texto de crudo, que es el que ya tenía. Un respaldo escrito aquí
+// sería la copia a mano de un texto que el motor puede reescribir mañana, y por
+// eso no lleva sufijo `_RESPALDO`: no hay nada que respaldar.
+let INSTRUCCIONES_POR_CATEGORIA_COCINADO = {};
+
+/**
+ * Cómo se da esta categoría en ESTE menú. El modo es el del menú, no el del
+ * botón de la pantalla de generar: un menú cocinado mirado después de cambiar
+ * el botón a crudo se sigue preparando cocinado.
+ */
+export function comoSeDaLaCategoria(categoria, modoDePreparacion) {
+  if (String(modoDePreparacion || "").toLowerCase() === "cocinado") {
+    const coc = INSTRUCCIONES_POR_CATEGORIA_COCINADO[categoria];
+    if (coc) return coc;
+  }
+  return INSTRUCCIONES_POR_CATEGORIA[categoria];
+}
 export let COMO_DAR_ALIMENTO = COMO_DAR_ALIMENTO_RESPALDO;
 
 alLlegarAlimentos((datos) => {
   if (datos?.como_se_da_por_categoria && Object.keys(datos.como_se_da_por_categoria).length) {
     INSTRUCCIONES_POR_CATEGORIA = datos.como_se_da_por_categoria;
+  }
+  if (datos?.como_se_da_por_categoria_cocinado
+      && Object.keys(datos.como_se_da_por_categoria_cocinado).length) {
+    INSTRUCCIONES_POR_CATEGORIA_COCINADO = datos.como_se_da_por_categoria_cocinado;
   }
   const porAlimento = {};
   for (const p of datos?.pantallas || []) {

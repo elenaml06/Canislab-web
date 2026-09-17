@@ -8,7 +8,7 @@ import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesion
          getTokenDeSesion } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
-import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
+import { COMO_DAR_ALIMENTO, comoSeDaLaCategoria } from "./instrucciones";
 import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // ⚠️ Los datos NO se piden a Supabase directamente: pasan por el almacén,
 // que los manda a Supabase o al navegador según haya cuenta o no. Ver el
@@ -957,6 +957,54 @@ const HIDRATOS_RESPALDO = [
     detalle: "arroz, patata o avena, siempre cocidos" },
 ];
 const PREGUNTA_HIDRATOS_RESPALDO = "¿Quieres que su menú pueda llevar arroz, patata o avena?";
+
+// ─── CRUDO O COCINADO ──────────────────────────────────────────────
+//
+// ⚠️ LA PIDIÓ ELENA Y ES UNA DECISIÓN DE LO QUE SE VA A COCINAR, NO DE LO QUE
+// COME AHORA (17 de septiembre de 2026): «cuando va a seleccionar el número de
+// días y todo eso, también puedo seleccionar qué le quiere dar de comer, barf o
+// comida cocinada. Entonces si le quiere dar comida cocinada solo se tienen que
+// poder generar el menú con lo de la comida cocinada».
+//
+// ⚠️ Y HAY QUE NO CONFUNDIRLA CON «¿QUÉ COME AHORA MISMO?», que está en esta
+// MISMA pantalla, dos preguntas más arriba y con una respuesta que se llama
+// igual («Comida cocinada»). Aquella es de dónde VIENE el perro y solo decide si
+// hace falta plan de transición; ésta es lo que se le va a dar a partir de
+// ahora, y decide el CATÁLOGO entero: en cocinado el hueso carnoso no es
+// candidato — cocido astilla — y las fichas animales son las cocidas.
+//
+// Los textos y la lista de modos los sirve el motor (`modo_de_preparacion` de
+// `GET /vocabulario`), regla 6. El respaldo es para cuando Render duerme.
+const MODOS_DE_PREPARACION_RESPALDO = [
+  { clave: "crudo", label: "Cruda (BARF)",
+    detalle: "carne, hueso carnoso y víscera crudos" },
+  { clave: "cocinado", label: "Cocinada",
+    detalle: "la carne y el pescado hervidos o al vapor, sin sal; sin hueso, porque cocido se astilla" },
+];
+
+function opcionesDeModoDePreparacion(vocab, registro) {
+  const servidos = vocab?.modo_de_preparacion?.modos;
+  if (!Array.isArray(servidos) || servidos.length === 0) return MODOS_DE_PREPARACION_RESPALDO;
+  return servidos
+    .filter((m) => m?.clave)
+    .map((m) => ({
+      clave: m.clave,
+      label: m?.[registro]?.titulo ?? m.clave,
+      detalle: m?.[registro]?.ejemplo ?? m?.[registro]?.detalle ?? "",
+    }));
+}
+
+// El modo por omisión lo dice el motor y no se escribe aquí: el día que cambie,
+// una copia en la app dejaría a la app generando crudo mientras el motor cree
+// que está cocinando.
+function modoDePreparacionPorOmision(vocab) {
+  return vocab?.modo_de_preparacion?.por_omision || "crudo";
+}
+
+function avisoDeModoCocinado(vocab) {
+  return vocab?.modo_de_preparacion?.ojo || "";
+}
+
 
 function opcionesDeHidratos(vocab, modo) {
   const servidos = vocab?.hidratos?.estados;
@@ -2056,6 +2104,13 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // compatible). El menú cumple los 30 requisitos igual, pero no se
       // parece a los demás -- sin explicación, parece un error.
       avisoComposicion: data.aviso_composicion || null,
+      // ⚠️ CON QUÉ MODO SE HIZO ESTE MENÚ. El servidor lo devuelve en cada
+      // respuesta y hace falta guardarlo: editar o revalidar un menú cocinado
+      // tiene que volver a pedirlo COCINADO, no con lo que diga el botón de la
+      // pantalla de generar, que para entonces puede estar en otra cosa. Un
+      // menú cocinado reeditado en crudo se llevaría hueso carnoso — y cocido
+      // astilla. `|| "crudo"` para los menús hechos antes de que esto existiera.
+      modoPreparacion: data.modo_de_preparacion || "crudo",
     };
   });
 }
@@ -2661,6 +2716,13 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   const [avisoComposicionPorMenu, setAvisoComposicionPorMenu] = useState({});
 
   const menu = menus.find((m) => m.id === tabActiva);
+  // ⚠️ EL MODO ES EL DEL MENÚ QUE SE ESTÁ MIRANDO. Decide el texto de «cómo
+  // darlo»: con el de crudo, un menú hervido dice «Cruda. En trozos, no picada»
+  // sobre un muslo de pollo cocido y «Crudo SOLO si se ha congelado antes» sobre
+  // un salmón que se acaba de cocer — justo en la pantalla que se abre para
+  // saber cómo se prepara.
+  const modoDelMenu = menu?.modoPreparacion || "crudo";
+  const comoSeDa = (categoria) => comoSeDaLaCategoria(categoria, modoDelMenu);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
   const viendoBloqueado = necesitaTransicion && idxActiva > 0;
   const gramosReales = gramosRealesPorMenu[tabActiva];
@@ -2800,6 +2862,13 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
           con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+          // ⚠️ EL MODO ES EL DEL MENÚ QUE SE ESTÁ EDITANDO, NO EL DEL BOTÓN.
+          // Lo dice el propio motor: «uno generado crudo y editado en cocinado
+          // metería hueso crudo en un plato que se va a cocer». El servidor lo
+          // devuelve con cada menú y aquí se le devuelve tal cual, así que
+          // cambiar un alimento de un menú cocinado ofrece fichas cocidas
+          // aunque quien lo mira haya tocado el botón de crudo entretanto.
+          modo_de_preparacion: menu?.modoPreparacion || "crudo",
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
           nombres_excluidos: Array.from(alimentosEvitados || []),
@@ -3346,7 +3415,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           {(() => {
             const porCategoria = [];
             for (const item of itemsMostrados) {
-              if (!INSTRUCCIONES_POR_CATEGORIA[item.categoria]) continue;
+              if (!comoSeDa(item.categoria)) continue;
               let grupo = porCategoria.find((g) => g.categoria === item.categoria);
               if (!grupo) { grupo = { categoria: item.categoria, items: [] }; porCategoria.push(grupo); }
               grupo.items.push(item);
@@ -3366,7 +3435,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                           {grupo.categoria}
                         </p>
                         <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-                          {INSTRUCCIONES_POR_CATEGORIA[grupo.categoria]}
+                          {comoSeDa(grupo.categoria)}
                         </p>
                       </div>
                     </div>
@@ -3966,7 +4035,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                       }}>
                       <Trash2 size={15} style={{ color: alimentoAQuitar === item.alimento ? ROSA : "#C9BEDD" }} />
                     </button>
-                    {INSTRUCCIONES_POR_CATEGORIA[item.categoria] && (
+                    {comoSeDa(item.categoria) && (
                       <button
                         aria-label={`Cómo preparar ${item.alimento}`}
                         onClick={() => { setComoAbierto(comoAbierto === i ? null : i); setPorqueAbierto(null); setEditorAbierto(null); }}>
@@ -4061,7 +4130,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <div className="flex gap-2 items-start">
                       <UtensilsCrossed size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
-                      <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{INSTRUCCIONES_POR_CATEGORIA[item.categoria]}</p>
+                      <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{comoSeDa(item.categoria)}</p>
                     </div>
                     {COMO_DAR_ALIMENTO[item.alimento] && (
                       <div className="mt-2.5 p-2.5 rounded-xl" style={{ background: PAPEL }}>
@@ -5376,7 +5445,7 @@ function datosDeUnPerro(perfil) {
  * manda el generador de un solo perro -- por eso se construye aquí una
  * vez y no en cada sitio que lo necesita.
  */
-function cuerpoApiDeUnPerro(perfil) {
+function cuerpoApiDeUnPerro(perfil, modoDePreparacion = "crudo") {
   const d = datosDeUnPerro(perfil);
   return {
     modo: "automatico",
@@ -5386,7 +5455,11 @@ function cuerpoApiDeUnPerro(perfil) {
     der_objetivo: d.derReal,
     actividad: claveDeActividad(perfil),
     premios_nivel: perfil?.premiosNivel || null,
-          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+    con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+    // El modo lo elige la pantalla y es el MISMO para toda la casa: en una
+    // cocina no se hierve para uno y se da crudo al otro — y si alguna vez
+    // hiciera falta por perro, el parámetro ya viaja por perro.
+    modo_de_preparacion: modoDePreparacion || "crudo",
     etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
     especies_excluidas: Array.from(d.especiesExcluidas),
     evitar_especies: [],
@@ -5869,6 +5942,24 @@ function RawkuOnboardingInterna({
   // (pienso o comida cocinada -> BARF no se hace de golpe). Un perro que
   // venía de pienso perdía ese dato y con él el aviso de transición.
   const [dietaActual, setDietaActual] = useState(perroInicial?.dieta_actual ?? null);
+
+  // ⚠️ CRUDO O COCINADO: ESTADO DE ESTA GENERACIÓN, NO CAMPO DE LA FICHA (17 de
+  // septiembre de 2026). Y es una decisión, no un descuido.
+  //
+  // El motor dice que el modo viaja CON el menú — «uno generado crudo y editado
+  // en cocinado metería hueso crudo en un plato que se va a cocer» —, así que la
+  // verdad de un menú ya hecho es la que el servidor devolvió con ÉL, y editarlo
+  // manda ESA (`menu.modoPreparacion`), nunca lo que diga este botón ahora.
+  // Guardarlo además en la ficha creaba un segundo sitio donde vive lo mismo, y
+  // el día que la ficha dijera «cocinado» con un menú crudo guardado al lado no
+  // habría nada que avisara: el menú sale verde igual. Es la duplicación del DER
+  // otra vez, y aquí todavía se puede no hacer.
+  //
+  // Arranca en lo que diga el motor (`por_omision`), no en un "crudo" escrito
+  // aquí: ver `modoDePreparacionPorOmision`.
+  const [modoPreparacion, setModoPreparacion] = useState(null);
+  const modoPreparacionElegido = modoPreparacion ?? modoDePreparacionPorOmision(vocab);
+
   const [modo, setModo] = useState(null);
   const [pantalla, setPantalla] = useState("elegir");
 
@@ -8099,7 +8190,7 @@ function RawkuOnboardingInterna({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           perros: fichas.map((f) => ({
-            ...cuerpoApiDeUnPerro(f.perfil),
+            ...cuerpoApiDeUnPerro(f.perfil, modoPreparacionElegido),
             ...(elegidos.length > 0
               ? { modo: "personalizar", forzar_presencia: elegidos,
                   nombres_alimentos: elegidos, restringir_especie: especiePorCategoria }
@@ -8485,7 +8576,11 @@ function RawkuOnboardingInterna({
       der_objetivo: derReal,                       // el DER de AHORA
       actividad: claveDeActividad(perfil),
       premios_nivel: perfil?.premiosNivel || null,
-          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+      con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+      // Igual que al editar: el menú guardado trae el suyo. Revalidar uno
+      // cocinado con el botón en crudo lo reharía con hueso.
+      modo_de_preparacion: menuParaRevisar?.modo_de_preparacion
+        || menuParaRevisar?.contexto?.modo_de_preparacion || "crudo",
       etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
@@ -8649,6 +8744,7 @@ function RawkuOnboardingInterna({
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
           con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+          modo_de_preparacion: modoPreparacionElegido,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
           // (para dar variedad entre varios menús automáticos) se
@@ -8747,7 +8843,8 @@ function RawkuOnboardingInterna({
             der_objetivo: derReal,
             actividad: claveDeActividad(perfil),
             premios_nivel: perfil?.premiosNivel || null,
-          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+            con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+            modo_de_preparacion: modoPreparacionElegido,
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
             especies_excluidas: Array.from(especiesExcluidas),
             evitar_especies: [],
@@ -12124,6 +12221,62 @@ function RawkuOnboardingInterna({
               </div>
             );
           })()}
+
+          {/* ─── CRUDO O COCINADO ────────────────────────────────────
+              ⚠️ VA AQUÍ, entre «¿qué come ahora?» y los dos modos, porque es la
+              pregunta que decide el CATÁLOGO con el que se va a montar el menú
+              y tiene que estar contestada antes de entrar en Automático o en
+              Personalizar — en Personalizar se eligen alimentos A MANO, y la
+              lista que se ofrece depende de esto.
+
+              ⚠️ Y LLEVA SU PROPIO TÍTULO DICIENDO «A PARTIR DE AHORA», porque dos
+              preguntas más arriba hay una respuesta que se llama IGUAL: «Comida
+              cocinada» como respuesta a «¿qué come ahora mismo?». Aquella es de
+              dónde viene el perro y solo decide el plan de transición; ésta es
+              lo que se le va a dar. Sin decirlo, las dos se leen como la misma.
+
+              El texto y los modos los sirve el motor (regla 6). */}
+          <p className="text-[11px] tracking-[0.14em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+            Y a partir de ahora
+          </p>
+          <p className="text-sm mb-3" style={{ color: TINTA, fontFamily: fontBody }}>
+            ¿Qué le quieres dar{paraQuien !== "solo" && listaDePerros.length > 1 ? "" : ` a ${nombreMostrar}`}?
+          </p>
+          <div className="flex flex-col gap-2 mb-2">
+            {opcionesDeModoDePreparacion(vocab, "dueno").map((op) => {
+              const activo = modoPreparacionElegido === op.clave;
+              return (
+                <button
+                  key={op.clave}
+                  onClick={() => setModoPreparacion(op.clave)}
+                  className="text-left rounded-xl p-4"
+                  style={{ background: activo ? "#F3EDFB" : "#FFFFFF",
+                           border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
+                >
+                  <p className="text-sm" style={{ color: TINTA, fontFamily: fontBody, fontWeight: activo ? 700 : 600 }}>
+                    {op.label}
+                  </p>
+                  {op.detalle && (
+                    <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                      {op.detalle}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {/* El «ojo» del motor: los gramos de un menú cocinado son de comida YA
+              cocinada. Va aquí y no solo con el menú hecho porque quien decide
+              cocinar tiene que saber antes cómo se pesa lo que va a cocinar. */}
+          {modoPreparacionElegido === "cocinado" && avisoDeModoCocinado(vocab) && (
+            <div className="rounded-xl p-3 mb-6 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
+              <Info size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                {String(avisoDeModoCocinado(vocab)).replace(/^\u26a0\ufe0f\s*/, "")}
+              </p>
+            </div>
+          )}
+          {modoPreparacionElegido !== "cocinado" && <div className="mb-6" />}
 
           <div className="flex flex-col gap-3 mb-6">
             {MODOS.map((m) => {
