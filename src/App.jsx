@@ -939,6 +939,43 @@ function preguntaDePremios(vocab, modo) {
   return vocab?.premios?.pregunta?.[modo] || PREGUNTA_PREMIOS_RESPALDO[modo];
 }
 
+// ─── LA PREGUNTA DE LOS HIDRATOS ─────────────────────────────────────────────
+//
+// ⚠️ TRES ESTADOS Y NO DOS, y el tercero es el que importa (17 de septiembre de
+// 2026). «No he contestado» NO es «no quiero»: sin contestar, el motor no
+// propone hidratos salvo que la patología los pida; con un «no», no entran ni
+// aunque la patología los pida. Con dos estados, un perro con pancreatitis se
+// quedaría sin la ración que le conviene por una respuesta que nadie dio.
+//
+// El texto y los estados los sirve el motor (`hidratos` de `GET /vocabulario`),
+// no se escriben aquí: la clave que viaja es un booleano y el registro que se
+// pinta es `dueno` o `veterinario`.
+const HIDRATOS_RESPALDO = [
+  { clave: "no", label: "No, sin arroz ni patata",
+    detalle: "ni aunque su enfermedad los pida — si eso deja el plato peor, te lo decimos" },
+  { clave: "si", label: "Sí, puede llevarlos",
+    detalle: "arroz, patata o avena, siempre cocidos" },
+];
+const PREGUNTA_HIDRATOS_RESPALDO = "¿Quieres que su menú pueda llevar arroz, patata o avena?";
+
+function opcionesDeHidratos(vocab, modo) {
+  const servidos = vocab?.hidratos?.estados;
+  if (!Array.isArray(servidos) || servidos.length === 0) return HIDRATOS_RESPALDO;
+  // El estado «sin contestar» (valor null) no se pinta: es la ausencia de
+  // respuesta, no una respuesta que se pueda pulsar.
+  return servidos
+    .filter((e) => e?.valor === true || e?.valor === false)
+    .map((e) => ({
+      clave: e.valor ? "si" : "no",
+      label: e?.[modo]?.titulo ?? (e.valor ? "Sí" : "No"),
+      detalle: e?.[modo]?.ejemplo ?? e?.[modo]?.detalle ?? "",
+    }));
+}
+
+function avisoDeHidratos(vocab) {
+  return vocab?.hidratos?.ojo || "";
+}
+
 // ⚠️ `ACTIVIDAD_API` y `claveDeActividad` VIVEN EN `vocabulario.js` DESDE EL 11
 // DE SEPTIEMBRE, y no es un traslado por orden: `formulador.jsx` -- la pantalla
 // del veterinario -- las necesita y no puede importar de aquí sin hacer un
@@ -2762,6 +2799,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           der_objetivo: menu.kcal,
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
+          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
           nombres_excluidos: Array.from(alimentosEvitados || []),
@@ -5201,6 +5239,10 @@ function perfilDesdeSupabase(p) {
     // vuelve como null y la pantalla vuelve a preguntarlo -- que es lo correcto:
     // mejor preguntar otra vez que dar por hecho que no le da ninguno.
     premiosNivel: p.premios_nivel ?? null,
+    // Igual que los premios: si la columna todavía no existe en Supabase vuelve
+    // null, y la pantalla lo vuelve a preguntar. Mejor preguntar otra vez que
+    // dar por contestado un «no» que el dueño no ha dicho.
+    conHidratos: p.con_hidratos ?? null,
     esterilizado: p.castrado ? "si" : "no",
     // ⚠️ LOS CUATRO «SI/NO» SE LEEN NORMALIZADOS (11 de septiembre de 2026).
     //
@@ -5338,6 +5380,7 @@ function cuerpoApiDeUnPerro(perfil) {
     der_objetivo: d.derReal,
     actividad: claveDeActividad(perfil),
     premios_nivel: perfil?.premiosNivel || null,
+          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
     etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
     especies_excluidas: Array.from(d.especiesExcluidas),
     evitar_especies: [],
@@ -5698,6 +5741,14 @@ function RawkuOnboardingInterna({
       // un «no le doy premios» que no ha dicho. Con null, la pantalla no deja
       // continuar hasta que elige.
       premiosNivel: null,
+      // ⚠️ null Y NO "no" (17 de septiembre de 2026). La pregunta de los
+      // hidratos tiene TRES estados en el motor y el tercero es «no ha
+      // contestado», que NO es lo mismo que «no quiero»: sin contestar, el
+      // motor no los propone salvo que la patología los pida; con un «no», no
+      // entran ni aunque la patología los pida. Poner "no" por defecto sería
+      // contestar por el dueño una pregunta que puede dejar sin la mejor
+      // ración a un perro con pancreatitis.
+      conHidratos: null,
       esterilizado: null,
       alergiaSi: null,
       alergias: [],
@@ -8428,6 +8479,7 @@ function RawkuOnboardingInterna({
       der_objetivo: derReal,                       // el DER de AHORA
       actividad: claveDeActividad(perfil),
       premios_nivel: perfil?.premiosNivel || null,
+          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
       etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
@@ -8590,6 +8642,7 @@ function RawkuOnboardingInterna({
           der_objetivo: derReal,
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
+          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
           // (para dar variedad entre varios menús automáticos) se
@@ -8688,6 +8741,7 @@ function RawkuOnboardingInterna({
             der_objetivo: derReal,
             actividad: claveDeActividad(perfil),
             premios_nivel: perfil?.premiosNivel || null,
+          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
             especies_excluidas: Array.from(especiesExcluidas),
             evitar_especies: [],
@@ -10246,6 +10300,50 @@ function RawkuOnboardingInterna({
                   );
                 })}
               </div>
+            )}
+          </div>
+
+          {/* ⚠️ LA PREGUNTA DE LOS HIDRATOS (17 de septiembre de 2026). La pidió
+              Elena: «también tendría que haber una pregunta de si quieres que tu
+              menú, ya sea barf o comida cocinada, lleve hidratos o no».
+
+              Va aquí, pegada a la del hueso, porque las dos son la misma clase
+              de pregunta —qué lleva el plato— y una pantalla más es un paso más
+              que abandonar. El texto y las respuestas los sirve el motor.
+
+              ⚠️ Y NO LLEVA `SiNoToggle` a propósito: son TRES estados y el
+              tercero es «no ha contestado», que no es «no quiero». Un toggle de
+              dos obligaría a que uno de los dos fuera el valor por defecto, y
+              ese es justo el fallo que se quería evitar: con un «no» puesto por
+              omisión, un perro con pancreatitis se queda sin la ración que le
+              conviene y nadie se entera. Se puede seguir sin contestar. */}
+          <div className="mt-7">
+            <Etiqueta>
+              {vocab?.hidratos?.pregunta_dueno || PREGUNTA_HIDRATOS_RESPALDO}
+            </Etiqueta>
+            <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
+              Una ración cruda no los lleva y no le hacen falta a un perro sano. Si tiene algo que
+              le obligue a comer más ligero, los ponemos aunque no contestes.
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              {opcionesDeHidratos(vocab, "dueno").map((op) => {
+                const activo = perfil.conHidratos === op.clave;
+                return (
+                  <button key={op.clave}
+                    onClick={() => set("conHidratos", activo ? null : op.clave)}
+                    className="text-left px-4 py-3 rounded-2xl transition-all"
+                    style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
+                    <span className="block" style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{op.label}</span>
+                    <span className="block text-xs mt-0.5" style={{ color: activo ? "#F3E9FB" : MALVA, fontFamily: fontBody }}>{op.detalle}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {perfil.conHidratos === "si" && (
+              <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                ⚠️ Van siempre cocidos, nunca crudos, y los gramos del menú son de producto ya
+                cocido: pésalos después de cocinarlos, no antes.
+              </p>
             )}
           </div>
 

@@ -86,6 +86,7 @@ const FICHA_COMPLETA = {
   // es el extremo, y es el que cambia más la ración -- un 20 % de las kcal del
   // día formuladas con el día entero de nutrientes.
   premios_nivel: "mas_del_maximo",
+  con_hidratos: false,
 };
 
 // Qué tiene que volver EXACTAMENTE igual, y por qué importa. El porqué no es
@@ -113,6 +114,7 @@ const CAMPOS = [
   ["patologia_si",            "cambia los límites de seguridad"],
   ["patologias",              "cambia los límites de seguridad"],
   ["premios_nivel",           "lo que come fuera de la ración diluye la ración: el motor la formula con las kcal que quedan y le exige igual el día entero de nutrientes"],
+  ["con_hidratos",            "es una respuesta de TRES estados: null es «no ha contestado» y false es «no quiero, ni aunque su enfermedad los pida». Si se pierde al guardar, el segundo se vuelve el primero y el motor le mete arroz"],
 ];
 
 test.describe("la ficha del perro sobrevive a guardar y volver", () => {
