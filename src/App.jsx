@@ -657,6 +657,21 @@ const CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO = [
   { key: "Verduras y frutas", label: "Verduras y frutas" },
 ];let CATEGORIAS_QUE_PUEDE_EXCLUIR = CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO;
 
+// ⚠️ LO QUE PUEDE QUITAR EL DUEÑO ES OTRA LISTA, Y ES UNA SOLA (17 de septiembre
+// de 2026). La de arriba es la del FORMULADOR del veterinario, que las ofrece
+// todas. Al dueño se le pregunta «qué NO PUEDE comer», y de las siete
+// categorías del motor solo el hueso contesta eso: quitar la carne es una dieta
+// de eliminación (la firma un veterinario), quitar los hidratos ya lo pregunta
+// la pregunta de los hidratos, y quitar vísceras o pescado no es «no puede
+// comer» sino «no quiero comprarlo», que es otra pregunta.
+//
+// Estaba escrita A MANO dentro del JSX, un array de un elemento, y por eso está
+// aquí: si la clave no coincide EXACTAMENTE con la del catálogo, la exclusión
+// no hace nada y el menú sale verde igual, sin error y sin aviso.
+const CATEGORIAS_QUE_QUITA_EL_DUENO_RESPALDO = [{ key: "Hueso carnoso", label: "Hueso carnoso (huesos crudos)" }];
+let CATEGORIAS_QUE_QUITA_EL_DUENO = CATEGORIAS_QUE_QUITA_EL_DUENO_RESPALDO;
+let PREGUNTA_QUITAR_CATEGORIA = null;
+
 // ⚠️ RESPALDO: el peso del perro de muestra de cada tamaño lo sirve el motor en
 // `tamanos.tamanos[].peso_kg_del_menu_de_muestra`, que es el mismo con el que
 // genera los menús precalculados de la vista previa. Tenerlo escrito aquí era
@@ -669,6 +684,11 @@ alLlegarVocabulario((v) => {
   if (Array.isArray(cats) && cats.length) {
     CATEGORIAS_QUE_PUEDE_EXCLUIR = cats.map((c) => ({ key: c, label: c }));
   }
+  const delDueno = v?.categorias_que_excluye_el_dueno;
+  if (Array.isArray(delDueno?.categorias) && delDueno.categorias.length) {
+    CATEGORIAS_QUE_QUITA_EL_DUENO = delDueno.categorias.map((c) => ({ key: c, label: c }));
+  }
+  if (delDueno?.pregunta) PREGUNTA_QUITAR_CATEGORIA = delDueno;
   const tam = v?.tamanos?.tamanos;
   if (Array.isArray(tam) && tam.length) {
     const m = {};
@@ -1014,6 +1034,18 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     "Ternera": ["Lomo de ternera con grasa", "Lengua de ternera", "Ternera con grasa", "Ternera solomillo sin grasa"],
     "Buey": ["Lengua de buey"],
     "Vaca": ["Corazón de vaca"],
+  },
+  // ⚠️ LOS HIDRATOS (17 de septiembre de 2026). Categoría nueva del motor:
+  // cinco fichas que se dan COCIDAS y se PESAN COCIDAS. En BARF no entran solas
+  // -- solo si la patología las pide o si el dueño contesta que sí a la
+  // pregunta de los hidratos -- pero en Personalizar se pueden elegir a mano,
+  // que es la regla 5 de su CLAUDE.md, y por eso tienen que estar en el
+  // respaldo: sin ellas, con Render dormido la pantalla no las ofrece.
+  "Cereales y tubérculos": {
+    "Arroz": ["Arroz blanco cocido", "Arroz integral cocido"],
+    "Avena": ["Copos de avena cocidos"],
+    "Patata": ["Patata cocida"],
+    "Quinoa": ["Quinoa cocida"],
   },
   "Pescados y mariscos": {
     // ⚠️ CORREGIDO (5 agosto, noche): Calamar/Gamba/Langostino(s)/
@@ -10153,18 +10185,50 @@ function RawkuOnboardingInterna({
           </div>
 
           <div className="mt-7">
-            <Etiqueta>¿Hay alguna categoría entera que no pueda comer?</Etiqueta>
+            {/* ⚠️ LA PREGUNTA ES DEL HUESO, NO DE «UNA CATEGORÍA ENTERA» (17 de
+                septiembre de 2026). Elena: «mira a ver tú qué sentido tiene que
+                un usuario pueda quitar otras categorías. Si no tiene sentido
+                entonces sería cambiar la pregunta y poner directamente si quiere
+                excluir el hueso».
+
+                De las siete categorías del motor solo el hueso contesta a «qué
+                NO PUEDE comer»: quitar la carne es una dieta de eliminación (la
+                firma un veterinario, y la tiene en SU pantalla), quitar los
+                hidratos ya lo pregunta la pregunta de los hidratos, y quitar
+                vísceras o pescado no es «no puede comer» sino «no quiero
+                comprarlo», que es otra pregunta.
+
+                ⚠️ La LISTA y el TEXTO vienen del motor
+                (`categorias_que_excluye_el_dueno`), no de aquí: si la clave no
+                coincide EXACTAMENTE con la del catálogo, la exclusión no hace
+                nada y el menú sale verde igual, sin error y sin aviso. Y si el
+                motor llegara a ofrecer más de una, los botones vuelven solos. */}
+            <Etiqueta>
+              {PREGUNTA_QUITAR_CATEGORIA?.pregunta?.dueno?.titulo
+                || "¿Hay que quitarle el hueso crudo del menú?"}
+            </Etiqueta>
             <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
-              Por ejemplo, si es senior o tiene los dientes en mal estado y no puede masticar huesos —
-              el calcio que aportaría se cubre con suplemento en su lugar.
+              {PREGUNTA_QUITAR_CATEGORIA?.pregunta?.dueno?.ejemplo
+                || "dinos que sí si es mayor, le faltan dientes o traga sin masticar"}
+              {" — "}
+              {PREGUNTA_QUITAR_CATEGORIA?.que_pasa_al_quitarlo
+                || "el calcio que aportaría se cubre con cáscara de huevo o con un suplemento."}
             </p>
             <SiNoToggle
               valor={perfil.categoriasExcluidasSi}
-              onChange={(v) => { set("categoriasExcluidasSi", v); if (v === "no") set("categoriasExcluidas", []); }}
+              onChange={(v) => {
+                set("categoriasExcluidasSi", v);
+                // Con UNA sola categoría, «sí» ya es la respuesta entera: pedirle
+                // además que pulse el único botón que hay es un paso que no
+                // decide nada, y se puede dejar a medias sin que nada avise.
+                if (v === "no") set("categoriasExcluidas", []);
+                else if (CATEGORIAS_QUE_QUITA_EL_DUENO.length === 1)
+                  set("categoriasExcluidas", [CATEGORIAS_QUE_QUITA_EL_DUENO[0].key]);
+              }}
             />
-            {perfil.categoriasExcluidasSi === "si" && (
+            {perfil.categoriasExcluidasSi === "si" && CATEGORIAS_QUE_QUITA_EL_DUENO.length > 1 && (
               <div className="flex flex-col gap-2 mt-3">
-                {[{ key: "Hueso carnoso", label: "Hueso carnoso (huesos crudos)" }].map((c) => {
+                {CATEGORIAS_QUE_QUITA_EL_DUENO.map((c) => {
                   const activo = perfil.categoriasExcluidas.includes(c.key);
                   return (
                     <button
