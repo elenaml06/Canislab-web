@@ -115,8 +115,28 @@ test.describe("de punta a punta contra la API de verdad", () => {
     const enPantalla = await page.getByText(/kcal \/ día/i).first()
       .locator("xpath=..").innerText();
     const numero = Number((enPantalla.match(/[\d.]+/g) || []).join("").replace(/\./g, ""));
-    expect(numero, `la pantalla dice ${numero} kcal y el motor recibió ${ida.cuerpo.der_objetivo}`)
-      .toBeCloseTo(Math.round(ida.cuerpo.der_objetivo), -1);
+    // ⚠️ CON LA TOLERANCIA DEL MOTOR, NO CON 5 kcal (16 de septiembre de 2026).
+    //
+    // Esa casilla enseña `menu.kcal` -- las kcal REALES del menú -- y no el DER.
+    // Y el solver tiene permitido moverse un 3 % (`tolerancia_kcal`), así que
+    // pedir que los dos números coincidan en menos de 5 kcal es pedirle al menú
+    // una propiedad que no tiene por qué cumplir. Pasaba por suerte: en tres
+    // ejecuciones seguidas salieron 1201, 1211 y 1217 para un DER de 1211, o
+    // sea ±0,5 %, dentro de lo permitido y fuera de las 5 kcal.
+    //
+    // Es la familia que el repo del motor ya tiene documentada cuatro veces:
+    // una prueba que da por hecha una propiedad INCIDENTAL del menú que
+    // devuelve el solver. Lo que esta comprobación quiere afirmar sigue intacto
+    // --que la pantalla y el motor hablan del mismo perro, que es el fallo del
+    // DER duplicado-- y para eso el margen que vale es el del motor: un menú
+    // para otro perro se iría mucho más del 3 %.
+    const TOLERANCIA_KCAL_DEL_MOTOR = 0.03;
+    const der = ida.cuerpo.der_objetivo;
+    expect(Math.abs(numero - der) / der,
+      `la pantalla dice ${numero} kcal y el motor recibió ${der}: se salen del ` +
+      `${TOLERANCIA_KCAL_DEL_MOTOR * 100} % que el solver tiene permitido, así que no ` +
+      `están hablando del mismo perro`)
+      .toBeLessThanOrEqual(TOLERANCIA_KCAL_DEL_MOTOR);
   });
 
   test("quitar un alimento rehace el menú en el motor de verdad", async ({ page }) => {

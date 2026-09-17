@@ -183,8 +183,28 @@ async function entrarYGenerar(page, request, ficha) {
   return { ok: true };
 }
 
+// ⚠️ LOS PREMIOS POR ENCIMA DE LO QUE RECOMIENDA LA FUENTE SON OTRA COSA, Y NO
+// UNA EXCEPCIÓN (16 de septiembre de 2026). Con el 20 % del día en premios y
+// SIN DECIR CUÁLES SON, el motor ya no da menú: contesta que hace falta saber
+// QUÉ se le da, y eso es una decisión de producto de Elena, no un fallo:
+//
+//     «¿pero para qué pones ese mensaje? si tiene que haber una parte en la que
+//      elija lo que le da y se meta en el plato»
+//
+// Lo que salía antes era el peldaño que pone el techo de lo accesorio en el
+// 100 % del plato, o sea los 484 g de alcachofa que ella rechazó.
+//
+// Así que para este perro la prueba cambia de pregunta, y exige LAS DOS
+// MITADES, que es lo que hace que no sea una excusa:
+//   1. que se le diga que la causa son los premios (no el mensaje genérico)
+//   2. que DECLARANDO uno, el menú salga de verdad
+// Si el motor dejara de dar menú al declararlo, la salida que se le ofrece al
+// dueño no existiría, y eso es peor que no ofrecerla.
+const PREMIOS_SIN_DECIR_QUE_SON = "Cairo más del máximo";
+
 test.describe("todos los tipos de perro obtienen menú, con el motor de verdad", () => {
   for (const perro of PERROS) {
+    if (perro[0] === PREMIOS_SIN_DECIR_QUE_SON) continue;
     test(`dueño · ${perro[0]}`, async ({ page, request }) => {
       test.setTimeout(RELOJ_POR_MENU + 60_000);
       const r = await entrarYGenerar(page, request, fichaDe(perro));
@@ -195,6 +215,51 @@ test.describe("todos los tipos de perro obtienen menú, con el motor de verdad",
         .toBe(true);
     });
   }
+
+  test(`dueño · ${PREMIOS_SIN_DECIR_QUE_SON}: se le pide decir QUÉ le da, y declararlo funciona`,
+       async ({ page, request }) => {
+    test.setTimeout(RELOJ_POR_MENU + 60_000);
+    const perro = PERROS.find((p) => p[0] === PREMIOS_SIN_DECIR_QUE_SON);
+    const r = await entrarYGenerar(page, request, fichaDe(perro));
+
+    // 1. No hay menú, y el motivo habla de los premios -- no del mensaje
+    //    genérico de «quita alguna restricción», que aquí es mentira: el dueño
+    //    puede quitar todas las alergias y seguirá sin salir.
+    expect(r.ok, `con el 20 % del día en premios SIN declarar, este cachorro sale con menú. ` +
+      `Si el motor vuelve a dárselo, mira QUÉ plato es: antes era 484 g de alcachofa`).toBe(false);
+    expect(r.motivo || "",
+      `no hay menú y no se dice que la causa son los premios. El mensaje genérico aquí ` +
+      `es mentira, y además no le da nada que hacer`).toMatch(/premios/i);
+    expect(r.motivo || "",
+      `no se le ofrece DECIR qué le da, que es la salida que existe y la que no le ` +
+      `cuesta nada`).toMatch(/qué le das|que le das/i);
+
+    // 2. Y la salida funciona: preguntándole al motor con el premio declarado,
+    //    el menú sale y lleva DENTRO los gramos que se han dicho.
+    const cuerpo = {
+      modo: "automatico", nombres_alimentos: [], forzar_presencia: [],
+      der_objetivo: 1581.0, actividad: "normal",
+      etapa_requisitos: "CachorroCrecimiento", especies_excluidas: [],
+      nombres_excluidos: [], peso_perro_kg: 20.0, patologias: [],
+      categorias_excluidas: [], peso_adulto_esperado_kg: 31.0, tamano: "Mediano",
+      premios_nivel: "mas_del_maximo",
+      premios_declarados: { "Corazón de pollo": 214.0 },
+    };
+    const res = await request.post(`${API_REAL_PAT}/menu/v2`, { data: cuerpo, timeout: 120_000 });
+    const j = await res.json();
+    expect(j.factible,
+      `se le dice al dueño que declare el premio y, declarándolo, TAMPOCO sale menú. ` +
+      `Entonces la salida que se le ofrece no existe: ${JSON.stringify(j.motivo || "").slice(0, 300)}`)
+      .toBe(true);
+    expect(j.menu?.["Corazón de pollo"],
+      `el menú sale pero NO lleva los 214 g declarados. Un premio declarado son gramos ` +
+      `FIJOS: si el motor los mueve, lo que se le enseña al dueño no es lo que come`)
+      .toBe(214.0);
+    expect(j.premios_dentro_del_menu?.["Corazón de pollo"],
+      `el premio está dentro del menú y no se marca como tal, así que el dueño lee ` +
+      `214 g de corazón en la lista y entiende que se los tiene que dar ADEMÁS`)
+      .toBe(214.0);
+  });
 
   // ─── LAS QUE PUEDE MARCAR EL DUEÑO ÉL SOLO ────────────────────────────────
   //
