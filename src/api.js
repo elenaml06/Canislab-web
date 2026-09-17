@@ -47,12 +47,27 @@ export const TIEMPO_MAXIMO_PETICION_MS = Number(import.meta.env?.VITE_TIMEOUT_AP
 // de que exista `/menu/semana`. Así que lo que se ajusta es la espera.
 export function tiempoParaVariosMenus(cuantos) {
   const n = Math.max(1, Number(cuantos) || 1);
-  // Si alguien ha puesto un tope a mano (las pruebas), se respeta y no se sube.
-  if (Number(import.meta.env?.VITE_TIMEOUT_API_MS)) return TIEMPO_MAXIMO_PETICION_MS;
-  // 25 s de arranque en frío + 18 s por menú, con techo. Con 7 son 151 s, que
-  // es el doble de lo medido: el margen es a propósito, porque Render va más
-  // lento cuanto más dormido está.
-  return Math.min(180000, 25000 + 18000 * n);
+  // UNA SOLA REGLA: lo que se espera por UNA petición, más 18 s por cada menú
+  // de más. Con el tope de siempre (45 s) y siete menús son 153 s.
+  //
+  // ⚠️ Y NO HAY EXCEPCIÓN PARA LAS PRUEBAS, QUE ES LO QUE ESTABA MAL (16 de
+  // septiembre de 2026). Aquí había un `if (VITE_TIMEOUT_API_MS) return
+  // TIEMPO_MAXIMO_PETICION_MS`, puesto para que un tope a mano no se subiera —
+  // y `playwright.real.config.js` pone ese tope a 45 s A PROPÓSITO, para no
+  // darse más margen que el producto. Juntas, las dos cosas le daban a la
+  // semana 45 s donde el producto le da 151: o sea que la prueba se daba MENOS
+  // margen que el producto, que es el mismo error del 12 de septiembre con el
+  // signo cambiado.
+  //
+  // CASO REAL: `dueño · Cairo más del máximo` salía rojo con la app colgada en
+  // «Despertando el servidor...» —que es lo que se ve cuando la petición se
+  // aborta— mientras el motor contestaba bien en 44 s. Una prueba que corta
+  // antes que el producto acusa al motor de algo que al usuario no le pasa.
+  //
+  // Con la regla unificada el tope a mano sigue mandando sobre la BASE (una
+  // petición nunca espera más de lo que diga), y la semana escala igual en la
+  // prueba y en producción.
+  return Math.min(180000, TIEMPO_MAXIMO_PETICION_MS + 18000 * (n - 1));
 }
 
 // fetch con límite de tiempo. Si el servidor no contesta, aborta y lanza un
