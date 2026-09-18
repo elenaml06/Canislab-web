@@ -221,11 +221,18 @@ test.describe("ningún camino se queda sin el modo", () => {
   });
 
   // Y el respaldo tiene que seguir usando las claves que entiende el motor.
+  //
+  // ⚠️ VIVE EN `vocabulario.js` DESDE EL 18 DE SEPTIEMBRE DE 2026, no en
+  // App.jsx: se mudó cuando el formulador del veterinario tuvo que elegir modo
+  // también, y esa pantalla no puede importar de App.jsx sin hacer un ciclo. Es
+  // la misma mudanza que ya hicieron `claveDeActividad` y los premios, y por el
+  // mismo motivo — las dos veces anteriores el veterinario acabó formulando sin
+  // un dato que la ficha SÍ tenía.
   test("las dos claves del respaldo son las que entiende el motor", () => {
-    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
-    const i = app.indexOf("const MODOS_DE_PREPARACION_RESPALDO = [");
-    expect(i, "App.jsx ya no tiene MODOS_DE_PREPARACION_RESPALDO. Si se ha renombrado hay que " +
-              "actualizar esta prueba, no borrarla").toBeGreaterThan(-1);
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/vocabulario.js"), "utf-8");
+    const i = app.indexOf("MODOS_DE_PREPARACION_RESPALDO = [");
+    expect(i, "`vocabulario.js` ya no tiene MODOS_DE_PREPARACION_RESPALDO. Si se ha renombrado o " +
+              "se ha vuelto a mudar hay que actualizar esta prueba, no borrarla").toBeGreaterThan(-1);
     const bloque = app.slice(i, app.indexOf("];", i));
     for (const clave of ["crudo", "cocinado"]) {
       expect(bloque,

@@ -272,3 +272,84 @@ alLlegarVocabulario((v) => {
     }
   }
 })
+
+// ─── CRUDO O COCINADO ──────────────────────────────────────────────
+//
+// ⚠️ LA PIDIÓ ELENA Y ES UNA DECISIÓN DE LO QUE SE VA A COCINAR, NO DE LO QUE
+// COME AHORA (17 de septiembre de 2026): «cuando va a seleccionar el número de
+// días y todo eso, también puedo seleccionar qué le quiere dar de comer, barf o
+// comida cocinada. Entonces si le quiere dar comida cocinada solo se tienen que
+// poder generar el menú con lo de la comida cocinada».
+//
+// ⚠️ Y HAY QUE NO CONFUNDIRLA CON «¿QUÉ COME AHORA MISMO?», que está en esta
+// MISMA pantalla, dos preguntas más arriba y con una respuesta que se llama
+// igual («Comida cocinada»). Aquella es de dónde VIENE el perro y solo decide si
+// hace falta plan de transición; ésta es lo que se le va a dar a partir de
+// ahora, y decide el CATÁLOGO entero: en cocinado el hueso carnoso no es
+// candidato — cocido astilla — y las fichas animales son las cocidas.
+//
+// Los textos y la lista de modos los sirve el motor (`modo_de_preparacion` de
+// `GET /vocabulario`), regla 6. El respaldo es para cuando Render duerme.
+export const MODOS_DE_PREPARACION_RESPALDO = [
+  { clave: "crudo", label: "Cruda (BARF)",
+    detalle: "carne, hueso carnoso y víscera crudos" },
+  { clave: "cocinado", label: "Cocinada",
+    detalle: "la carne y el pescado hervidos o al vapor, sin sal; sin hueso, porque cocido se astilla" },
+];
+
+export function opcionesDeModoDePreparacion(vocab, registro) {
+  const servidos = vocab?.modo_de_preparacion?.modos;
+  if (!Array.isArray(servidos) || servidos.length === 0) return MODOS_DE_PREPARACION_RESPALDO;
+  return servidos
+    .filter((m) => m?.clave)
+    .map((m) => ({
+      clave: m.clave,
+      label: m?.[registro]?.titulo ?? m.clave,
+      detalle: m?.[registro]?.ejemplo ?? m?.[registro]?.detalle ?? "",
+    }));
+}
+
+// ⚠️ EL CALENDARIO DE LA TRANSICIÓN, del motor. Su respaldo es el mismo que
+// estaba escrito aquí a mano, y se queda SOLO para cuando Render duerme: los
+// cuatro tramos son la Tabla 1-1 de SACN5 y viven en `transicion.py`.
+const TRAMOS_TRANSICION_RESPALDO = [
+  { dias: 0, hasta: 3, nuevo_pct: 25, anterior_pct: 75 },
+  { dias: 3, hasta: 6, nuevo_pct: 50, anterior_pct: 50 },
+  { dias: 6, hasta: 9, nuevo_pct: 75, anterior_pct: 25 },
+  { dias: 9, hasta: null, nuevo_pct: 100, anterior_pct: 0 },
+];
+
+function tramosDeTransicion(vocab) {
+  const servidos = vocab?.transicion?.tramos;
+  const tramos = Array.isArray(servidos) && servidos.length ? servidos : TRAMOS_TRANSICION_RESPALDO;
+  return tramos.map((t) => ({
+    ...t,
+    // «Días 1-3», «Día 10 en adelante». Los días del motor cuentan desde 0.
+    etiqueta: t.hasta == null
+      ? `Día ${t.dias + 1} en adelante`
+      : `Días ${t.dias + 1}-${t.hasta}`,
+  }));
+}
+
+function ojoDeLaTransicion(vocab) {
+  return vocab?.transicion?.dueno?.ojo
+    || "Dáselo en tomas separadas, no mezclado en el mismo plato — se digieren a ritmos distintos.";
+}
+
+// Cómo se llama esta forma de dar de comer, para escribirla en una frase. Sale
+// de la MISMA lista que pinta el selector, así que no hay dos nombres.
+export function nombreDelModo(vocab, clave) {
+  const op = opcionesDeModoDePreparacion(vocab, "dueno").find((m) => m.clave === clave);
+  return op?.label || (clave === "cocinado" ? "cocinada" : "BARF");
+}
+
+// El modo por omisión lo dice el motor y no se escribe aquí: el día que cambie,
+// una copia en la app dejaría a la app generando crudo mientras el motor cree
+// que está cocinando.
+export function modoDePreparacionPorOmision(vocab) {
+  return vocab?.modo_de_preparacion?.por_omision || "crudo";
+}
+
+export function avisoDeModoCocinado(vocab) {
+  return vocab?.modo_de_preparacion?.ojo || "";
+}

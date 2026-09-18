@@ -26,7 +26,8 @@ import { API_BASE, fetchConTimeout } from "./api.js";
 // La clave de actividad que entiende el motor. Vive en `vocabulario.js` y no en
 // `App.jsx` porque esta pantalla la necesita y no puede importar de allí sin
 // hacer un ciclo -- que es justo por lo que este formulador no la mandaba.
-import { claveDeActividad, useVocabulario } from "./vocabulario.js";
+import { claveDeActividad, useVocabulario, opcionesDeModoDePreparacion,
+         modoDePreparacionPorOmision, avisoDeModoCocinado } from "./vocabulario.js";
 import { agruparNutrientes, resumenDeLaFicha, nombreLegible } from "./nutrientes.js";
 import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
 
@@ -169,6 +170,12 @@ export default function Formulador({
   onImprimir = null,
 }) {
   const [gramos, setGramos] = useState(() => ({ ...(gramosIniciales || {}) }));
+  // ⚠️ Arranca en null y NO en «crudo»: el modo por omisión lo dice el motor.
+  // Escribirlo aquí dejaría al formulador formulando crudo el día que el motor
+  // cambiara de omisión, y sin dar ningún error.
+  const [modoElegido, setModoElegido] = useState(null);
+  const vocabDelModo = useVocabulario();
+  const modoDePreparacion = modoElegido ?? modoDePreparacionPorOmision(vocabDelModo);
   const [catalogo, setCatalogo] = useState(null);
   const [buscando, setBuscando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
@@ -359,6 +366,19 @@ export default function Formulador({
     //     deja al veterinario formulando sin una herramienta que el dueño le ha
     //     autorizado.
     con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+    //   · `modo_de_preparacion` — CRUDA o COCINADA. Es el MISMO hueco por
+    //     tercera vez, y el más caro de los tres: el motor lo acepta en
+    //     `/formular/*` y aquí no viajaba, así que un veterinario solo podía
+    //     formular en crudo y NADA se lo decía. Elena lo pidió para los dos
+    //     desde el primer día: «el usuario tiene que poder elegir, O EL
+    //     VETERINARIO, si quiere hacer menú barf o cocinado».
+    //
+    //     Y no es una etiqueta: decide el CATÁLOGO. En cocinado el hueso
+    //     carnoso no es candidato —cocido astilla— y las fichas animales son
+    //     las cocidas, cuya composición y cuyos GRAMOS son de comida ya
+    //     cocinada. Formular en crudo una ración que el paciente va a comer
+    //     hervida es firmar unos gramos que no son los que se van a pesar.
+    modo_de_preparacion: modoDePreparacion,
     actividad: claveDeActividad(perfil),
     etapa_requisitos: etapaRequisitos,
     peso_perro_kg: pesoPerroKg ?? null,
@@ -388,7 +408,7 @@ export default function Formulador({
       : undefined,
   }), [perfil, derObjetivo, etapaRequisitos, pesoPerroKg, pesoAdultoEsperadoKg, pesoObjetivoKg,
       patologias, especiesExcluidas, nombresExcluidos, categoriasExcluidas, peldano,
-      fueraDeLaPrueba, objetivos, diasDeEstaRacion, racionesDeLaSemana]);
+      fueraDeLaPrueba, objetivos, diasDeEstaRacion, racionesDeLaSemana, modoDePreparacion]);
 
   // El catálogo, una vez. Es la misma lista que usa el analizador.
   useEffect(() => {
@@ -1026,6 +1046,60 @@ export default function Formulador({
               <Plus size={15} /> Añadir alimento
             </button>
           )}
+
+          {/* ─── CRUDA O COCINADA ─────────────────────────────────────────
+              ⚠️ ELENA LO PIDIÓ PARA LOS DOS DESDE EL PRIMER DÍA: «el usuario
+              tiene que poder elegir, O EL VETERINARIO, si quiere hacer menú
+              barf o cocinado». Hasta hoy el motor lo aceptaba en `/formular/*`
+              y esta pantalla no lo mandaba, así que un veterinario solo podía
+              formular en CRUDO y nada se lo decía — el mismo hueco que ya
+              tuvieron los premios, la actividad y los hidratos.
+
+              Y no es una etiqueta: decide el CATÁLOGO. En cocinado el hueso
+              carnoso no es candidato, las fichas animales son las cocidas, y
+              sus GRAMOS son de comida ya cocinada. Firmar una ración en crudo
+              que el paciente va a comer hervida es firmar unos gramos que no
+              son los que se van a pesar.
+
+              Se pinta el registro del VETERINARIO, no el del dueño. */}
+          <div className="mt-3 rounded-xl" style={{ background: PAPEL, border: "1px solid #E3DAF0" }}>
+            <div className="px-3 py-2.5">
+              <span className="block text-[10px] tracking-[0.1em] uppercase"
+                    style={{ color: MALVA, fontFamily: "monospace" }}>
+                Preparación
+              </span>
+              <div className="flex gap-2 mt-1.5">
+                {opcionesDeModoDePreparacion(vocabDelModo, "veterinario").map((op) => {
+                  const activo = modoDePreparacion === op.clave;
+                  return (
+                    <button key={op.clave} onClick={() => setModoElegido(op.clave)}
+                      className="flex-1 text-left rounded-lg px-2.5 py-2"
+                      style={{ background: activo ? "#F3EDFB" : "#FFFFFF",
+                               border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
+                      <span className="block" style={{ color: TINTA, fontFamily: fontBody,
+                                                       fontSize: 13, fontWeight: activo ? 700 : 600 }}>
+                        {op.label}
+                      </span>
+                      {op.detalle && (
+                        <span className="block text-[11px] leading-snug mt-0.5"
+                              style={{ color: MALVA, fontFamily: fontBody }}>
+                          {op.detalle}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* El «ojo» del motor: en cocinado los gramos que se firman son de
+                  comida YA COCINADA. Quien firma tiene que saberlo ANTES de
+                  escribir un gramo, no al final. */}
+              {modoDePreparacion === "cocinado" && avisoDeModoCocinado(vocabDelModo) && (
+                <p className="text-[11px] leading-snug mt-2" style={{ color: TINTA, fontFamily: fontBody }}>
+                  {String(avisoDeModoCocinado(vocabDelModo)).replace(/^\u26a0\ufe0f\s*/, "")}
+                </p>
+              )}
+            </div>
+          </div>
 
           {/* ─── LA SEMANA DE ESTE PACIENTE ───────────────────────────────
               ⚠️ NO ES UN CONTADOR BONITO: es lo que hace que el presupuesto
