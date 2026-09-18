@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, ChevronDown, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ChevronUp, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, ChevronDown, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import Formulador from "./formulador.jsx";
@@ -9,6 +9,7 @@ import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesion
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { COMO_DAR_ALIMENTO, comoSeDaLaCategoria } from "./instrucciones";
+import { documentacionDelModo, deQueEsRico } from "./documentacion";
 import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // ⚠️ Los datos NO se piden a Supabase directamente: pasan por el almacén,
 // que los manda a Supabase o al navegador según haya cuenta o no. Ver el
@@ -4171,6 +4172,37 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                         )}
                       </div>
                     )}
+                    {/* ⚠️ PARA QUÉ ES BUENO ESTE ALIMENTO (18 de septiembre de
+                        2026). Elena: «esto es la hostia para el pelo, esto es
+                        la hostia para el hígado». Lo DERIVA el motor del
+                        catálogo vivo y llega con la frase ya hecha: si la app
+                        tradujera «epa_dha» a «para las articulaciones» sería la
+                        regla 6 rota, y el día que se cambie la frase habría que
+                        cambiarla en dos sitios.
+
+                        Y no sale en todos los alimentos a propósito: de 232,
+                        113 no destacan en nada. Poner algo en todos sería no
+                        informar de nada. */}
+                    {deQueEsRico(item.alimento).length > 0 && (
+                      <div className="mt-2.5 p-2.5 rounded-xl" style={{ background: "#F3EDFB" }}>
+                        <p className="text-[10px] tracking-[0.1em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          Por qué está en el menú
+                        </p>
+                        <ul className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                          {/* Se lee al revés que el dato: primero PARA QUÉ
+                              sirve, que es lo que le interesa a quien lo lee, y
+                              luego por qué lo decimos. El nombre llano del
+                              nutriente lo manda el motor: traducirlo aquí sería
+                              tener la misma frase en dos sitios. */}
+                          {deQueEsRico(item.alimento).map((r) => (
+                            <li key={r.nutriente} className="mb-0.5">
+                              · <strong>{r.dueno.charAt(0).toUpperCase() + r.dueno.slice(1)}</strong>
+                              {" "}— es de los alimentos con más {r.nombre || r.nutriente} del catálogo.
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -5958,6 +5990,8 @@ function RawkuOnboardingInterna({
   // Arranca en lo que diga el motor (`por_omision`), no en un "crudo" escrito
   // aquí: ver `modoDePreparacionPorOmision`.
   const [modoPreparacion, setModoPreparacion] = useState(null);
+  // Plegado por omisión: quien ya sabe lo que quiere no tiene que leer nada.
+  const [queEsAbierto, setQueEsAbierto] = useState(false);
   const modoPreparacionElegido = modoPreparacion ?? modoDePreparacionPorOmision(vocab);
 
   const [modo, setModo] = useState(null);
@@ -12276,7 +12310,71 @@ function RawkuOnboardingInterna({
               </p>
             </div>
           )}
-          {modoPreparacionElegido !== "cocinado" && <div className="mb-6" />}
+          {modoPreparacionElegido !== "cocinado" && <div className="mb-2" />}
+
+          {/* ─── QUÉ ES CADA UNA ───────────────────────────────────────────
+              ⚠️ POR QUÉ ESTÁ AQUÍ (18 de septiembre de 2026). Elena:
+              «deberíamos tener una parte en la aplicación que sea información
+              sobre los beneficios del BARF y qué es el BARF, los beneficios de
+              la comida cocinada y qué es la comida cocinada».
+
+              Va PLEGADO y justo debajo de la pregunta, no en una pantalla
+              aparte: quien ya sabe lo que quiere no tiene que leer nada, y
+              quien duda lo tiene donde le surge la duda y no en un menú de
+              ayuda que nadie abre.
+
+              ⚠️ Y ENSEÑA LAS DOS MITADES. `por_que` son las ventajas y
+              `a_tener_en_cuenta` es lo que hay que saber, y los dos modos
+              tienen las dos: contar solo las ventajas de una forma de dar de
+              comer es publicidad, no información. El texto lo escribe el motor
+              (regla 6) — aquí no hay ni una frase. */}
+          {(() => {
+            const doc = documentacionDelModo(modoPreparacionElegido);
+            if (!doc) return null;
+            return (
+              <div className="mb-6">
+                <button
+                  onClick={() => setQueEsAbierto((v) => !v)}
+                  className="flex items-center gap-1.5 text-xs"
+                  style={{ color: VIOLETA, fontFamily: fontBody }}
+                >
+                  <Info size={13} /> {doc.titulo || "Qué es esto"}
+                  {queEsAbierto ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+                {queEsAbierto && (
+                  <div className="mt-2 rounded-xl p-3" style={{ background: PAPEL }}>
+                    <p className="text-xs mb-3" style={{ color: TINTA, fontFamily: fontBody }}>
+                      {doc.que_es}
+                    </p>
+                    {(doc.por_que || []).length > 0 && (
+                      <>
+                        <p className="text-[10px] tracking-[0.1em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          Por qué
+                        </p>
+                        {(doc.por_que || []).map((x) => (
+                          <p key={x.titulo} className="text-xs mb-1.5" style={{ color: TINTA, fontFamily: fontBody }}>
+                            <strong>{x.titulo}.</strong> {x.texto}
+                          </p>
+                        ))}
+                      </>
+                    )}
+                    {(doc.a_tener_en_cuenta || []).length > 0 && (
+                      <>
+                        <p className="text-[10px] tracking-[0.1em] uppercase mt-3 mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          Y esto hay que saberlo
+                        </p>
+                        {(doc.a_tener_en_cuenta || []).map((x) => (
+                          <p key={x.titulo} className="text-xs mb-1.5" style={{ color: TINTA, fontFamily: fontBody }}>
+                            <strong>{x.titulo}.</strong> {x.texto}
+                          </p>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="flex flex-col gap-3 mb-6">
             {MODOS.map((m) => {
