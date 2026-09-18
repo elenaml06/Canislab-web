@@ -243,3 +243,84 @@ test.describe("ningún camino se queda sin el modo", () => {
     }
   });
 });
+
+// ─── AL EDITAR NO SE OFRECE COMIDA DEL OTRO MODO ─────────────────────────────
+//
+// POR QUÉ EXISTE (18 de septiembre de 2026)
+//
+// Elena: «cuando generas un menú en automático o en personalizar y cambias algo
+// y se rehace el menú, solo va a usar ingredientes de ese tipo de menú».
+//
+// ⚠️ Y LO PRIMERO QUE HAY QUE SABER ES QUE EL MOTOR YA LO CUMPLÍA. Medido antes
+// de tocar nada: los cuatro caminos de edición —cambiar, quitar, añadir y
+// revalidar— en los dos modos, CERO intrusos. Lo que el motor rellena por su
+// cuenta al rehacer el menú siempre fue del modo correcto, y eso lo vigila el
+// BLOQUE 128 del motor.
+//
+// Lo que faltaba era ESTA punta: el selector de «cambiar a» ofrecía el CATÁLOGO
+// ENTERO, porque `filtrarCategoriasPorEspecies` solo mira las especies
+// excluidas. En un menú cocinado te ofrecía la versión CRUDA de un alimento al
+// lado de la cocida, y elegirla metía comida cruda en un plato que se va a
+// cocer.
+//
+// ⚠️ NO ES UNA PROHIBICIÓN: el motor sigue respetando lo que se pide por su
+// nombre (regla 5). Lo que cambia es que ya no se ofrece por accidente.
+//
+// ⚠️ Y EL FILTRO NO PUEDE DEDUCIRSE DEL NOMBRE. «Las que acaban en cocido»
+// fallaría con el Boniato y con la clara de huevo, que se dan cocidos y no se
+// llaman así. Lo dice el motor, en `modos` de cada alimento, con la misma
+// función que usa el solver — así que aquí se siembra un alimento cuyo nombre
+// NO delata su modo, que es lo único que distingue «lee lo que sirve el motor»
+// de «mira cómo se llama».
+const CRUDO_SOLO = "Ganchufla del prado";        // solo vale en crudo, y no lo dice su nombre
+const COCIDO_SOLO = "Ganchufla del puchero";     // solo vale en cocinado, tampoco
+const LOS_DOS = "Ganchufla de siempre";          // vale en los dos
+
+function catalogoConModos() {
+  const fila = (nombre, modos) => ({ nombre, kcal_100g: 120, especie: "Ganchufla", modos });
+  return {
+    pantallas: [
+      // ⚠️ El árbol de la app se indexa por `clave`, no por `titulo`: es lo que
+      // se pinta como categoría en el editor. Se le pone una distintiva para
+      // que no case con nada del respaldo.
+      { clave: "Carne de ganchufla", titulo: "Carne de ganchufla", segundo_nivel: "especie",
+        grupos: { Ganchufla: [fila(CRUDO_SOLO, ["crudo"]), fila(COCIDO_SOLO, ["cocinado"]),
+                              fila(LOS_DOS, ["crudo", "cocinado"])] } },
+    ],
+  };
+}
+
+test.describe("al editar solo se ofrece comida del modo del menú", () => {
+  for (const [modo, tituloDelModo, seOfrece, noSeOfrece] of [
+    ["cocinado", COCINADO_TITULO, COCIDO_SOLO, CRUDO_SOLO],
+    ["crudo", CRUDO_TITULO, CRUDO_SOLO, COCIDO_SOLO],
+  ]) {
+    test(`en un menú ${modo} no aparece la comida del otro modo`, async ({ page, request }) => {
+      await configurarBackend(request, {
+        retrasoPerrosMs: 50, perros: [PERRO], menus: [], premium: true,
+        vocabulario: vocabularioConModos("crudo"), catalogo: catalogoConModos(),
+      });
+      await entrar(page);
+      await page.getByText(tituloDelModo).click();
+      await page.getByRole("button", { name: /^Automático/ }).click();
+      await page.getByRole("button", { name: /^(Generar|Hacer)/ }).click();
+      await expect(page.getByText(/Semana de/)).toBeVisible({ timeout: 30000 });
+
+      // Se abre el editor del primer alimento y se entra en su categoría. El
+      // botón se llama «Cambiar <alimento>», que es su `aria-label`.
+      await page.getByRole("button", { name: /^Cambiar / }).first().click();
+      await page.getByRole("button", { name: "Carne de ganchufla", exact: true }).first().click();
+      await page.getByRole("button", { name: /^Ganchufla/ }).first().click();
+
+      await expect(page.getByRole("button", { name: seOfrece }),
+        `«${seOfrece}» vale en «${modo}» y no se ofrece: el filtro se ha pasado de estricto y ` +
+        `deja al usuario sin alternativas que sí valen`).toBeVisible();
+      await expect(page.getByRole("button", { name: noSeOfrece }),
+        `«${noSeOfrece}» NO vale en «${modo}» y se está ofreciendo. Elegirlo mete comida del ` +
+        `otro modo en el plato — y su nombre no delata cuál es, que es justo el caso que la ` +
+        `app no puede resolver sola`).toHaveCount(0);
+      await expect(page.getByRole("button", { name: LOS_DOS }),
+        `«${LOS_DOS}» vale en los dos modos y no se ofrece`).toBeVisible();
+    });
+  }
+});

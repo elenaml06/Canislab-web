@@ -1308,10 +1308,60 @@ let CATEGORIAS_ALIMENTO = arbolOrdenado(CATEGORIAS_ALIMENTO_RESPALDO);
 
 // En cuanto conteste el motor, esta es la lista. Antes de eso, el respaldo.
 pedirAlimentos();
+// ⚠️ EN QUÉ MODOS VALE CADA ALIMENTO, del motor (18 de septiembre de 2026). Lo
+// pidió Elena: «cuando generas un menú y cambias algo y se rehace, solo va a
+// usar ingredientes de ese tipo de menú».
+//
+// Medido antes de tocar nada: el AUTOMÁTICO de la edición ya lo cumplía —
+// cambiar, quitar, añadir y revalidar, en los dos modos, cero intrusos. Lo que
+// faltaba era ESTA punta: el selector de «cambiar a» ofrecía el CATÁLOGO
+// ENTERO, porque `filtrarCategoriasPorEspecies` solo mira las especies
+// excluidas. En un menú cocinado te ofrecía «Pavo pechuga con piel» crudo al
+// lado de su versión cocida, y elegirlo metía comida cruda en un plato que se
+// va a cocer.
+//
+// ⚠️ NO SE DEDUCE DEL NOMBRE. «Las que acaban en cocido» fallaría con el
+// Boniato y con la clara de huevo, que se dan cocidos y no se llaman así. Lo
+// dice el motor, con la misma función que usa el solver.
+let MODOS_DE_CADA_ALIMENTO = {};
+
 alLlegarAlimentos((datos) => {
   const arbol = alimentosDelMotor(datos);
   if (arbol) CATEGORIAS_ALIMENTO = arbolOrdenado(arbol);
+  const modos = {};
+  for (const p of datos?.pantallas || []) {
+    for (const lista of Object.values(p.grupos || {})) {
+      for (const a of lista) {
+        if (Array.isArray(a.modos) && a.modos.length) modos[a.nombre] = a.modos;
+      }
+    }
+  }
+  if (Object.keys(modos).length) MODOS_DE_CADA_ALIMENTO = modos;
 });
+
+/**
+ * El árbol de alimentos, dejando solo los que valen en ESTE modo.
+ *
+ * Sin modo, o sin haber recibido nada del motor, no se filtra: el lado del que
+ * no se pierde comida. Un alimento del que no sabemos nada se ofrece, que es lo
+ * que hacía la app hasta hoy.
+ */
+function filtrarCategoriasPorModo(categoriasAlimento, modo) {
+  if (!modo || Object.keys(MODOS_DE_CADA_ALIMENTO).length === 0) return categoriasAlimento;
+  const resultado = {};
+  for (const [categoria, especies] of Object.entries(categoriasAlimento)) {
+    const dentro = {};
+    for (const [especie, alimentos] of Object.entries(especies)) {
+      const quedan = alimentos.filter((n) => {
+        const m = MODOS_DE_CADA_ALIMENTO[n];
+        return !m || m.includes(modo);
+      });
+      if (quedan.length) dentro[especie] = quedan;
+    }
+    if (Object.keys(dentro).length) resultado[categoria] = dentro;
+  }
+  return resultado;
+}
 
 // El árbol que manda el motor -> la forma que pinta la app.
 // `pantallas[].grupos` ya viene con el segundo nivel resuelto: la especie en
@@ -2688,6 +2738,13 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // un salmón que se acaba de cocer — justo en la pantalla que se abre para
   // saber cómo se prepara.
   const modoDelMenu = menu?.modoPreparacion || "crudo";
+  // ⚠️ EL ÁRBOL QUE SE OFRECE AL EDITAR ES EL DEL MODO DE **ESTE** MENÚ, no el
+  // del botón de la pantalla de generar: un menú cocinado mirado después de
+  // cambiar el botón a crudo se sigue editando en cocinado. Es la misma regla
+  // que ya siguen las instrucciones de «cómo darlo» y la petición al motor.
+  const catsDelModo = useMemo(
+    () => filtrarCategoriasPorModo(categoriasDisponibles || CATEGORIAS_ALIMENTO, modoDelMenu),
+    [categoriasDisponibles, modoDelMenu]);
   const comoSeDa = (categoria) => comoSeDaLaCategoria(categoria, modoDelMenu);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
   const viendoBloqueado = necesitaTransicion && idxActiva > 0;
@@ -4072,7 +4129,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>CAMBIAR A QUÉ CATEGORÍA</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                      {Object.keys(categoriasDisponibles || CATEGORIAS_ALIMENTO).map((cat) => (
+                      {Object.keys(catsDelModo).map((cat) => (
                         <button key={cat} onClick={() => setEditorAbierto({ ...editorAbierto, categoria: cat })}
                           className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
                           {cat}
@@ -4086,7 +4143,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{editorAbierto.categoria.toUpperCase()}</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                       <ListaDeEspecies
-                        porEspecie={(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]}
+                        porEspecie={catsDelModo[editorAbierto.categoria]}
                         onElegir={(alimento) => cambiarAlimento(editorAbierto.alimentoViejo, alimento)}
                         onAbrir={(especie) => setEditorAbierto({ ...editorAbierto, especie })}
                         fondo={PAPEL}
@@ -4105,13 +4162,13 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                           única opción (ahí es redundante). Con más de una,
                           hace falta para poder decir "cualquiera de estos
                           cortes vale" en vez de fijar uno exacto. */}
-                      {(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][editorAbierto.especie].length > 1 && (
+                      {catsDelModo[editorAbierto.categoria][editorAbierto.especie].length > 1 && (
                         <button onClick={() => cambiarAlimento(editorAbierto.alimentoViejo, `Todo: ${editorAbierto.especie}`)}
                           className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}>
                           Todo el/la {editorAbierto.especie}
                         </button>
                       )}
-                      {(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][editorAbierto.especie].map((alimento) => (
+                      {catsDelModo[editorAbierto.categoria][editorAbierto.especie].map((alimento) => (
                         <button key={alimento} onClick={() => cambiarAlimento(editorAbierto.alimentoViejo, alimento)}
                           className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
                           {alimento}
@@ -4967,7 +5024,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               .map((it, idxReal) => ({ ...it, idxReal }))
               .filter((it) => it.categoria === cat.nombre);
             const abierto = abiertoAnalizar && abiertoAnalizar.categoria === cat.nombre ? abiertoAnalizar : null;
-            const catsParaEsta = { [cat.nombre]: (categoriasDisponibles || CATEGORIAS_ALIMENTO)[cat.nombre] };
+            const catsParaEsta = { [cat.nombre]: catsDelModo[cat.nombre] };
             return (
               <div key={cat.nombre} className="rounded-2xl p-4 mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
                 <div className="flex items-center gap-3 mb-1">

@@ -671,6 +671,14 @@ export function crearFakeSupabase(opciones = {}) {
 
     if (ruta === "/menu/v2") {
       estado.peticionesMenu.push(JSON.parse(cuerpo || "{}"));
+      // ⚠️ EL MODO VUELVE EN LA RESPUESTA, COMO EN EL MOTOR DE VERDAD (18 de
+      // septiembre de 2026). El de verdad escribe SIEMPRE
+      // `resultado["modo_de_preparacion"]`, y éste no lo devolvía nunca — o
+      // sea que era MENOS fiel que la API real justo en el campo que decide
+      // con qué catálogo se edita después. Con él ausente, la app lee «crudo»
+      // pase lo que pase, y una prueba del modo cocinado comprueba el crudo
+      // creyendo que comprueba otra cosa.
+      const _modo = String(JSON.parse(cuerpo || "{}").modo_de_preparacion || "crudo");
       // ⚠️ AÑADIDO (12 septiembre) — poder sembrar una respuesta de «no hay
       // menú» ENTERA, con sus `choque_de_patologias` y sus
       // `se_intento_relajando`. Hasta hoy el falso solo sabía dar menús o
@@ -689,6 +697,7 @@ export function crearFakeSupabase(opciones = {}) {
         return responder(200, {
           ...MENU_FALSO,
           menu: { ...MENU_FALSO.menu, [`Marcador de prueba ${cual}`]: 100 },
+          modo_de_preparacion: _modo,
           aviso_composicion: estado.avisoComposicion,
         });
       }
@@ -713,10 +722,12 @@ export function crearFakeSupabase(opciones = {}) {
             `PREMIOS: este menú está calculado contando ${Math.round(_der * _frac)} kcal al día ` +
             `fuera de su ración (${Math.round(_frac * 100)} % de lo que come).`,
           ],
+          modo_de_preparacion: _modo,
           aviso_composicion: estado.avisoComposicion,
         });
       }
       return responder(200, { ...MENU_FALSO, kcal_total: _der || undefined,
+                              modo_de_preparacion: _modo,
                               aviso_composicion: estado.avisoComposicion });
     }
     // Los tres caminos de edición devuelven el menú en "gramos", no en
