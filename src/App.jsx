@@ -9,7 +9,7 @@ import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesion
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
 import { COMO_DAR_ALIMENTO, comoSeDaLaCategoria } from "./instrucciones";
-import { documentacionDelModo, deQueEsRico } from "./documentacion";
+import { documentacionDelModo, deQueEsRico, crudoQueHaceFalta, sePesaCocido, comoSePreparaElPlato } from "./documentacion";
 import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // ⚠️ Los datos NO se piden a Supabase directamente: pasan por el almacén,
 // que los manda a Supabase o al navegador según haya cuenta o no. Ver el
@@ -993,6 +993,40 @@ function opcionesDeModoDePreparacion(vocab, registro) {
       label: m?.[registro]?.titulo ?? m.clave,
       detalle: m?.[registro]?.ejemplo ?? m?.[registro]?.detalle ?? "",
     }));
+}
+
+// ⚠️ EL CALENDARIO DE LA TRANSICIÓN, del motor. Su respaldo es el mismo que
+// estaba escrito aquí a mano, y se queda SOLO para cuando Render duerme: los
+// cuatro tramos son la Tabla 1-1 de SACN5 y viven en `transicion.py`.
+const TRAMOS_TRANSICION_RESPALDO = [
+  { dias: 0, hasta: 3, nuevo_pct: 25, anterior_pct: 75 },
+  { dias: 3, hasta: 6, nuevo_pct: 50, anterior_pct: 50 },
+  { dias: 6, hasta: 9, nuevo_pct: 75, anterior_pct: 25 },
+  { dias: 9, hasta: null, nuevo_pct: 100, anterior_pct: 0 },
+];
+
+function tramosDeTransicion(vocab) {
+  const servidos = vocab?.transicion?.tramos;
+  const tramos = Array.isArray(servidos) && servidos.length ? servidos : TRAMOS_TRANSICION_RESPALDO;
+  return tramos.map((t) => ({
+    ...t,
+    // «Días 1-3», «Día 10 en adelante». Los días del motor cuentan desde 0.
+    etiqueta: t.hasta == null
+      ? `Día ${t.dias + 1} en adelante`
+      : `Días ${t.dias + 1}-${t.hasta}`,
+  }));
+}
+
+function ojoDeLaTransicion(vocab) {
+  return vocab?.transicion?.dueno?.ojo
+    || "Dáselo en tomas separadas, no mezclado en el mismo plato — se digieren a ritmos distintos.";
+}
+
+// Cómo se llama esta forma de dar de comer, para escribirla en una frase. Sale
+// de la MISMA lista que pinta el selector, así que no hay dos nombres.
+function nombreDelModo(vocab, clave) {
+  const op = opcionesDeModoDePreparacion(vocab, "dueno").find((m) => m.clave === clave);
+  return op?.label || (clave === "cocinado" ? "cocinada" : "BARF");
 }
 
 // El modo por omisión lo dice el motor y no se escribe aquí: el día que cambie,
@@ -3248,23 +3282,31 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               <p className="text-sm mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
                 Plan de transición ({dietaActual === "pienso" ? "pienso" : "comida cocinada"} → BARF)
               </p>
+              {/* ⚠️ EL CALENDARIO LO DICE EL MOTOR (18 de septiembre de 2026).
+                  Los cuatro tramos estaban escritos aquí a mano y viven en
+                  `transicion.py` desde agosto CON SU FUENTE: la Tabla 1-1 de
+                  SACN5, el calendario LARGO, que es el que la fuente recomienda
+                  cuando el cambio de comida «is known to be significant». Es la
+                  regla 6: el día que cambiara, la app seguiría pintando el
+                  viejo sin dar ningún error.
+
+                  ⚠️ Y EL NOMBRE DE LA COMIDA NUEVA TAMBIÉN, que con el modo
+                  cocinado dejó de ser cosmético: aquí ponía «% BARF» pasara lo
+                  que pasara, así que a quien iba a COCINAR le decía que le
+                  diera BARF. Ahora es el nombre del modo con el que se generó
+                  el menú, en el registro del dueño. */}
               <div className="flex flex-col gap-1">
-                {[
-                  { dias: "Días 1-3", barf: 25 },
-                  { dias: "Días 4-6", barf: 50 },
-                  { dias: "Días 7-9", barf: 75 },
-                  { dias: "Día 10 en adelante", barf: 100 },
-                ].map((tramo, i) => (
+                {tramosDeTransicion(vocabDeLaVista).map((tramo, i) => (
                   <div key={i} className="flex items-center justify-between text-xs" style={{ fontFamily: fontBody, color: TINTA }}>
-                    <span>{tramo.dias}</span>
+                    <span>{tramo.etiqueta}</span>
                     <span style={{ fontFamily: "monospace", color: VIOLETA, fontWeight: 700 }}>
-                      {tramo.barf}% BARF / {100 - tramo.barf}% {dietaActual === "pienso" ? "pienso" : "cocinado"}
+                      {tramo.nuevo_pct}% {nombreDelModo(vocabDeLaVista, modoDelMenu)} / {tramo.anterior_pct}% {dietaActual === "pienso" ? "pienso" : "lo de antes"}
                     </span>
                   </div>
                 ))}
               </div>
               <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
-                Dáselo en tomas separadas, no mezclado en el mismo plato — se digieren a ritmos distintos.
+                {ojoDeLaTransicion(vocabDeLaVista)}
               </p>
             </div>
           )}
@@ -3401,6 +3443,33 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 que se calculó deja de cumplir sin que se note.
               </p>
             </div>
+          {/* ─── CÓMO SE MONTA EL PLATO ────────────────────────────────────
+              ⚠️ VA ANTES QUE «ALIMENTO POR ALIMENTO», y el orden es el de
+              quien cocina: primero qué se hace con todo esto, y después el
+              detalle de cada cosa. Lo preguntó Elena el 17 de septiembre —«¿se
+              tritura todo junto y se da modo puré? ¿se le echa todo entero?»— y
+              no se contestaba en ningún sitio: había texto de cada alimento y
+              de cada categoría, y ninguno del PLATO.
+
+              Los pasos los escribe el motor y cambian con el modo del MENÚ, no
+              con el botón de la pantalla de generar. Aquí no hay ni una frase. */}
+          {(() => {
+            const plato = comoSePreparaElPlato(modoDelMenu);
+            if (!plato) return null;
+            return (
+              <div className="rounded-2xl p-4 mb-4" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <p className="text-[11px] tracking-[0.1em] uppercase mb-2" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  {plato.titulo}
+                </p>
+                {(plato.pasos || []).map((paso) => (
+                  <p key={paso.titulo} className="text-xs mb-2 leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                    <b>{paso.titulo}.</b> {paso.texto}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
+
           {/* ⚠️ AÑADIDO — CÓMO PREPARAR CADA ALIMENTO, TODO JUNTO.
               Esto mismo sigue estando detrás del icono de cubiertos de
               cada fila, y no es un descuido: ahí sirve para mirar UN
@@ -6226,7 +6295,9 @@ function RawkuOnboardingInterna({
         : (p.menus || []).filter((_, i) => i === compraMenu),
     })).filter((p) => (p.menus || []).length);
 
-    const cesta = cestaDeLaCompra(conElMenu, categoriaDeAlimento);
+    // ⚠️ El tercer argumento es lo que convierte los gramos COCIDOS del menú
+    // en los CRUDOS que se piden en la tienda. El factor lo calcula el motor.
+    const cesta = cestaDeLaCompra(conElMenu, categoriaDeAlimento, crudoQueHaceFalta);
     if (compraTandas === 1) return cesta;
     return cesta.map((z) => ({
       ...z,
@@ -8098,6 +8169,25 @@ function RawkuOnboardingInterna({
                         {deQuien && (
                           <span className="text-[10px] ml-1" style={{ color: MALVA, fontFamily: "monospace" }}>
                             {deQuien}
+                          </span>
+                        )}
+                        {/* ⚠️ SE DICE QUE ES PESO CRUDO, y no es cosmética: la
+                            cesta ACABA DE CONVERTIR los gramos del menú, que son
+                            de comida ya cocinada, al peso que se pide en el
+                            mostrador. Convertir en silencio sería tan malo como
+                            no convertir — quien mire el menú y la lista vería
+                            dos números distintos para el mismo alimento y no
+                            sabría cuál creer. Del pulpo la lista pone el DOBLE
+                            que el menú, y eso hay que explicarlo donde se lee. */}
+                        {linea.seCompraEnCrudo && (
+                          <span className="block text-[10px]" style={{ color: MALVA, fontFamily: fontBody }}>
+                            en crudo — en el plato son {formatearCompra(linea.gramosEnElPlato * compraTandas)} ya cocinado
+                            {linea.factorAproximado ? " (aproximado)" : ""}
+                          </span>
+                        )}
+                        {linea.sinFactor && (
+                          <span className="block text-[10px]" style={{ color: MALVA, fontFamily: fontBody }}>
+                            son gramos YA COCINADOS: compra un poco más, que al cocer pierde agua
                           </span>
                         )}
                       </span>

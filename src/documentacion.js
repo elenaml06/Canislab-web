@@ -1,4 +1,5 @@
 import { alLlegarAlimentos } from './vocabulario.js';
+import { declararQueEsCocido } from './cesta.js';
 
 // ─── LO QUE SE LE CUENTA AL DUEÑO ─────────────────────────────────────────────
 //
@@ -53,6 +54,25 @@ export let PARA_QUE_ES_BUENO = PARA_QUE_ES_BUENO_RESPALDO;
 // dentro de cada alimento, que es donde no se puede desincronizar.
 let RICO_EN = {};
 
+// {alimento: {factor, de_donde, aproximado}} — cuánto CRUDO hay que comprar
+// para esos gramos cocidos. Lo calcula el motor: aquí no hay ni un número.
+let CRUDO_QUE_HACE_FALTA = {};
+// Y qué fichas se pesan ya cocidas, que no se puede saber por el nombre: hay
+// cocidas que no se llaman «cocido» (el Boniato) y al revés.
+let SE_PESA_COCIDO = new Set();
+
+// ⚠️ CÓMO SE MONTA EL PLATO ENTERO. Lo preguntó Elena —«¿se tritura todo junto
+// y se da modo puré? ¿se le echa todo entero?»— y no se contestaba en ningún
+// sitio: había texto de cada alimento y de cada categoría, y ninguno de lo que
+// tiene delante quien va a cocinar.
+//
+// El respaldo va VACÍO a propósito: sin motor no se enseña la sección, y eso es
+// mejor que enseñar unos pasos escritos aquí que mañana no coincidan con los
+// que el motor sirve. No es seguridad que se pierda — lo que no puede faltar
+// nunca (que el hueso cocido no se da) vive en el aviso de cada alimento.
+export const COMO_SE_PREPARA_EL_PLATO_RESPALDO = {};
+let COMO_SE_PREPARA_EL_PLATO = COMO_SE_PREPARA_EL_PLATO_RESPALDO;
+
 alLlegarAlimentos((datos) => {
   const doc = datos?.documentacion;
   if (doc?.modos && Object.keys(doc.modos).length) DOCUMENTACION_MODOS = doc.modos;
@@ -60,15 +80,47 @@ alLlegarAlimentos((datos) => {
     PARA_QUE_ES_BUENO = doc.para_que_es_bueno;
   }
   const rico = {};
+  const crudo = {};
+  const cocidas = new Set();
   for (const p of datos?.pantallas || []) {
     for (const lista of Object.values(p.grupos || {})) {
       for (const a of lista) {
         if (Array.isArray(a.rico_en) && a.rico_en.length) rico[a.nombre] = a.rico_en;
+        if (a.cuanto_crudo_hace_falta) crudo[a.nombre] = a.cuanto_crudo_hace_falta;
+        if (String(a.se_pesa || "").toLowerCase() === "ya cocido") cocidas.add(a.nombre);
       }
     }
   }
   if (Object.keys(rico).length) RICO_EN = rico;
+  if (Object.keys(crudo).length) CRUDO_QUE_HACE_FALTA = crudo;
+  if (cocidas.size) SE_PESA_COCIDO = cocidas;
+  if (datos?.como_se_prepara_el_plato && Object.keys(datos.como_se_prepara_el_plato).length) {
+    COMO_SE_PREPARA_EL_PLATO = datos.como_se_prepara_el_plato;
+  }
+  declararQueEsCocido((n) => SE_PESA_COCIDO.has(n));
 });
+
+/**
+ * Cuánto CRUDO hay que comprar para los gramos cocidos de este alimento.
+ *
+ * Devuelve null cuando el motor no lo sabe, y eso es una respuesta: hoy le
+ * pasa a una sola ficha, porque su fila cruda de referencia no publica agua.
+ * Inventarle el factor de otro corte sería poner una cifra sin fuente en una
+ * lista de la compra.
+ */
+export function crudoQueHaceFalta(nombre) {
+  return CRUDO_QUE_HACE_FALTA[nombre] || null;
+}
+
+/** Los pasos para montar el plato en este modo, o null si el motor no los ha dado. */
+export function comoSePreparaElPlato(modo) {
+  const d = COMO_SE_PREPARA_EL_PLATO[String(modo || "crudo").toLowerCase()];
+  return d && (d.pasos || []).length ? d : null;
+}
+
+export function sePesaCocido(nombre) {
+  return SE_PESA_COCIDO.has(nombre);
+}
 
 /** Qué contar de este modo de preparación. */
 export function documentacionDelModo(modo) {
