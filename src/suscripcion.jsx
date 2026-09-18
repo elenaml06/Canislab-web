@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { API_BASE, fetchConTimeout } from './api.js'
+import { getTokenDeSesion } from './supabase.js'
 
 const VIOLETA = '#5A4088'
 const ROSA = '#FF6F91'
@@ -13,6 +14,19 @@ export default function Suscripcion({ usuario, onVolver, esDemo = false, onActiv
   const [planSeleccionado, setPlanSeleccionado] = useState('mensual')
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState(null)
+  // ⚠️ QUIEN YA PAGÓ NO ESTÁ VIENDO UN ERROR (18 de septiembre de 2026).
+  //
+  // El motor contesta `{ya_suscrito: true, url: null, motivo: "..."}` desde el
+  // 11 de septiembre, y esta pantalla solo miraba `data.url`: a quien ya tiene
+  // suscripción le decía **«No se pudo iniciar el pago. Inténtalo de nuevo»**.
+  // O sea que al único que NO hay que cobrar se le estaba invitando a
+  // reintentar, que es como se cobra dos veces -- justo lo que el endpoint
+  // comprueba antes de crear nada.
+  //
+  // Se guarda aparte del `error` a propósito: no es un fallo, es la respuesta
+  // correcta, y pintarlo en rojo con «inténtalo de nuevo» sería el mismo daño
+  // con otras palabras.
+  const [yaSuscrito, setYaSuscrito] = useState(null)
 
   const iniciarCheckout = async () => {
     // ⚠️ Modo prueba: Premium se enciende al momento, sin pasar por
@@ -42,9 +56,43 @@ export default function Suscripcion({ usuario, onVolver, esDemo = false, onActiv
       const data = await res.json()
       if (data.url) {
         window.location.href = data.url
+      } else if (data.ya_suscrito) {
+        setYaSuscrito(data.motivo
+          || 'Ya tienes una suscripción activa, así que no hace falta pagar otra vez.')
       } else {
         setError('No se pudo iniciar el pago. Inténtalo de nuevo.')
       }
+    } catch (e) {
+      setError(e?.esTimeout
+        ? 'El servidor está tardando demasiado en responder. Vuelve a intentarlo en un momento.'
+        : 'Error de conexión. Inténtalo de nuevo.')
+    } finally {
+      setCargando(false)
+    }
+  }
+
+  // Y para gestionarla, el portal de Stripe. ⚠️ Va con el TOKEN de sesión y no
+  // con el id de cliente: un identificador no es una credencial, y mandar el de
+  // otro abría SU facturación (tapado en el motor el 11 de septiembre). Desde
+  // entonces `/stripe/checkout` ya no devuelve la URL del portal, así que este
+  // es el único camino.
+  const abrirGestion = async () => {
+    setCargando(true)
+    setError(null)
+    try {
+      const token = await getTokenDeSesion()
+      if (!token) {
+        setError('Vuelve a entrar en tu cuenta para gestionar la suscripción.')
+        return
+      }
+      const res = await fetchConTimeout(`${API_BASE}/stripe/portal`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token_usuario: token }),
+      })
+      const data = await res.json()
+      if (data.url) window.location.href = data.url
+      else setError('No hemos podido abrir la gestión de la suscripción. Inténtalo en un momento.')
     } catch (e) {
       setError(e?.esTimeout
         ? 'El servidor está tardando demasiado en responder. Vuelve a intentarlo en un momento.'
@@ -148,6 +196,32 @@ export default function Suscripcion({ usuario, onVolver, esDemo = false, onActiv
         <p style={{ color: ROSA, fontFamily: fontBody, fontSize: 13, marginBottom: 16, textAlign: 'center' }}>
           {error}
         </p>
+      )}
+
+      {/* Ya tiene suscripción: NO es un error, así que no va en rojo ni dice
+          «inténtalo de nuevo». Lo que hace falta aquí es la puerta para
+          gestionarla, que es lo que esta persona venía buscando. */}
+      {yaSuscrito && (
+        <div style={{
+          width: '100%', maxWidth: 380, marginBottom: 16, padding: '14px 16px',
+          borderRadius: 14, background: '#fff', border: `1px solid ${MALVA}33`,
+        }}>
+          <p style={{ color: TINTA, fontFamily: fontBody, fontSize: 14, margin: 0, lineHeight: 1.5 }}>
+            {yaSuscrito}
+          </p>
+          <button
+            onClick={abrirGestion}
+            disabled={cargando}
+            style={{
+              marginTop: 12, width: '100%', padding: '12px', borderRadius: 12,
+              border: `1px solid ${VIOLETA}`, background: 'transparent', color: VIOLETA,
+              fontFamily: fontBody, fontSize: 14, fontWeight: 600,
+              cursor: cargando ? 'default' : 'pointer', opacity: cargando ? 0.6 : 1,
+            }}
+          >
+            {cargando ? 'Un momento…' : 'Gestionar mi suscripción'}
+          </button>
+        </div>
       )}
 
       {/* Botón */}

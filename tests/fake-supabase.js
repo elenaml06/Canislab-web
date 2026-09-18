@@ -176,6 +176,11 @@ export function crearFakeSupabase(opciones = {}) {
     // Lo que ha recibido /pauta/firmar y lo que se ha llegado a guardar.
     peticionesFirmar: [],
     pautasFirmadas: [],
+    // El cobro. `yaSuscrito` es el caso de quien ya paga: el motor contesta
+    // `ya_suscrito` y NO una url, y eso no es un error.
+    peticionesCheckout: [],
+    peticionesPortal: [],
+    yaSuscrito: false,
     pautaNoSeFirma: false,
     // Y el caso de "con esas cantidades no cuadra", que es donde se ofrece
     // una alternativa sin aplicarla.
@@ -476,6 +481,8 @@ export function crearFakeSupabase(opciones = {}) {
         peticionesAnalizar: estado.peticionesAnalizar.map((p) => JSON.parse(JSON.stringify(p))),
         pesos: estado.pesos.map((p) => JSON.parse(JSON.stringify(p))),
         peticionesFirmar: estado.peticionesFirmar.map((p) => JSON.parse(JSON.stringify(p))),
+        peticionesCheckout: estado.peticionesCheckout.map((p) => JSON.parse(JSON.stringify(p))),
+        peticionesPortal: estado.peticionesPortal.map((p) => JSON.parse(JSON.stringify(p))),
         pautasFirmadas: estado.pautasFirmadas.map((p) => JSON.parse(JSON.stringify(p))),
         // Lo que quedó GUARDADO de la clínica, para poder comprobarlo sin
         // mirar la pantalla (que se pinta del estado local y puede verse
@@ -1140,6 +1147,33 @@ export function crearFakeSupabase(opciones = {}) {
     // devuelve algo con la misma FORMA para poder probar la pantalla. Lo
     // que esto no puede comprobar -- que el sello sirva -- se comprueba
     // contra el motor, en el BLOQUE 42 de pruebas_completas.py.
+    // ⚠️ EL COBRO, Y EL CASO QUE IMPORTA: QUIEN YA ESTÁ SUSCRITO. El motor
+    // devuelve `{ya_suscrito: true, url: null, motivo}` desde el 11 de
+    // septiembre, y hasta el 18 la app lo leía como un fallo y le decía
+    // «No se pudo iniciar el pago. Inténtalo de nuevo» -- o sea que al único
+    // al que NO hay que cobrar se le invitaba a reintentar.
+    if (ruta === "/stripe/checkout") {
+      estado.peticionesCheckout.push(JSON.parse(cuerpo || "{}"));
+      if (estado.yaSuscrito) {
+        return responder(200, {
+          ya_suscrito: true,
+          url: null,
+          motivo: "Ya tienes una suscripción activa, así que no hace falta pagar otra vez. " +
+                  "Para cambiarla o cancelarla, entra en tu cuenta y abre la gestión de la " +
+                  "suscripción.",
+        });
+      }
+      return responder(200, { url: "https://checkout.dementira/sesion" });
+    }
+    if (ruta === "/stripe/portal") {
+      const p = JSON.parse(cuerpo || "{}");
+      estado.peticionesPortal.push(p);
+      // El portal se abre con el TOKEN de sesión, no con el id de cliente:
+      // un identificador no es una credencial. Si no viene token, 401, que es
+      // lo que hace el de verdad.
+      if (!p.token_usuario) return responder(401, { detail: "Hace falta el token de sesión." });
+      return responder(200, { url: "https://portal.dementira/sesion" });
+    }
     if (ruta === "/pauta/firmar") {
       const p = JSON.parse(cuerpo || "{}");
       estado.peticionesFirmar.push(p);
