@@ -319,7 +319,7 @@ const TRAMOS_TRANSICION_RESPALDO = [
   { dias: 9, hasta: null, nuevo_pct: 100, anterior_pct: 0 },
 ];
 
-function tramosDeTransicion(vocab) {
+export function tramosDeTransicion(vocab) {
   const servidos = vocab?.transicion?.tramos;
   const tramos = Array.isArray(servidos) && servidos.length ? servidos : TRAMOS_TRANSICION_RESPALDO;
   return tramos.map((t) => ({
@@ -331,7 +331,7 @@ function tramosDeTransicion(vocab) {
   }));
 }
 
-function ojoDeLaTransicion(vocab) {
+export function ojoDeLaTransicion(vocab) {
   return vocab?.transicion?.dueno?.ojo
     || "Dáselo en tomas separadas, no mezclado en el mismo plato — se digieren a ritmos distintos.";
 }

@@ -56,7 +56,21 @@ let RICO_EN = {};
 
 // {alimento: {factor, de_donde, aproximado}} — cuánto CRUDO hay que comprar
 // para esos gramos cocidos. Lo calcula el motor: aquí no hay ni un número.
-let CRUDO_QUE_HACE_FALTA = {};
+// ⚠️ SU RESPALDO VA VACÍO Y TIENE QUE EXISTIR IGUAL (18 de septiembre de 2026).
+//
+// Esta lista no viaja sola: va DENTRO de cada alimento de `/alimentos`. Aun
+// así el motor la declara en `lo_que_la_app_pinta.json` con su nombre de
+// respaldo, y la ley exige que todo respaldo declarado EXISTA de verdad en la
+// app -- lo contrario es una línea de inventario que no vigila nada. Lo cazó
+// `la-ley-del-motor.spec.js` nada más fusionarse el motor.
+//
+// Vacío a propósito, como los otros dos de este fichero: sin motor no se dice
+// cuánto crudo hay que comprar, y eso es mejor que un factor escrito aquí que
+// mañana no coincida con el agua que el catálogo declara. Y no se pierde nada
+// de seguridad: que unos gramos son de producto YA COCIDO lo dice el aviso de
+// cada alimento, que sí tiene respaldo.
+export const CUANTO_CRUDO_HACE_FALTA_RESPALDO = {};
+let CRUDO_QUE_HACE_FALTA = CUANTO_CRUDO_HACE_FALTA_RESPALDO;
 // Y qué fichas se pesan ya cocidas, que no se puede saber por el nombre: hay
 // cocidas que no se llaman «cocido» (el Boniato) y al revés.
 let SE_PESA_COCIDO = new Set();

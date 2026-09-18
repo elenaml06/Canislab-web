@@ -1076,15 +1076,15 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // alimentación cruda, lo que separa víscera de carne no es "es
     // tejido muscular o es un órgano", es si SEGREGA algo o no: ni el
     // corazón ni la molleja segregan, así que van con la carne.
-    "Conejo": ["Conejo", "Corazón de conejo"],
-    "Cordero": ["Corazón de cordero", "Lengua de cordero"],
-    "Gallina": ["Gallina (carne sin hueso)"],
-    "Pato": ["Pato (carne sin hueso)"],
-    "Pavo": ["Corazón de pavo", "Molleja de pavo", "Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
-    "Pollo": ["Corazón de pollo", "Molleja de pollo", "Pollo ala con piel (sin hueso)", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo sin piel", "Pollo pechuga con piel", "Pollo pechuga sin piel"],
-    "Ternera": ["Lomo de ternera con grasa", "Lengua de ternera", "Ternera con grasa", "Ternera solomillo sin grasa"],
-    "Buey": ["Lengua de buey"],
-    "Vaca": ["Corazón de vaca"],
+    "Conejo": ["Cerdo cocido", "Conejo", "Conejo cocido", "Corazón de conejo"],
+    "Cordero": ["Corazón de cordero", "Corazón de cordero cocido", "Lengua de cordero", "Lengua de cordero cocida"],
+    "Gallina": ["Gallina (carne sin hueso)", "Gallina (carne sin hueso) cocida"],
+    "Pato": ["Pato (carne sin hueso)", "Pato (carne sin hueso) cocido"],
+    "Pavo": ["Corazón de pavo", "Corazón de pavo cocido", "Molleja de pavo", "Molleja de pavo cocida", "Pavo", "Pavo muslo con piel", "Pavo muslo con piel cocido", "Pavo pechuga con piel", "Pavo pechuga con piel cocido", "Pavo pechuga sin piel", "Pavo pechuga sin piel cocido"],
+    "Pollo": ["Corazón de pollo", "Corazón de pollo cocido", "Molleja de pollo", "Molleja de pollo cocida", "Pollo ala con piel (sin hueso)", "Pollo ala con piel (sin hueso) cocido", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo con piel cocido", "Pollo muslo sin piel", "Pollo muslo sin piel cocido", "Pollo pechuga con piel", "Pollo pechuga con piel cocido", "Pollo pechuga sin piel", "Pollo pechuga sin piel cocido"],
+    "Ternera": ["Jarrete de ternera cocido", "Lengua de ternera", "Lengua de ternera cocida", "Lomo de ternera con grasa", "Ternera cocida", "Ternera con grasa", "Ternera solomillo sin grasa"],
+    "Buey": ["Lengua de buey", "Lengua de buey cocida", "Solomillo de vaca cocido", "Vaca para guisar cocida"],
+    "Vaca": ["Corazón de vaca", "Corazón de vaca cocido"],
   },
   // ⚠️ LOS HIDRATOS (17 de septiembre de 2026). Categoría nueva del motor:
   // cinco fichas que se dan COCIDAS y se PESAN COCIDAS. En BARF no entran solas
@@ -1104,26 +1104,26 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // AUTOMÁTICO no los usa nunca (se filtran de ACCESIBLES) -- pero
     // si el usuario los quiere elegir él mismo aquí, sabiendo que hay
     // que cocinarlos, puede.
-    "Atún": ["Atún"],
+    "Atún": ["Atún", "Atún claro cocido"],
     "Bacaladilla": ["Bacaladilla"],
-    "Bacalao": ["Bacalao"],
+    "Bacalao": ["Bacalao", "Bacalao cocido"],
     "Besugo": ["Besugo"],
     "Boquerón": ["Boquerón"],
-    "Caballa": ["Caballa"],
-    "Calamar": ["Calamar"],
-    "Dorada": ["Dorada"],
+    "Caballa": ["Caballa", "Caballa cocida"],
+    "Calamar": ["Calamar", "Calamar cocido"],
+    "Dorada": ["Dorada", "Dorada cocida"],
     "Gamba": ["Gamba roja"],
     "Langostino": ["Langostino"],
-    "Lenguado": ["Lenguado"],
+    "Lenguado": ["Lenguado", "Lenguado cocido"],
     "Lubina": ["Lubina"],
-    "Merluza": ["Merluza"],
-    "Perca": ["Perca"],
+    "Merluza": ["Merluza", "Merluza cocida"],
+    "Perca": ["Perca", "Perca cocida"],
     "Pescadilla": ["Pescadilla"],
-    "Pulpo": ["Pulpo"],
-    "Salmón": ["Salmón"],
+    "Pulpo": ["Pulpo", "Pulpo cocido"],
+    "Salmón": ["Salmón", "Salmón cocido"],
     "Sardina": ["Sardina"],
     "Sepia": ["Sepia"],
-    "Trucha": ["Trucha"],
+    "Trucha": ["Trucha", "Trucha cocida"],
   },
   "Hueso carnoso": {
     // ⚠️ CORREGIDO (5 agosto, noche) — tercera pasada: la usuaria ya
@@ -1163,7 +1163,7 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // aparte. Confirmado que NO hay datos fiables de bazo/páncreas de
     // pollo, pavo ni conejo -- no se han inventado esas especies.
     // Timo y cerebro dan variedad adicional con datos USDA reales.
-    "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero"],
+    "Cordero": ["Bazo de cordero", "Bazo de cordero cocido", "Pulmón de cordero", "Pulmón de cordero cocido", "Riñón de cordero", "Riñón de cordero cocido"],
     // ⚠️ «Riñón de ternera» YA NO EXISTE (13 septiembre, noche). El motor la
     // renombró a «Riñón de vaca» sin tocar una cifra: cuadra en TRECE celdas
     // exactas con la fila de riñón de BUEY de CIQUAL, así que la ficha era de
@@ -1171,7 +1171,7 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // el bazo, el páncreas y el pulmón. Aquí es respaldo, pero un respaldo que
     // ofrece un alimento que el motor no tiene manda una petición que el motor
     // no sabe recibir.
-    "Ternera": ["Pulmón de ternera", "Timo de ternera", "Cerebro de ternera"],
+    "Ternera": ["Cerebro de ternera", "Cerebro de ternera cocido", "Pulmón de ternera", "Pulmón de ternera cocido", "Timo de ternera", "Timo de ternera cocido"],
     // ⚠️ AMPLIADO (8 septiembre) — LA MISMA HISTORIA DE AGOSTO, OTRA VEZ.
     // El comentario de arriba cuenta que "Bazo de ternera" y "Páncreas de
     // ternera" pasaron a "de vaca" porque sus datos eran de animal adulto.
@@ -1191,8 +1191,7 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // que un respaldo desactualizado. La de TERNERA se queda, porque la
     // ternera española se sacrifica por debajo del año, y su ficha lleva esa
     // condición escrita y un aviso para quien va a la carnicería.
-    "Vaca": ["Bazo de vaca", "Páncreas de vaca", "Timo de vaca",
-             "Pulmón de vaca", "Riñón de vaca"],
+    "Vaca": ["Bazo de vaca", "Bazo de vaca cocido", "Páncreas de vaca", "Pulmón de vaca", "Pulmón de vaca cocido", "Riñón de vaca", "Riñón de vaca cocido", "Timo de vaca", "Timo de vaca cocido"],
     // ⚠️ ELIMINADO (5 agosto, madrugada) — CASO REAL GRAVE, pedido
     // expreso: "Cerdo": ["Bazo de cerdo", "Páncreas de cerdo"] quitado
     // por completo -- riesgo real de enfermedad de Aujeszky
@@ -1204,14 +1203,14 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
   },
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
-    "Cordero": ["Hígado de cordero"],
+    "Cordero": ["Hígado de cordero", "Hígado de cordero cocido"],
     "Pato": ["Hígado de pato"],
-    "Pavo": ["Hígado de pavo"],
-    "Pollo": ["Hígado de pollo"],
-    "Vaca": ["Hígado de vaca"],
+    "Pavo": ["Hígado de pavo", "Hígado de pavo cocido"],
+    "Pollo": ["Hígado de pollo", "Hígado de pollo cocido"],
+    "Vaca": ["Hígado de vaca", "Hígado de vaca cocido"],
   },
   "Verduras y frutas": {
-    "Acelga": ["Acelga"],
+    "Acelga": ["Acelga", "Acelga cocida"],
     "Albahaca": ["Albahaca"],
     "Albaricoque": ["Albaricoque"],
     "Alcachofa": ["Alcachofa"],
@@ -1219,24 +1218,24 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     "Arándano": ["Arándano"],
     "Berenjena": ["Berenjena"],
     "Boniato": ["Boniato"],
-    "Bruselas": ["Coles de Bruselas"],
-    "Brócoli": ["Brócoli"],
-    "Calabacín": ["Calabacín"],
-    "Calabaza": ["Calabaza"],
+    "Bruselas": ["Coles de Bruselas", "Coles de Bruselas cocida"],
+    "Brócoli": ["Brócoli", "Brócoli cocido"],
+    "Calabacín": ["Calabacín", "Calabacín cocido"],
+    "Calabaza": ["Calabaza", "Calabaza cocida"],
     "Canónigos": ["Canónigos"],
-    "Cardo": ["Cardo"],
-    "Champiñón": ["Champiñón"],
+    "Cardo": ["Cardo", "Cardo cocido"],
+    "Champiñón": ["Champiñón", "Champiñón cocido"],
     "Coco": ["Coco fresco"],
-    "Col": ["Col lombarda", "Col rizada"],
-    "Coliflor": ["Coliflor"],
+    "Col": ["Col lombarda", "Col lombarda cocida", "Col rizada"],
+    "Coliflor": ["Coliflor", "Coliflor cocida"],
     "Dátil": ["Dátil"],
     "Endibia": ["Endibia"],
-    "Espinaca": ["Espinaca"],
+    "Espinaca": ["Espinaca", "Espinaca cocida"],
     "Espárrago": ["Espárrago verde"],
     "Frambuesa": ["Frambuesa"],
     "Fresa": ["Fresa"],
     "Grelo": ["Grelo"],
-    "Judía": ["Judía verde"],
+    "Judía": ["Judía verde", "Judía verde cocida"],
     "Lechuga": ["Lechuga"],
     "Mandarina": ["Mandarina"],
     "Mango": ["Mango"],
@@ -1246,15 +1245,15 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     "Naranja": ["Naranja"],
     "Pepino": ["Pepino"],
     "Pera": ["Pera"],
-    "Pimiento": ["Pimiento rojo"],
+    "Pimiento": ["Pimiento rojo", "Pimiento rojo cocido"],
     "Piña": ["Piña"],
     "Plátano": ["Plátano"],
-    "Repollo": ["Repollo"],
+    "Repollo": ["Repollo", "Repollo cocido"],
     "Rucula": ["Rucula"],
     "Rábano": ["Rábano"],
     "Sandía": ["Sandía"],
     "Tomate": ["Tomate (puré)"],
-    "Zanahoria": ["Zanahoria"],
+    "Zanahoria": ["Zanahoria", "Zanahoria cocida"],
   },
   "Extras": {
     "Huevo": ["Huevo clara", "Huevo de codorniz", "Huevo de gallina entero", "Huevo de pato", "Huevo de pato entero", "Huevo yema"],
