@@ -39,7 +39,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout, tiempoParaVariosMenus } from "./api.js";
-import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS, MODOS_DE_PREPARACION_RESPALDO, opcionesDeModoDePreparacion, modoDePreparacionPorOmision, avisoDeModoCocinado, nombreDelModo } from "./vocabulario.js";
+import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS, MODOS_DE_PREPARACION_RESPALDO, opcionesDeModoDePreparacion, modoDePreparacionPorOmision, avisoDeModoCocinado, nombreDelModo, tramosDeTransicion, ojoDeLaTransicion } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
