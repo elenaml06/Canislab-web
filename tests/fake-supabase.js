@@ -439,9 +439,13 @@ export function crearFakeSupabase(opciones = {}) {
           ? JSON.parse(JSON.stringify(cfg.catalogo)) : null;
       }
       estado.sinColumnasDeClinica = cfg.sinColumnasDeClinica === true;
-      if (Array.isArray(cfg.columnasDePerroQueFaltan)) {
-        estado.columnasDePerroQueFaltan = cfg.columnasDePerroQueFaltan;
-      }
+      // ⚠️ SE RESETEA SIEMPRE, como `sinColumnasDeClinica`. Si solo se asignara
+      // cuando viene, una prueba que le quita una columna se la quitaría
+      // también a todas las que corrieran después en el mismo servidor -- y
+      // eso da rojos que no hablan de lo que la prueba mira. Pasó al escribirlo:
+      // `sin-cuenta.spec.js` se caía sola y pasaba al correrla aparte.
+      estado.columnasDePerroQueFaltan = Array.isArray(cfg.columnasDePerroQueFaltan)
+        ? cfg.columnasDePerroQueFaltan : [];
       // ⚠️ LEER NO PUEDE BORRAR (8 septiembre). `leer()` hace un POST con el
       // cuerpo vacío para mirar el estado, y aquí `clinica` no es un
       // interruptor de escenario: es lo que la app ACABA DE GUARDAR. Si se
