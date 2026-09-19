@@ -54,13 +54,27 @@ export const laFichaClinicaHaCargado = (page) =>
 // la pantalla de entrada vuelva a cambiar se toque un sitio. Y no oculta la
 // regresión que arregla: quién aterriza dónde lo comprueba, a pelo y sin
 // ayudas, `vet-arranque-y-rueda.spec.js`.
+// ⚠️ SE ESPERA A QUE HAYA PANTALLA ANTES DE MIRARLA (19 de septiembre de 2026).
+// La primera versión hacía `count()` nada más entrar, y `count()` NO espera:
+// devuelve lo que hay en ese instante. Como la lista tarda en pintarse -- la
+// petición de pacientes pasa por el servidor de mentira --, salía 0, no se
+// pulsaba ningún paciente, y la ayuda se quedaba esperando la ficha clínica
+// hasta el timeout.
+//
+// Medido: ocho pruebas del formulador en rojo, TODAS con «waiting for
+// getByRole('heading', {name: /Ficha del paciente/})». Parecían ocho
+// regresiones del cambio de pantalla de entrada y era una carrera aquí.
 export async function esperarElPaciente(page, opciones = {}) {
-  const enLaLista = page.getByRole("button", { name: /Dar de alta un paciente/ });
-  if (await enLaLista.count()) {
+  const laLista = page.getByRole("button", { name: /Dar de alta un paciente/ });
+  const laFicha = laFichaClinicaHaCargado(page);
+  // O la lista o la ficha: se acepta CUALQUIERA de las dos y luego se mira
+  // cuál es. Esperar solo a una daría un timeout que no dice por qué.
+  await laLista.or(laFicha).first().waitFor(opciones);
+  if (await laLista.isVisible()) {
     const primero = page.getByRole("button", { name: /^Paciente / }).first();
     if (await primero.count()) await primero.click();
   }
-  await laFichaClinicaHaCargado(page).waitFor(opciones);
+  await laFicha.waitFor(opciones);
 }
 
 // Ir al generador desde donde sea. Desde el 25 de agosto se entra por "Mis
