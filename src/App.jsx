@@ -1071,6 +1071,29 @@ function avisoDeHidratos(vocab) {
   return vocab?.hidratos?.ojo || "";
 }
 
+// ⚠️ A QUIÉN NO SE LE PREGUNTA POR LOS HIDRATOS, Y LO DECIDE EL MOTOR
+// (19 de septiembre de 2026). Lo pidió Elena: «y lo mismo para patologías, si
+// tiene que llevar hidratos pues que no se pregunte».
+//
+// A quien su enfermedad le OBLIGA a llevarlos no se le ofrece elegir: se le
+// cuenta. Una pregunta cuya respuesta no cambia nada le hace creer que decide
+// algo que no decide.
+//
+// ⚠️ LA LISTA NO SE ESCRIBE AQUÍ: la sirve `GET /vocabulario` derivada de
+// `patologias.json` con la MISMA función que usa el solver. Copiarla sería la
+// regla 6 rota otra vez -- el día que una patología cambie, la app seguiría
+// preguntando donde el motor ya ha decidido. Sin vocabulario (Render dormido)
+// se pregunta, que es el lado que no esconde nada.
+function laPatologiaPideHidratos(vocab, patologias) {
+  const piden = vocab?.hidratos?.patologias_que_los_piden;
+  if (!Array.isArray(piden) || !Array.isArray(patologias)) return false;
+  return patologias.some((p) => piden.includes(p));
+}
+
+function textoHidratosDeLaPatologia(vocab) {
+  return vocab?.hidratos?.texto_si_los_pide_la_patologia?.dueno || "";
+}
+
 // ⚠️ `ACTIVIDAD_API` y `claveDeActividad` VIVEN EN `vocabulario.js` DESDE EL 11
 // DE SEPTIEMBRE, y no es un traslado por orden: `formulador.jsx` -- la pantalla
 // del veterinario -- las necesita y no puede importar de aquí sin hacer un
@@ -12812,6 +12835,15 @@ function RawkuOnboardingInterna({
               seguir sin tocarla, y volver a pulsar la elegida la desmarca.
 
               El texto y las respuestas los sirve el motor (regla 6). */}
+          {laPatologiaPideHidratos(vocab, perfil.patologias) ? (
+            /* No se pregunta: se cuenta. Ver `laPatologiaPideHidratos`. */
+            <div className="rounded-xl p-3 mb-6 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
+              <Info size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                {textoHidratosDeLaPatologia(vocab)}
+              </p>
+            </div>
+          ) : (<>
           <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
             {vocab?.hidratos?.pregunta_dueno || PREGUNTA_HIDRATOS_RESPALDO}
           </p>
@@ -12855,6 +12887,7 @@ function RawkuOnboardingInterna({
             </div>
           )}
           {perfil.conHidratos !== "si" && <div className="mb-4" />}
+          </>)}
 
           {/* ─── QUÉ ES CADA UNA ───────────────────────────────────────────
               ⚠️ POR QUÉ ESTÁ AQUÍ (18 de septiembre de 2026). Elena:
