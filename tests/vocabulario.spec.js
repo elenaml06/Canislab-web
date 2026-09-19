@@ -1034,8 +1034,15 @@ test.describe("los dos nombres de cada etapa", () => {
     await abrirMenuLateral(page);
     await page.getByRole("button", { name: /Analizar la dieta actual/ }).click();
     await page.getByRole("button", { name: "Carne muscular: añadir alimento" }).click();
-    // «Pato» es un alimento directo, sin submenú de tipos: un clic.
-    await page.getByRole("button", { name: "Pato (carne sin hueso)" }).click();
+    // ⚠️ DOS CLICS, Y ANTES ERA UNO (18 de septiembre de 2026, noche). «Pato»
+    // pasó a tener dos fichas --crudo y cocido-- el día que entraron las 64
+    // cocidas, y el analizador enseña el catálogo ENTERO a propósito: analiza
+    // lo que el perro come HOY, que puede ser de cualquiera de los dos modos.
+    // Lo que se prueba aquí es la ETAPA que viaja en la petición, no cuántos
+    // toques cuesta elegir el pato -- eso lo vigila `un-solo-alimento.spec.js`,
+    // que ya no escribe la especie a mano.
+    await page.getByRole("button", { name: /^Pato: ver los \d+ tipos$/ }).click();
+    await page.getByRole("button", { name: "Pato (carne sin hueso)", exact: true }).click();
     await page.locator("input[type=number]").first().fill("300");
     await page.getByRole("button", { name: /Analizar esta dieta/ }).click();
 

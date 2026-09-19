@@ -192,6 +192,97 @@ test.describe("ningún camino se queda sin el modo", () => {
     }
   });
 
+  // ⚠️ LO QUE SE OFRECE A MANO, QUE ES LA OTRA PUNTA DEL MODO (18 de septiembre
+  // de 2026, noche). El selector de «cambiar a» de un menú ya hecho filtraba por
+  // el modo desde esa mañana y PERSONALIZAR no: ofrecía el catálogo entero, o
+  // sea «Acelga cocida» debajo de «Acelga» en un menú crudo -- el mismo alimento
+  // dos veces con dos composiciones distintas.
+  //
+  // ⚠️ Y esto NO se veía en las pruebas aunque el código ya filtrara, porque la
+  // tabla de modos (`MODOS_DE_CADA_ALIMENTO`) arrancaba VACÍA y solo se llenaba
+  // cuando `/alimentos` contestaba con `pantallas` -- que el servidor de mentira
+  // no devuelve. O sea que el filtro estaba y no filtraba nada, ni aquí ni con
+  // Render dormido. Por eso ahora arranca en `MODOS_DE_CADA_ALIMENTO_RESPALDO`.
+  // Las dos mitades van en DOS pruebas y no en una: sin la de cocinado, «no
+  // filtra nada» y «filtra bien» se ven exactamente igual en la de crudo.
+  for (const [comoSeLlama, modo, elQueVale, elQueNo] of [
+    ["crudo", null, "Acelga", "Acelga cocida"],
+    ["cocinado", COCINADO_TITULO, "Acelga cocida", "Acelga"],
+  ]) {
+    test(`Personalizar en ${comoSeLlama} solo ofrece la comida de ese modo`, async ({ page, request }) => {
+      await configurarBackend(request, {
+        retrasoPerrosMs: 50, perros: [PERRO], menus: [], premium: true,
+        vocabulario: vocabularioConModos("crudo"),
+      });
+      await entrar(page);
+      if (modo) await page.getByRole("button", { name: modo }).click();
+
+      await page.getByRole("button", { name: /^Personalizar/ }).click();
+      await page.getByRole("button", { name: /^(Generar|Hacer|Elegir)/ }).click();
+      await page.getByRole("button", { name: "Verduras y frutas: elijo yo" }).click();
+      await page.getByRole("button", { name: "Verduras y frutas: elegir alimento" }).click();
+
+      await expect(page.getByRole("button", { name: elQueVale, exact: true }),
+        `en un menú ${comoSeLlama} no se ofrece «${elQueVale}»`).toHaveCount(1);
+      await expect(page.getByRole("button", { name: elQueNo, exact: true }),
+        `en un menú ${comoSeLlama} se está ofreciendo «${elQueNo}», que es del otro modo: ` +
+        `es el mismo alimento dos veces con dos composiciones distintas`).toHaveCount(0);
+    });
+  }
+
+  // ⚠️ Y LA CATEGORÍA QUE EN ESE MODO NO TIENE NADA: EL HUESO. El hueso cocido
+  // astilla, así que el motor no tiene ni una ficha de hueso carnoso para el modo
+  // cocinado (`accesibles.modos_de`: «Hueso carnoso -> SOLO crudo, siempre»). Sin
+  // esto quedaba en Personalizar una tarjeta de «Hueso carnoso» con su botón de
+  // elegir y una lista vacía detrás, que se lee como que la app está rota.
+  test("en cocinado no se pinta la categoría del hueso, que no tiene nada", async ({ page, request }) => {
+    await configurarBackend(request, {
+      retrasoPerrosMs: 50, perros: [PERRO], menus: [], premium: true,
+      vocabulario: vocabularioConModos("crudo"),
+    });
+    await entrar(page);
+    await page.getByRole("button", { name: /^Personalizar/ }).click();
+    await page.getByRole("button", { name: /^(Generar|Hacer|Elegir)/ }).click();
+    await expect(page.getByRole("button", { name: "Hueso carnoso: elijo yo" }),
+      "en un menú crudo el hueso tiene que estar").toHaveCount(1);
+
+    await irAlGenerador(page);
+    await page.getByRole("button", { name: COCINADO_TITULO }).click();
+    await page.getByRole("button", { name: /^Personalizar/ }).click();
+    await page.getByRole("button", { name: /^(Generar|Hacer|Elegir)/ }).click();
+    await expect(page.getByRole("button", { name: "Hueso carnoso: elijo yo" }),
+      "en un menú COCINADO se sigue ofreciendo la categoría del hueso, y detrás no " +
+      "hay ni una ficha: el hueso cocido astilla y el motor no tiene ninguna").toHaveCount(0);
+    // Y no se ha llevado por delante las demás.
+    await expect(page.getByRole("button", { name: "Verduras y frutas: elijo yo" }),
+      "al esconder el hueso se han escondido también las demás").toHaveCount(1);
+  });
+
+  // ⚠️ Y LA PANTALLA QUE NO FILTRA, que es tan importante como las que sí. El
+  // analizador mira lo que el perro come HOY, y `modoDelMenu` vale «crudo»
+  // siempre que no haya un menú abierto -- que es su caso. Con el filtro puesto
+  // ahí, a quien ya le da comida cocinada a su perro no le salía NI UN alimento
+  // cocido con el que escribir su dieta.
+  test("el analizador ofrece la comida de los dos modos", async ({ page, request }) => {
+    await configurarBackend(request, {
+      retrasoPerrosMs: 50, perros: [PERRO], menus: [], premium: true,
+      vocabulario: vocabularioConModos("crudo"),
+    });
+    await page.goto("/");
+    await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+    await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+    await page.getByRole("button", { name: "Entrar" }).click();
+    await page.getByRole("button", { name: "Menú", exact: true }).last().click();
+    await page.getByRole("dialog", { name: "Panel lateral" })
+              .getByRole("button", { name: "Analizar la dieta actual", exact: true }).click();
+
+    await page.getByRole("button", { name: "Verduras y frutas: añadir alimento" }).click();
+    await page.getByRole("button", { name: /^Acelga: ver los \d+ tipos$/ }).click();
+    await expect(page.getByRole("button", { name: /^Acelga cocida$/ }),
+      "el analizador no ofrece la acelga cocida: quien ya le da comida cocinada " +
+      "a su perro no puede escribir lo que le da").toHaveCount(1);
+  });
+
   // ⚠️ Y LA OTRA MITAD, que no se ve en pantalla: al EDITAR o al REVALIDAR, el
   // modo es el DEL MENÚ, no el del botón. Lo dice el propio motor: «uno
   // generado crudo y editado en cocinado metería hueso crudo en un plato que se
