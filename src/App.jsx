@@ -2658,7 +2658,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // lista de suplementos). Sin esto se queda con el RESPALDO para siempre:
   // la lista del motor llega después de pintar y reasignar una variable de
   // módulo no repinta nada. Ver `useAlimentos` en vocabulario.js.
-  useAlimentos();
+  const alimentosDelMotor = useAlimentos();
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ LA CUARTA COPIA DE LOS NIVELES DE ACTIVIDAD, encontrada el 11 de
   // septiembre escribiendo `tests/vocabulario.spec.js`. Esta pantalla tenía la
@@ -2936,7 +2936,9 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // que ya siguen las instrucciones de «cómo darlo» y la petición al motor.
   const catsDelModo = useMemo(
     () => filtrarCategoriasPorModo(categoriasDisponibles || CATEGORIAS_ALIMENTO, modoDelMenu),
-    [categoriasDisponibles, modoDelMenu]);
+    // `alimentosDelMotor` sube cuando llega `/alimentos`: sin él este memo
+    // devuelve el árbol del RESPALDO para siempre. Ver `useAlimentos`.
+    [categoriasDisponibles, modoDelMenu, alimentosDelMotor]);
   const comoSeDa = (categoria) => comoSeDaLaCategoria(categoria, modoDelMenu);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
   const viendoBloqueado = necesitaTransicion && idxActiva > 0;
@@ -5831,7 +5833,7 @@ function RawkuOnboardingInterna({
 }) {
   // Lo mismo: `filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, …)` se
   // calcula al pintar. Ver `useAlimentos` en vocabulario.js.
-  useAlimentos();
+  const alimentosDelMotor = useAlimentos();
   // ⚠️ EL VOCABULARIO DEL MOTOR (11 septiembre). Una sola peticion por sesion,
   // cacheada a nivel de modulo. De aqui salen los niveles de actividad con SUS
   // DOS registros -- el del dueño y el del veterinario --, en vez de las listas
@@ -8760,7 +8762,10 @@ function RawkuOnboardingInterna({
   const pesoObjetivoKg = objetivo?.kg || null;
   const categoriasDisponibles = useMemo(
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
-    [especiesExcluidas]
+    // `alimentosDelMotor` sube cuando llega `/alimentos`. Sin él este memo no
+    // se recalcula nunca -- repintar no basta -- y Personalizar se queda con el
+    // RESPALDO, que es justo lo que Elena vio con el Pets Purest.
+    [especiesExcluidas, alimentosDelMotor]
   );
   // ⚠️ PERSONALIZAR ELIGE DENTRO DEL MODO QUE SE ACABA DE ELEGIR (18 de
   // septiembre de 2026, noche). El selector de «cambiar a» de un menú ya hecho

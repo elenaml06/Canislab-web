@@ -117,3 +117,58 @@ test.describe("los suplementos de Personalizar salen del motor", () => {
       `vocabulario.js`).toBeVisible();
   });
 });
+
+// ─── Y LA OTRA PANTALLA, QUE ES LA QUE ELENA NOMBRÓ ──────────────────────────
+//
+// ⚠️ ESTA MITAD SE AÑADIÓ AL FUSIONAR (19 de septiembre de 2026), leyendo el
+// arreglo antes de meterlo. `useAlimentos()` obliga a repintar -- eso es
+// correcto y necesario -- pero en la pantalla de Personalizar el árbol no se
+// calcula al pintar: sale de
+//
+//     const categoriasDisponibles = useMemo(
+//       () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
+//       [especiesExcluidas]);
+//
+// y un `useMemo` cuyas dependencias no han cambiado **devuelve el valor viejo
+// aunque el componente se vuelva a pintar**. O sea que repintar no basta ahí:
+// el árbol seguiría siendo el del respaldo.
+//
+// Las dos pantallas no se ven igual desde fuera, así que hacen falta las dos
+// pruebas. La de arriba mira «Añadir suplemento» dentro del menú ya hecho, que
+// es donde `SelectorAlimentos` cae a `CATEGORIAS_ALIMENTO` y se recalcula al
+// pintar. Ésta mira la pantalla donde se eligen los alimentos ANTES de generar,
+// que es la que va por el memo.
+const CARNE_INVENTADA = "Zzyrax Solomillo de Quimera";
+
+test.describe("el catálogo de Personalizar sale del motor", () => {
+  test("el alimento que sirve el motor se puede elegir, aunque llegue tarde",
+    async ({ page, request }) => {
+      const sembrado = JSON.parse(JSON.stringify(CATALOGO_SEMBRADO));
+      sembrado.pantallas[0].grupos = {
+        Quimera: [{ nombre: CARNE_INVENTADA, kcal_100g: 120,
+                    categoria_del_motor: "Carne muscular" }],
+      };
+      await configurarBackend(request, { premium: true, catalogo: sembrado });
+      await elMotorContestaTarde(page);
+      await page.goto("/");
+      await page.getByPlaceholder("Email").fill(CUENTA_DE_PRUEBA.email);
+      await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
+      await page.getByRole("button", { name: "Entrar" }).click();
+      await irAlGenerador(page);
+      // «Personalizar» está deshabilitado hasta contestar de qué viene el perro.
+      await page.getByRole("button", { name: "Pienso" }).click();
+      await page.getByRole("button", { name: /^Personalizar/ }).click();
+      await page.getByRole("button", { name: /Elegir los ingredientes/i }).click();
+      // Y se pone la categoría en «Manual», que es lo que abre la lista de
+      // alimentos elegibles. Sin esto la pantalla solo enseña los ocho títulos.
+      await page.getByRole("button", { name: "Carne muscular: elijo yo" }).click();
+      await page.getByRole("button", { name: "Carne muscular: elegir alimento" }).click();
+
+      await expect(page.getByText(CARNE_INVENTADA),
+        `«${CARNE_INVENTADA}» lo sirve el motor en /alimentos y no se puede elegir en ` +
+        `Personalizar. Repintar no basta aquí: «categoriasDisponibles» es un useMemo cuyas ` +
+        `dependencias no cambian cuando llega la lista, así que devuelve el árbol del ` +
+        `RESPALDO aunque el componente se vuelva a pintar`)
+        .toBeVisible({ timeout: 15_000 });
+    });
+});

@@ -121,8 +121,27 @@ export function olvidarAlimentos() { _pedidoAlimentos = null }
 // El vocabulario no tenía este problema porque `useVocabulario` SÍ es estado.
 // Esto es su hermano para los alimentos: no devuelve nada, solo obliga a
 // repintar cuando la lista llega.
+// ⚠️ Y DEVUELVE UN NÚMERO, QUE NO ES DECORACIÓN (19 de septiembre de 2026).
+// La primera versión de esto no devolvía nada: solo forzaba a repintar. Con
+// eso basta donde el árbol se calcula AL PINTAR (`SelectorAlimentos` cae a
+// `CATEGORIAS_ALIMENTO` cuando no le pasan lista), y **no basta** donde sale de
+// un `useMemo`:
+//
+//     const categoriasDisponibles = useMemo(
+//       () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
+//       [especiesExcluidas]);
+//
+// Un `useMemo` cuyas dependencias no han cambiado devuelve el valor viejo
+// aunque el componente se vuelva a pintar. Así que la pantalla de Personalizar
+// -- que es la que Elena nombró -- seguía enseñando el RESPALDO.
+//
+// Lo cazó `tests/suplementos-del-motor.spec.js` con una carne inventada: la
+// prueba de «Añadir suplemento» pasaba y ésta no, y las dos pantallas se ven
+// exactamente igual desde fuera. Por eso son dos pruebas y no una.
+//
+// El número sube cuando la lista llega, y va en las dependencias del memo.
 export function useAlimentos() {
-  const [, setLlego] = useState(0)
+  const [llego, setLlego] = useState(0)
   useEffect(() => {
     let vivo = true
     // Las funciones de `_alLlegarAlimentos` se registraron antes que este
@@ -130,6 +149,7 @@ export function useAlimentos() {
     pedirAlimentos().then(() => { if (vivo) setLlego((n) => n + 1) })
     return () => { vivo = false }
   }, [])
+  return llego
 }
 
 export function useVocabulario() {
