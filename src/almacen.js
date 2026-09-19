@@ -407,6 +407,12 @@ export async function migrarLocalACuenta(userId) {
       // día entero de calorías -- comiendo de más, en silencio, justo en el
       // salto. Lo cazó `tests/sin-cuenta.spec.js` el día que se añadió el campo.
       premiosNivel: p.premios_nivel,
+      // ⚠️ Y CUÁLES son, que es otro campo y se pierde en el mismo sitio: sin
+      // esta línea, quien declaró «60 g de pavo» sin cuenta y luego se registra
+      // sube con la declaración vacía, y esos gramos dejan de estar en el plato
+      // -- el dueño cree que los ha dicho y el motor formula sin ellos.
+      premiosDeclarados: (p.premios_declarados && typeof p.premios_declarados === 'object')
+        ? p.premios_declarados : {},
       // ⚠️ Mismo motivo que la de arriba, y el mismo sitio donde se pierde: sin
       // esta línea, quien contestó «sin hidratos» sin cuenta y luego se
       // registra vuelve con la pregunta a null, y el motor puede meterle arroz

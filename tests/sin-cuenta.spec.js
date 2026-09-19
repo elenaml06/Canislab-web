@@ -68,6 +68,7 @@ const PERRO_LOCAL = {
   // El extremo, no el primero de la lista: `ninguno` se parece demasiado al
   // vacío y la prueba pasaría aunque el campo se perdiera en el salto.
   premios_nivel: "mas_del_maximo",
+  premios_declarados: { "Pavo pechuga sin piel": 60, "Zanahoria": 15 },
   con_hidratos: false,
 };
 
@@ -96,6 +97,7 @@ const CAMPOS = [
   ["patologia_si",            "cambia los límites de seguridad"],
   ["patologias",              "cambia los límites de seguridad"],
   ["premios_nivel",           "lo que come fuera de la ración cambia cuánta comida le toca"],
+  ["premios_declarados",      "CUÁLES son: lo declarado entra en el plato como gramos fijos. Si se pierde justo en este salto, el dueño cree que lo ha dicho y el motor formula sin ello"],
   ["con_hidratos",            "quien contestó «sin hidratos» sin cuenta tiene que seguir sin ellos después de registrarse"],
 ];
 

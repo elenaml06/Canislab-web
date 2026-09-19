@@ -940,6 +940,87 @@ function preguntaDePremios(vocab, modo) {
   return vocab?.premios?.pregunta?.[modo] || PREGUNTA_PREMIOS_RESPALDO[modo];
 }
 
+// ─── Y CUÁLES SON, QUE ES OTRA PREGUNTA ──────────────────────────────────────
+//
+// ⚠️ PEDIDO EXPRESO (Elena, 19 de septiembre de 2026): «ADEMÁS no me pregunta
+// qué tipo de premios le das. Que dijimos que tenía que preguntarlo». Y lo
+// había dicho antes, el 16 de septiembre: «tiene que haber una parte en la que
+// elija lo que le da y se meta en el plato».
+//
+// EL MOTOR YA SABÍA HACERLO y la app no se lo pedía nunca: `premios_declarados`
+// ({nombre: gramos}) existe en `/menu/v2` desde el 16 de septiembre, con su
+// justificación escrita -- es literalmente lo que hace el formulador de Sean
+// Delaney, coeditor de Fascetti & Delaney: «Some of these can be selected as
+// "Treats & Enticers" when creating a recipe (...) no more than 10% of daily
+// calories IF NOT CALLED FOR AND ACCOUNTED FOR SPECIFICALLY IN THE RECIPE».
+// Declarado = está en la receta. Regla 6 por la mitad que no se ve: el motor
+// sirve y nadie usa.
+//
+// LA DIFERENCIA, Y ES LA QUE HAY QUE CONTARLE AL DUEÑO: un premio SIN declarar
+// son kcal a ciegas, así que el motor formula la ración con las que quedan y le
+// sigue exigiendo el día entero de nutrientes (dilución). Un premio DECLARADO
+// entra en el plato como gramos fijos: sus nutrientes cuentan, y no hace falta
+// apretar nada. Los dos conviven -- «le doy 60 g de pavo y alguna galleta».
+//
+// ⚠️ SOLO ALIMENTOS DEL CATÁLOGO, y lo impone el motor: de una ficha sabemos su
+// composición y la rehace un auditor contra su fuente. Un nombre que no está se
+// DICE (`premios_que_no_conocemos`), no se ignora.
+const DECLARAR_PREMIOS_RESPALDO = {
+  dueno: {
+    pregunta: "¿Nos dices cuáles le das?",
+    detalle: "Lo que nos digas entra en el plato y deja de ser una estimación: "
+             + "contamos sus nutrientes de verdad. Lo que no nos digas sigue contando "
+             + "como calorías de más, que es el lado seguro.",
+    boton: "Añadir un premio",
+    unidad: "g al día",
+  },
+  veterinario: {
+    pregunta: "Aporte extraración DECLARADO",
+    detalle: "Entra en la ración como gramos fijos: sus nutrientes cuentan dentro de los "
+             + "43 requisitos y no se escala ningún mínimo. Lo no declarado sigue "
+             + "tratándose como dilución.",
+    boton: "Añadir alimento",
+    unidad: "g/día",
+  },
+};
+
+// ⚠️ Y SOLO POR ENCIMA DEL TECHO, que es lo que se decidió y lo que hace el
+// motor (Elena, 19 de septiembre de 2026: «habíamos dicho que si son más del
+// 10 %, ¿no? Que si son menos del 10 %, los ignoramos»).
+//
+// El motor solo cambia de comportamiento cuando
+// `kcal_premios / DER > FRACCION_MAXIMA_DE_PREMIOS` Y no se ha declarado nada:
+// ahí recorta la escalera y contesta «dinos QUÉ le das». Por debajo del techo
+// los cuenta como fracción y formula igual, así que preguntarle cuáles a quien
+// da «alguna galleta» es una pregunta que no cambia nada y una pantalla más
+// larga.
+//
+// ⚠️ EL 10 % NO SE ESCRIBE AQUÍ: sale de `techo_recomendado_pct` y del
+// `pct_del_dia` de cada nivel, que los sirve el motor (regla 6). El día que la
+// fuente mueva ese techo, la pregunta se mueve con él sin tocar la app.
+function hayQueDeclararLosPremios(vocab, nivel) {
+  if (!nivel || nivel === "ninguno") return false;
+  const techo = Number(vocab?.premios?.techo_recomendado_pct);
+  const suyo = nivelesDePremios(vocab, "dueno").find((n) => n.clave === nivel);
+  const pct = Number(suyo?.pct);
+  // Sin vocabulario (Render dormido) se cae al respaldo: la última respuesta es
+  // la que pasa del techo, y es la única que hoy lo pasa.
+  if (!Number.isFinite(techo) || !Number.isFinite(pct)) return nivel === "mas_del_maximo";
+  return pct > techo;
+}
+
+function textosDeDeclararPremios(vocab, modo) {
+  const respaldo = DECLARAR_PREMIOS_RESPALDO[modo] || DECLARAR_PREMIOS_RESPALDO.dueno;
+  const servido = vocab?.premios?.declarar?.[modo];
+  if (!servido) return respaldo;
+  return {
+    pregunta: servido.pregunta || respaldo.pregunta,
+    detalle: servido.detalle || respaldo.detalle,
+    boton: servido.boton || respaldo.boton,
+    unidad: servido.unidad || respaldo.unidad,
+  };
+}
+
 // ─── LA PREGUNTA DE LOS HIDRATOS ─────────────────────────────────────────────
 //
 // ⚠️ TRES ESTADOS Y NO DOS, y el tercero es el que importa (17 de septiembre de
@@ -3078,6 +3159,11 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           der_objetivo: menu.kcal,
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
+          // ⚠️ VA EN LOS CINCO CUERPOS, igual que `patologias` y que
+          // `modo_de_preparacion`: un camino que se lo olvide formula la ración
+          // como si esos gramos no estuvieran en el plato, sin dar error.
+          premios_declarados: (perfil?.premiosDeclarados
+            && Object.keys(perfil.premiosDeclarados).length) ? perfil.premiosDeclarados : null,
           con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
           // ⚠️ EL MODO ES EL DEL MENÚ QUE SE ESTÁ EDITANDO, NO EL DEL BOTÓN.
           // Lo dice el propio motor: «uno generado crudo y editado en cocinado
@@ -5598,6 +5684,11 @@ function perfilDesdeSupabase(p) {
     // vuelve como null y la pantalla vuelve a preguntarlo -- que es lo correcto:
     // mejor preguntar otra vez que dar por hecho que no le da ninguno.
     premiosNivel: p.premios_nivel ?? null,
+    // ⚠️ SIEMPRE UN OBJETO, nunca null: medio archivo hace
+    // `Object.entries(perfil.premiosDeclarados)` y con null revienta. Y una
+    // fila vieja (o la columna todavía sin crear) vuelve sin él.
+    premiosDeclarados: (p.premios_declarados && typeof p.premios_declarados === "object")
+      ? p.premios_declarados : {},
     // Igual que los premios: si la columna todavía no existe en Supabase vuelve
     // null, y la pantalla lo vuelve a preguntar. Mejor preguntar otra vez que
     // dar por contestado un «no» que el dueño no ha dicho.
@@ -5745,6 +5836,11 @@ function cuerpoApiDeUnPerro(perfil, modoDePreparacion = "crudo") {
     der_objetivo: d.derReal,
     actividad: claveDeActividad(perfil),
     premios_nivel: perfil?.premiosNivel || null,
+          // ⚠️ VA EN LOS CINCO CUERPOS, igual que `patologias` y que
+          // `modo_de_preparacion`: un camino que se lo olvide formula la ración
+          // como si esos gramos no estuvieran en el plato, sin dar error.
+          premios_declarados: (perfil?.premiosDeclarados
+            && Object.keys(perfil.premiosDeclarados).length) ? perfil.premiosDeclarados : null,
     con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
     // El modo lo elige la pantalla y es el MISMO para toda la casa: en una
     // cocina no se hierve para uno y se da crudo al otro — y si alguna vez
@@ -6116,6 +6212,10 @@ function RawkuOnboardingInterna({
       // un «no le doy premios» que no ha dicho. Con null, la pantalla no deja
       // continuar hasta que elige.
       premiosNivel: null,
+      // ⚠️ CUÁLES son, no cuántos: {nombre del catálogo: gramos al día}. Lo
+      // declarado entra en el plato; lo no declarado sigue contando como kcal
+      // a ciegas. Ver `PremiosDeclarados` y `premios_declarados` del motor.
+      premiosDeclarados: {},
       // ⚠️ null Y NO "no" (17 de septiembre de 2026). La pregunta de los
       // hidratos tiene TRES estados en el motor y el tercero es «no ha
       // contestado», que NO es lo mismo que «no quiero»: sin contestar, el
@@ -8961,6 +9061,11 @@ function RawkuOnboardingInterna({
       der_objetivo: derReal,                       // el DER de AHORA
       actividad: claveDeActividad(perfil),
       premios_nivel: perfil?.premiosNivel || null,
+          // ⚠️ VA EN LOS CINCO CUERPOS, igual que `patologias` y que
+          // `modo_de_preparacion`: un camino que se lo olvide formula la ración
+          // como si esos gramos no estuvieran en el plato, sin dar error.
+          premios_declarados: (perfil?.premiosDeclarados
+            && Object.keys(perfil.premiosDeclarados).length) ? perfil.premiosDeclarados : null,
       con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
       // Igual que al editar: el menú guardado trae el suyo. Revalidar uno
       // cocinado con el botón en crudo lo reharía con hueso.
@@ -9128,6 +9233,11 @@ function RawkuOnboardingInterna({
           der_objetivo: derReal,
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
+          // ⚠️ VA EN LOS CINCO CUERPOS, igual que `patologias` y que
+          // `modo_de_preparacion`: un camino que se lo olvide formula la ración
+          // como si esos gramos no estuvieran en el plato, sin dar error.
+          premios_declarados: (perfil?.premiosDeclarados
+            && Object.keys(perfil.premiosDeclarados).length) ? perfil.premiosDeclarados : null,
           con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
           modo_de_preparacion: modoPreparacionElegido,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
@@ -9228,6 +9338,11 @@ function RawkuOnboardingInterna({
             der_objetivo: derReal,
             actividad: claveDeActividad(perfil),
             premios_nivel: perfil?.premiosNivel || null,
+          // ⚠️ VA EN LOS CINCO CUERPOS, igual que `patologias` y que
+          // `modo_de_preparacion`: un camino que se lo olvide formula la ración
+          // como si esos gramos no estuvieran en el plato, sin dar error.
+          premios_declarados: (perfil?.premiosDeclarados
+            && Object.keys(perfil.premiosDeclarados).length) ? perfil.premiosDeclarados : null,
             con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
             modo_de_preparacion: modoPreparacionElegido,
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
@@ -9932,6 +10047,24 @@ function RawkuOnboardingInterna({
                 );
               })}
             </div>
+            {/* Lo declarado entra en la ración como gramos fijos: no se escala
+                ningún mínimo, porque no queda parte del día a ciegas. */}
+            {hayQueDeclararLosPremios(vocab, perfil.premiosNivel) && (
+              <div className="mt-3">
+                <p className="text-[11px] tracking-[0.12em] uppercase mb-1"
+                   style={{ color: MALVA, fontFamily: "monospace" }}>
+                  {textosDeDeclararPremios(vocab, "veterinario").pregunta}
+                </p>
+                <PremiosDeclarados
+                  declarados={perfil.premiosDeclarados}
+                  onCambiar={(v) => set("premiosDeclarados", v)}
+                  categorias={categoriasParaPersonalizar}
+                  vocab={vocab}
+                  registro="veterinario"
+                  estadoAbierto={categoriaAbierta}
+                  setEstadoAbierto={setCategoriaAbierta} />
+              </div>
+            )}
           </BloqueFicha>
 
           <BloqueFicha titulo="Alergias alimentarias confirmadas">
@@ -10660,6 +10793,30 @@ function RawkuOnboardingInterna({
               );
             })}
           </div>
+
+          {/* ⚠️ Y CUÁLES SON (19 de septiembre de 2026). Pedido expreso: «no me
+              pregunta qué tipo de premios le das». El motor lo acepta desde el
+              16 -- `premios_declarados` -- y la app no se lo mandaba nunca.
+
+              Sale solo si ha dicho que le da alguno: preguntarle cuáles a quien
+              ha contestado «ninguno» es una pregunta sin respuesta posible.
+
+              Y NO es obligatorio: quien no sepa los gramos deja la pregunta en
+              blanco y el motor sigue contándolos a ciegas, que es el lado
+              seguro. Obligarlo dejaría fuera a quien da «alguna galleta». */}
+          {hayQueDeclararLosPremios(vocab, perfil.premiosNivel) && (
+            <div className="mb-2">
+              <Etiqueta>{textosDeDeclararPremios(vocab, "dueno").pregunta}</Etiqueta>
+              <PremiosDeclarados
+                declarados={perfil.premiosDeclarados}
+                onCambiar={(v) => set("premiosDeclarados", v)}
+                categorias={categoriasParaPersonalizar}
+                vocab={vocab}
+                registro="dueno"
+                estadoAbierto={categoriaAbierta}
+                setEstadoAbierto={setCategoriaAbierta} />
+            </div>
+          )}
 
           <div className="flex-1" />
             <BotonContinuar activo={puedeContinuar} onClick={siguiente} />
@@ -13412,6 +13569,78 @@ function SiNoToggle({ valor, onChange }) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// ─── LOS PREMIOS, UNO A UNO Y CON SUS GRAMOS ─────────────────────────────────
+//
+// Reusa `SelectorAlimentos` para ELEGIR (con su árbol del motor, sus alergias
+// ya quitadas y su búsqueda sin tildes) y le pone al lado lo único que no
+// tiene: los gramos. Se le pasa `lista={[]}` a propósito -- las fichas de lo
+// ya elegido se pintan aquí arriba, porque llevan un campo de gramos dentro y
+// las suyas no.
+//
+// ⚠️ SIN GRAMOS NO SE MANDA. Un premio declarado con 0 g no es un premio
+// declarado: sería un alimento en la receta que no aporta nada, y el motor lo
+// descarta igual (`if g > 0`). Se queda en la lista, en gris, hasta que tenga
+// un número -- callarlo sería decirle al dueño que lo hemos contado.
+function PremiosDeclarados({ declarados, onCambiar, categorias, vocab, registro = "dueno",
+                             estadoAbierto, setEstadoAbierto }) {
+  const t = textosDeDeclararPremios(vocab, registro);
+  const filas = Object.entries(declarados || {});
+  const poner = (nombre, gramos) => onCambiar({ ...(declarados || {}), [nombre]: gramos });
+  const quitar = (nombre) => {
+    const copia = { ...(declarados || {}) };
+    delete copia[nombre];
+    onCambiar(copia);
+  };
+  return (
+    <div className="mb-2">
+      <p className="text-xs mb-2 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+        {t.detalle}
+      </p>
+      {filas.length > 0 && (
+        <div className="flex flex-col gap-2 mb-3">
+          {filas.map(([nombre, gramos]) => {
+            const sinGramos = !(Number(gramos) > 0);
+            return (
+              <div key={nombre} className="flex items-center gap-2 px-3 py-2 rounded-xl"
+                   style={{ background: "#FFFFFF", border: `1.5px solid ${sinGramos ? "#F5DFA8" : "#E3DAF0"}` }}>
+                <span className="flex-1 text-sm" style={{ color: TINTA, fontFamily: fontBody }}>{nombre}</span>
+                <input
+                  type="number" inputMode="decimal" min="0" step="1"
+                  value={gramos === 0 || gramos ? gramos : ""}
+                  onChange={(e) => poner(nombre, e.target.value === "" ? "" : Number(e.target.value))}
+                  aria-label={`Gramos de ${nombre}`}
+                  className="w-20 text-right px-2 py-1 rounded-lg text-sm"
+                  style={{ color: TINTA, fontFamily: fontBody, border: "1.5px solid #E3DAF0" }} />
+                <span className="text-[11px]" style={{ color: MALVA, fontFamily: fontBody }}>{t.unidad}</span>
+                <button onClick={() => quitar(nombre)} aria-label={`Quitar ${nombre}`}
+                        style={{ background: "transparent", border: "none", cursor: "pointer" }}>
+                  <X size={14} style={{ color: MALVA }} />
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <SelectorAlimentos
+        lista={[]}
+        onAnadir={({ alimento }) => {
+          // «Todo: <especie>» no es un alimento: el motor necesita una ficha
+          // concreta para saber qué lleva dentro. Se ignora en vez de mandarlo
+          // y que vuelva en `premios_que_no_conocemos`.
+          if (!alimento || alimento.startsWith("Todo: ")) return;
+          if (!(alimento in (declarados || {}))) poner(alimento, "");
+          setEstadoAbierto(null);
+        }}
+        onQuitar={() => {}}
+        idGrupo="premios-declarados"
+        estadoAbierto={estadoAbierto}
+        setEstadoAbierto={setEstadoAbierto}
+        categorias={categorias}
+      />
     </div>
   );
 }

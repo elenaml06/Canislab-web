@@ -264,7 +264,19 @@ test.describe("todos los tipos de perro obtienen menú, con el motor de verdad",
     });
   }
 
-  test(`dueño · ${PREMIOS_SIN_DECIR_QUE_SON}: se le pide decir QUÉ le da, y declararlo funciona`,
+  // ⚠️ ESTA PRUEBA SE LLAMABA «y declararlo funciona» Y NO LO PROBABA (19 de
+  // septiembre de 2026). Su segunda mitad le preguntaba A LA API directamente,
+  // con un cuerpo escrito aquí, así que lo que demostraba es que el MOTOR sabe
+  // recibir `premios_declarados` -- no que la app sepa mandarlo. Y la app NO
+  // sabía: no existía ninguna pantalla para declarar un premio.
+  //
+  // O sea: un verde con un nombre que prometía una función que no existía. Es
+  // exactamente lo que este repo tiene escrito que no puede pasar -- «un test
+  // que pasa con el fallo puesto no sirve» -- y encima en su forma más cara,
+  // porque se reportó como prueba de que la salida al dueño funcionaba.
+  //
+  // Ahora la segunda mitad va POR LA APP, como la primera.
+  test(`dueño · ${PREMIOS_SIN_DECIR_QUE_SON}: se le pide decir QUÉ le da, y declarándolo desde la app sale`,
        async ({ page, request }) => {
     test.setTimeout(RELOJ_POR_MENU + 60_000);
     const perro = PERROS.find((p) => p[0] === PREMIOS_SIN_DECIR_QUE_SON);
@@ -282,8 +294,23 @@ test.describe("todos los tipos de perro obtienen menú, con el motor de verdad",
       `no se le ofrece DECIR qué le da, que es la salida que existe y la que no le ` +
       `cuesta nada`).toMatch(/qué le das|que le das/i);
 
-    // 2. Y la salida funciona: preguntándole al motor con el premio declarado,
-    //    el menú sale y lleva DENTRO los gramos que se han dicho.
+    // 2. Y LA SALIDA FUNCIONA DESDE LA APP. Se le da al perro la declaración
+    //    hecha -- que es lo que la ficha guarda cuando el dueño la contesta --
+    //    y se vuelve a generar por el mismo camino de antes. Si la app no
+    //    mandara `premios_declarados`, esto sale igual de rojo que arriba.
+    const r2 = await entrarYGenerar(
+      page, request,
+      { ...fichaDe(perro), premios_declarados: { "Corazón de pollo": 214.0 } });
+    expect(r2.ok,
+      `el dueño declara el premio en la ficha y la app SIGUE sin darle menú. O no manda ` +
+      `\`premios_declarados\`, o el motor no lo acepta: la salida que se le ofrece no existe. ` +
+      `${r2.motivo || ""}`)
+      .toBe(true);
+
+    // 3. Y lo que hace el motor con ese premio, preguntándoselo de frente: son
+    //    gramos FIJOS y van marcados como premio dentro del menú. Esto sí va
+    //    por la API a propósito -- es una afirmación sobre el MOTOR, y va
+    //    dicho en vez de disfrazarlo de prueba de la app.
     const cuerpo = {
       modo: "automatico", nombres_alimentos: [], forzar_presencia: [],
       der_objetivo: 1581.0, actividad: "normal",
