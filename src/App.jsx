@@ -10948,49 +10948,19 @@ function RawkuOnboardingInterna({
             )}
           </div>
 
-          {/* ⚠️ LA PREGUNTA DE LOS HIDRATOS (17 de septiembre de 2026). La pidió
-              Elena: «también tendría que haber una pregunta de si quieres que tu
-              menú, ya sea barf o comida cocinada, lleve hidratos o no».
+          {/* ⚠️ LA PREGUNTA DE LOS HIDRATOS YA NO ESTÁ AQUÍ (19 de septiembre de
+              2026). Estaba pegada a la del hueso porque las dos son «qué lleva
+              el plato», y eso dejaba un orden imposible: se preguntaba si quiere
+              hidratos ANTES de que hubiera dicho si la ración es cruda o
+              cocinada, que es lo que decide el catálogo entero.
 
-              Va aquí, pegada a la del hueso, porque las dos son la misma clase
-              de pregunta —qué lleva el plato— y una pantalla más es un paso más
-              que abandonar. El texto y las respuestas los sirve el motor.
+              Lo vio Elena: «cuando el usuario marca que quiere meter hidratos
+              [...] ¿debería ir un poco más adelante? O sea, después de preguntar
+              lo de BARF o cocinada, o en la misma pantalla».
 
-              ⚠️ Y NO LLEVA `SiNoToggle` a propósito: son TRES estados y el
-              tercero es «no ha contestado», que no es «no quiero». Un toggle de
-              dos obligaría a que uno de los dos fuera el valor por defecto, y
-              ese es justo el fallo que se quería evitar: con un «no» puesto por
-              omisión, un perro con pancreatitis se queda sin la ración que le
-              conviene y nadie se entera. Se puede seguir sin contestar. */}
-          <div className="mt-7">
-            <Etiqueta>
-              {vocab?.hidratos?.pregunta_dueno || PREGUNTA_HIDRATOS_RESPALDO}
-            </Etiqueta>
-            <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
-              Una ración cruda no los lleva y no le hacen falta a un perro sano. Si tiene algo que
-              le obligue a comer más ligero, los ponemos aunque no contestes.
-            </p>
-            <div className="grid grid-cols-1 gap-2">
-              {opcionesDeHidratos(vocab, "dueno").map((op) => {
-                const activo = perfil.conHidratos === op.clave;
-                return (
-                  <button key={op.clave}
-                    onClick={() => set("conHidratos", activo ? null : op.clave)}
-                    className="text-left px-4 py-3 rounded-2xl transition-all"
-                    style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
-                    <span className="block" style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{op.label}</span>
-                    <span className="block text-xs mt-0.5" style={{ color: activo ? "#F3E9FB" : MALVA, fontFamily: fontBody }}>{op.detalle}</span>
-                  </button>
-                );
-              })}
-            </div>
-            {perfil.conHidratos === "si" && (
-              <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
-                ⚠️ Van siempre cocidos, nunca crudos, y los gramos del menú son de producto ya
-                cocido: pésalos después de cocinarlos, no antes.
-              </p>
-            )}
-          </div>
+              Vive ahora junto a la de cruda/cocinada. El dato sigue siendo el
+              mismo campo del perro (`conHidratos`), así que se guarda y viaja
+              igual que antes. */}
 
           <div className="mt-7 mb-4">
             <Etiqueta>¿Tiene alguna patología diagnosticada?</Etiqueta>
@@ -12825,6 +12795,66 @@ function RawkuOnboardingInterna({
             </div>
           )}
           {modoPreparacionElegido !== "cocinado" && <div className="mb-2" />}
+
+          {/* ─── ¿CON HIDRATOS? ───────────────────────────────────────────
+              ⚠️ VA AQUÍ Y NO EN LA FICHA (19 de septiembre de 2026), y lo pidió
+              Elena: la pregunta es «qué lleva el plato», y el plato no existe
+              hasta que se ha dicho si es crudo o cocinado. Preguntándolo en la
+              ficha se contestaba a ciegas, y además en una pantalla que se
+              rellena una vez y no se vuelve a abrir -- mientras que el modo se
+              elige en CADA menú.
+
+              ⚠️ TRES ESTADOS Y NO DOS, que es lo que la hace servir: sin
+              contestar (no entran salvo que la patología los pida), «no» (no
+              entran nunca, ni con una patología que los pida) y «sí» (entran
+              aunque el perro no tenga nada). Con dos, «no he contestado» y «no
+              quiero» serían lo mismo. Por eso no lleva `SiNoToggle`: se puede
+              seguir sin tocarla, y volver a pulsar la elegida la desmarca.
+
+              El texto y las respuestas los sirve el motor (regla 6). */}
+          <p className="text-sm mb-1" style={{ color: TINTA, fontFamily: fontBody }}>
+            {vocab?.hidratos?.pregunta_dueno || PREGUNTA_HIDRATOS_RESPALDO}
+          </p>
+          <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
+            Una ración cruda no los lleva y no le hacen falta a un perro sano. Si tiene algo que
+            le obligue a comer más ligero, los ponemos aunque no contestes.
+          </p>
+          <div className="flex flex-col gap-2 mb-2">
+            {opcionesDeHidratos(vocab, "dueno").map((op) => {
+              const activo = perfil.conHidratos === op.clave;
+              return (
+                <button key={op.clave}
+                  onClick={() => setPerfil((p) => ({ ...p, conHidratos: activo ? null : op.clave }))}
+                  className="text-left rounded-xl p-4"
+                  style={{ background: activo ? "#F3EDFB" : "#FFFFFF",
+                           border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
+                  <p className="text-sm" style={{ color: TINTA, fontFamily: fontBody, fontWeight: activo ? 700 : 600 }}>
+                    {op.label}
+                  </p>
+                  {op.detalle && (
+                    <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                      {op.detalle}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {/* ⚠️ Y SE DICE QUE VAN COCIDOS, aunque la ración sea cruda -- que es
+              justo cuando hace falta: en un BARF todo lo demás va crudo, así que
+              quien vea «arroz» puede darlo tal cual. Y lo que más importa no es
+              eso sino la BASE: los gramos son de producto YA cocido. */}
+          {perfil.conHidratos === "si" && (
+            <div className="rounded-xl p-3 mb-6 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
+              <Info size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                El arroz, la patata, la avena y la quinoa van siempre cocidos, nunca crudos — también
+                en una ración cruda. Y los gramos del menú son de producto ya cocido: pésalos después
+                de cocinarlos, no antes.
+              </p>
+            </div>
+          )}
+          {perfil.conHidratos !== "si" && <div className="mb-4" />}
 
           {/* ─── QUÉ ES CADA UNA ───────────────────────────────────────────
               ⚠️ POR QUÉ ESTÁ AQUÍ (18 de septiembre de 2026). Elena:
