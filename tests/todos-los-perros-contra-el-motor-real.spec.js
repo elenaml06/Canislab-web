@@ -40,7 +40,10 @@
 // casos de cachorro de raza grande con premios tienen que ponerse rojos.
 
 import { test, expect } from "@playwright/test";
-import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { CUENTA_DE_PRUEBA } from "./fake-supabase.js";
+// ⚠️ La lista de perros vive aparte: la comparten esta prueba y la que corre
+// contra rawku.app desplegado. Ver `perros-de-la-matriz.js`.
+import { PERROS, fichaDe } from "./perros-de-la-matriz.js";
 import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54322";
@@ -65,26 +68,6 @@ const configurar = async (request, opciones) => {
 //     suelo reforzado de la nota b y el techo apretado de SACN5
 //   · con y sin premios, porque los premios suben los suelos y no los techos
 //   · las patologías que más aprietan, una por aparato
-const PERROS = [
-  // nombre                       etapa                  peso  raza                      tamano     nacimiento     premios
-  ["adulto mediano",              "adulto",              24.5, "Pastor Alemán",          "Grande",  "2021-05-14",  null],
-  ["adulto toy",                  "adulto",               1.8, "Chihuahua",              "Toy",     "2021-05-14",  null],
-  ["adulto gigante",              "adulto",              62.0, "Mastín Español",         "Gigante", "2021-05-14",  null],
-  ["senior",                      "adulto",              24.5, "Pastor Alemán",          "Grande",  "2015-05-14",  null],
-  ["cachorro joven",              "cachorro_joven",       4.0, "Pastor Alemán",          "Grande",  null,          null],
-  ["cachorro crecimiento",        "cachorro_crecimiento", 12.0, "Pastor Alemán",         "Grande",  null,          null],
-  ["gestante",                    "gestante_tardia",     22.0, "Pastor Alemán",          "Grande",  "2021-05-14",  null],
-  ["lactante",                    "lactante",            22.0, "Pastor Alemán",          "Grande",  "2021-05-14",  null],
-  // EL CASO DE CAIRO, con los cuatro niveles de premios
-  ["Cairo sin premios",           "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "ninguno"],
-  ["Cairo pocos premios",         "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "alguno"],
-  ["Cairo premios al máximo",     "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "hasta_el_maximo"],
-  ["Cairo más del máximo",        "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "mas_del_maximo"],
-  // y el adulto con premios, que es la otra mitad de la regla 3-bis
-  ["adulto con premios",          "adulto",              24.5, "Pastor Alemán",          "Grande",  "2021-05-14",  "mas_del_maximo"],
-  ["toy con premios",             "adulto",               1.8, "Chihuahua",              "Toy",     "2021-05-14",  "hastaـel_maximo".replace("ـ", "_")],
-];
-
 // ⚠️ QUÉ PATOLOGÍAS ENTRAN EN CADA ROL, Y **NO SE ESCRIBE AQUÍ** (13 de
 // septiembre). Elena, al ver la primera versión de esta prueba:
 //
@@ -124,24 +107,6 @@ async function patologiasPorQuienLaMarca(request) {
 // el reloj y no la nutrición -- que es el fallo que ya costó dos rondas en el
 // BLOQUE 43 y en el 75 del otro repo.
 const RELOJ_POR_MENU = 180_000;
-
-function fichaDe([nombre, etapa, peso, raza, tamano, nacimiento, premios], patologias = []) {
-  return {
-    ...PERRO_DE_PRUEBA,
-    nombre,
-    peso_actual: peso,
-    etapa,
-    tamano,
-    raza,
-    // Sin fecha, la app calcula la etapa desde `etapa`. Con ella, desde la edad
-    // -- que es lo que hace la app de verdad, así que se manda cuando la hay.
-    fecha_nacimiento: nacimiento,
-    premios_nivel: premios,
-    patologia_si: patologias.length ? "si" : "no",
-    patologias,
-    dieta_actual: "barf",
-  };
-}
 
 // El «ojo» del modo cocinado, leído DEL MOTOR y no copiado aquí: es la señal de
 // que el clic ha entrado, y si se copiase dejaría de servir el día que el motor
@@ -264,7 +229,19 @@ test.describe("todos los tipos de perro obtienen menú, con el motor de verdad",
     });
   }
 
-  test(`dueño · ${PREMIOS_SIN_DECIR_QUE_SON}: se le pide decir QUÉ le da, y declararlo funciona`,
+  // ⚠️ ESTA PRUEBA SE LLAMABA «y declararlo funciona» Y NO LO PROBABA (19 de
+  // septiembre de 2026). Su segunda mitad le preguntaba A LA API directamente,
+  // con un cuerpo escrito aquí, así que lo que demostraba es que el MOTOR sabe
+  // recibir `premios_declarados` -- no que la app sepa mandarlo. Y la app NO
+  // sabía: no existía ninguna pantalla para declarar un premio.
+  //
+  // O sea: un verde con un nombre que prometía una función que no existía. Es
+  // exactamente lo que este repo tiene escrito que no puede pasar -- «un test
+  // que pasa con el fallo puesto no sirve» -- y encima en su forma más cara,
+  // porque se reportó como prueba de que la salida al dueño funcionaba.
+  //
+  // Ahora la segunda mitad va POR LA APP, como la primera.
+  test(`dueño · ${PREMIOS_SIN_DECIR_QUE_SON}: se le pide decir QUÉ le da, y declarándolo desde la app sale`,
        async ({ page, request }) => {
     test.setTimeout(RELOJ_POR_MENU + 60_000);
     const perro = PERROS.find((p) => p[0] === PREMIOS_SIN_DECIR_QUE_SON);
@@ -282,8 +259,23 @@ test.describe("todos los tipos de perro obtienen menú, con el motor de verdad",
       `no se le ofrece DECIR qué le da, que es la salida que existe y la que no le ` +
       `cuesta nada`).toMatch(/qué le das|que le das/i);
 
-    // 2. Y la salida funciona: preguntándole al motor con el premio declarado,
-    //    el menú sale y lleva DENTRO los gramos que se han dicho.
+    // 2. Y LA SALIDA FUNCIONA DESDE LA APP. Se le da al perro la declaración
+    //    hecha -- que es lo que la ficha guarda cuando el dueño la contesta --
+    //    y se vuelve a generar por el mismo camino de antes. Si la app no
+    //    mandara `premios_declarados`, esto sale igual de rojo que arriba.
+    const r2 = await entrarYGenerar(
+      page, request,
+      { ...fichaDe(perro), premios_declarados: { "Corazón de pollo": 214.0 } });
+    expect(r2.ok,
+      `el dueño declara el premio en la ficha y la app SIGUE sin darle menú. O no manda ` +
+      `\`premios_declarados\`, o el motor no lo acepta: la salida que se le ofrece no existe. ` +
+      `${r2.motivo || ""}`)
+      .toBe(true);
+
+    // 3. Y lo que hace el motor con ese premio, preguntándoselo de frente: son
+    //    gramos FIJOS y van marcados como premio dentro del menú. Esto sí va
+    //    por la API a propósito -- es una afirmación sobre el MOTOR, y va
+    //    dicho en vez de disfrazarlo de prueba de la app.
     const cuerpo = {
       modo: "automatico", nombres_alimentos: [], forzar_presencia: [],
       der_objetivo: 1581.0, actividad: "normal",

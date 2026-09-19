@@ -360,6 +360,11 @@ export default function Formulador({
     //
     // Lo vigila `tests/formulador.spec.js`, comprobado con el fallo puesto.
     premios_nivel: perfil?.premiosNivel || null,
+    //   · `premios_declarados` — CUÁLES son. Lo declarado entra en la ración
+    //     como gramos fijos: sus nutrientes cuentan dentro de los 43 requisitos
+    //     y no se escala ningún mínimo, porque no queda parte del día a ciegas.
+    premios_declarados: (perfil?.premiosDeclarados
+      && Object.keys(perfil.premiosDeclarados).length) ? perfil.premiosDeclarados : null,
     //   · `con_hidratos` — la respuesta del dueño a si su menú puede llevar
     //     arroz, patata o avena. El motor la acepta en `/formular/*` desde el
     //     17 de septiembre de 2026 y aquí no viajaba, que es el MISMO hueco que

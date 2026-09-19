@@ -383,6 +383,9 @@ export function filaDePerro(userId, perfil, extras = {}) {
     // si se lo decimos -- y para deciselo en CADA peticion hay que guardarlo.
     // Sin esto, la ficha se contesta una vez y se olvida al recargar.
     premios_nivel: perfil.premiosNivel || null,
+    // CUÁLES son, no cuántos. Lo declarado entra en el plato como gramos fijos.
+    premios_declarados: (perfil.premiosDeclarados && Object.keys(perfil.premiosDeclarados).length)
+      ? perfil.premiosDeclarados : null,
     // ⚠️ La respuesta a «¿quieres hidratos?», con sus TRES estados. Se guarda
     // como booleano o null y NO como "si"/"no", porque null tiene que seguir
     // significando «no ha contestado» al releerla: con un "no" guardado por
@@ -451,7 +454,7 @@ export const esColumnaQueNoExiste = (error, columna) => {
 // Si falta el ALTER TABLE, se guarda la ficha sin ellas en vez de no guardarla.
 // ⚠️ El orden importa poco; lo que importa es que una columna nueva se añada
 // AQUI el mismo dia que a `filaDePerro`.
-const COLUMNAS_NUEVAS = ['peso_objetivo_kg', 'premios_nivel', 'con_hidratos']
+const COLUMNAS_NUEVAS = ['peso_objetivo_kg', 'premios_nivel', 'con_hidratos', 'premios_declarados']
 
 export async function guardarPerro(userId, perfil, extras = {}) {
   const payload = filaDePerro(userId, perfil, extras)

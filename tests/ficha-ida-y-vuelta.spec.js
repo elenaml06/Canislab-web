@@ -86,6 +86,12 @@ const FICHA_COMPLETA = {
   // es el extremo, y es el que cambia más la ración -- un 20 % de las kcal del
   // día formuladas con el día entero de nutrientes.
   premios_nivel: "mas_del_maximo",
+  // ⚠️ Y CUÁLES SON (19 de septiembre de 2026). `premios_nivel` dice CUÁNTO y
+  // esto dice QUÉ, y no es lo mismo: lo declarado entra en el plato como
+  // gramos fijos y sus nutrientes cuentan; lo no declarado son kcal a ciegas.
+  // Si se pierde al guardar, el dueño ve que ha declarado 60 g de pavo y el
+  // motor formula como si no existieran.
+  premios_declarados: { "Pavo pechuga sin piel": 60, "Zanahoria": 15 },
   con_hidratos: false,
 };
 
@@ -114,6 +120,7 @@ const CAMPOS = [
   ["patologia_si",            "cambia los límites de seguridad"],
   ["patologias",              "cambia los límites de seguridad"],
   ["premios_nivel",           "lo que come fuera de la ración diluye la ración: el motor la formula con las kcal que quedan y le exige igual el día entero de nutrientes"],
+  ["premios_declarados",      "CUÁLES son, no cuántos: lo declarado entra en el plato como gramos fijos y sus nutrientes cuentan dentro de los 43 requisitos. Perderlo formula como si esos gramos no estuvieran"],
   ["con_hidratos",            "es una respuesta de TRES estados: null es «no ha contestado» y false es «no quiero, ni aunque su enfermedad los pida». Si se pierde al guardar, el segundo se vuelve el primero y el motor le mete arroz"],
 ];
 
