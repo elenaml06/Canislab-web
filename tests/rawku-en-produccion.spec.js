@@ -71,7 +71,10 @@ const RELOJ_POR_MENU = 210_000;
 // de 20 o 30 segundos esperando a ver un menú en la pantalla». Se cuenta aparte
 // y se resume al final, porque con el túnel de por medio no se puede distinguir
 // de un corte de la máquina.
-const API = process.env.RAWKU_API || "https://canislab-api.onrender.com";
+// ⚠️ La URL a la que se reenvía NO se escribe aquí: es la que pidió el propio
+// navegador (`capturado.url`). Si mañana la app llama a otro endpoint, esta
+// prueba lo sigue sin enterarse de nada -- y preguntarle a `/menu/v2` cuando la
+// app fue a `/menu/semana` daría un veredicto sobre una pregunta que nadie hizo.
 const lentos = [];
 
 // ⚠️ NO EN MODO `serial`, y la primera versión sí lo estaba: en serie,
@@ -96,7 +99,19 @@ async function sembrarYAbrir(page, ficha) {
   await page.goto(SITIO, { waitUntil: "domcontentloaded", timeout: 120_000 });
 }
 
-async function generar(page, modo) {
+async function generar(page, modo, capturado) {
+  // ⚠️ SE GUARDA EL CUERPO QUE MANDA LA APP, y no es un detalle: cuando no sale
+  // menú hay que preguntarle a la API **lo mismo** que le preguntó el
+  // navegador. La primera versión de esto escribía el cuerpo a mano aquí, y con
+  // un cuerpo más fácil (sin `peso_adulto_esperado_kg`, sin premios) la API
+  // contestaba en 1,6 s -- así que la prueba acusaba a la app de no enseñar un
+  // menú que el motor nunca había calculado. Comparar dos preguntas distintas
+  // no es comparar.
+  page.on("request", (r) => {
+    if (!/\/menu\//.test(r.url())) return;
+    try { capturado.cuerpo = JSON.parse(r.postData() || "null"); } catch { /* nada */ }
+    capturado.url = r.url();
+  });
   // Por el mismo camino que la matriz local, que es el que hace una persona:
   // Menú -> Mis menús -> Hacer otro menú. Reutilizado a propósito -- si la app
   // cambia esa navegación, las dos pruebas se enteran a la vez.
@@ -129,8 +144,9 @@ for (const modo of ["crudo", "cocinado"]) {
           if (m.type() === "error") errores.push(m.text().slice(0, 200));
         });
         await sembrarYAbrir(page, fichaDe(perro));
+        const capturado = {};
         const t0 = Date.now();
-        const r = await generar(page, modo);
+        const r = await generar(page, modo, capturado);
         const tardo = ((Date.now() - t0) / 1000).toFixed(1);
         // ⚠️ SE DICE CUÁNTO TARDA SIEMPRE, salga o no salga. Elena: «no te
         // puedes tirar más de 20 o 30 segundos esperando a ver un menú en la
@@ -141,9 +157,13 @@ for (const modo of ["crudo", "cocinado"]) {
 
         // No ha salido. Antes de acusar a nadie, se le pregunta a la API desde
         // Node -- ver el comentario de `RELOJ_POR_MENU`.
+        expect(capturado.cuerpo,
+          `«${perro[0]}» (${modo}) no sale menú y la app NO ha llegado a pedir ninguno. ` +
+          `El fallo está antes del motor: en la ficha, en la navegación o en el despliegue`)
+          .toBeTruthy();
         const t1 = Date.now();
-        const res = await request.post(`${API}/menu/v2`, {
-          data: cuerpoDeMenu(perro, modo), timeout: 200_000,
+        const res = await request.post(capturado.url, {
+          data: capturado.cuerpo, timeout: 200_000,
         });
         const j = await res.json().catch(() => ({}));
         const tardoApi = ((Date.now() - t1) / 1000).toFixed(1);
@@ -175,22 +195,5 @@ test.afterAll(() => {
               "   esperando a ver un menú en la pantalla».\n");
 });
 
-// El cuerpo que manda la app, para poder preguntarle a la API lo mismo que le
-// pidió el navegador. No es una copia de la ficha: son los pocos campos que
-// deciden si hay menú.
-function cuerpoDeMenu(perro, modo) {
-  const [, etapa, peso, , tamano, , premios] = perro;
-  const ETAPAS = {
-    adulto: "Adulto", cachorro_joven: "CachorroJoven",
-    cachorro_crecimiento: "CachorroCrecimiento", gestante_tardia: "Gestante",
-    lactante: "Lactante", senior: "Adulto",
-  };
-  return {
-    modo: "automatico", nombres_alimentos: [], forzar_presencia: [],
-    der_objetivo: Math.round(110 * Math.pow(peso, 0.75)),
-    actividad: "normal", etapa_requisitos: ETAPAS[etapa] || "Adulto",
-    especies_excluidas: [], nombres_excluidos: [], peso_perro_kg: peso,
-    patologias: [], categorias_excluidas: [], tamano,
-    premios_nivel: premios || null, modo_de_preparacion: modo,
-  };
-}
+// ⚠️ AQUÍ HABÍA UN CUERPO ESCRITO A MANO y se ha ido a propósito: lo que se
+// reenvía a la API es **el que capturó el navegador**. Ver `generar()`.
