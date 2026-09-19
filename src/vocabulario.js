@@ -45,18 +45,50 @@ export function alLlegarVocabulario(fn) {
   if (_pedido) _pedido.then((v) => { if (v) fn(v) })
 }
 
+// ⚠️ UNA PETICIÓN QUE FALLA NO SE CACHEA (19 de septiembre de 2026), Y ESTO ES
+// UN FALLO DE PRODUCCIÓN ENCONTRADO ABRIENDO rawku.app CON UN NAVEGADOR DE
+// VERDAD. En la consola, nada más cargar:
+//
+//     Access to fetch at 'https://canislab-api.onrender.com/alimentos' from
+//     origin 'https://rawku.app' has been blocked by CORS policy
+//
+// Y el CORS está BIEN: comprobado contra la API desplegada, devuelve
+// `access-control-allow-origin: https://rawku.app` y nada para un origen
+// desconocido. Lo que pasaba es que **Render estaba dormido**: la primera
+// petición se la come su borde sin cabeceras y el navegador lo cuenta como
+// CORS.
+//
+// Lo grave no es eso, es lo de después: la promesa se guardaba **también
+// cuando fallaba**, así que la app se quedaba con el RESPALDO durante TODA la
+// sesión, sin reintentar jamás. Render tarda ~30-60 s en despertar, o sea que
+// le pasa a la primera visita después de cada rato sin uso.
+//
+// Es la otra mitad de «NO VEO EL PETS PUREST EN OMEGA 3»: el arreglo del 15 de
+// septiembre hace repintar cuando la lista LLEGA, y aquí no llegaba nunca.
+//
+// ⚠️ Y no hay riesgo de tormenta: quien pide esto son los `useVocabulario` /
+// `useAlimentos` al montarse, que son unos pocos por pantalla. No es un bucle.
+function _cacheaSoloSiLlega(hacerla, guardar) {
+  return hacerla().then(
+    (v) => { if (v == null) guardar(null); return v },
+    (e) => { guardar(null); return null },
+  )
+}
+
 export function pedirVocabulario() {
   if (!_pedido) {
-    _pedido = fetchConTimeout(`${API_BASE}/vocabulario`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((v) => {
-        // Cada suscriptor por separado: si uno revienta, los demás siguen.
-        // Un fallo instalando las razas no puede dejar sin etiquetas a la
-        // pantalla de actividad.
-        if (v) for (const fn of _alLlegar) { try { fn(v) } catch { /* nada */ } }
-        return v
-      })
-      .catch(() => null)
+    _pedido = _cacheaSoloSiLlega(
+      () => fetchConTimeout(`${API_BASE}/vocabulario`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((v) => {
+          // Cada suscriptor por separado: si uno revienta, los demás siguen.
+          // Un fallo instalando las razas no puede dejar sin etiquetas a la
+          // pantalla de actividad.
+          if (v) for (const fn of _alLlegar) { try { fn(v) } catch { /* nada */ } }
+          return v
+        }),
+      (x) => { _pedido = x },
+    )
   }
   return _pedido
 }
@@ -86,13 +118,17 @@ export function alLlegarAlimentos(fn) {
 
 export function pedirAlimentos() {
   if (!_pedidoAlimentos) {
-    _pedidoAlimentos = fetchConTimeout(`${API_BASE}/alimentos`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((v) => {
-        if (v) for (const fn of _alLlegarAlimentos) { try { fn(v) } catch { /* nada */ } }
-        return v
-      })
-      .catch(() => null)
+    // Mismo motivo que arriba: si falla no se cachea, o Render dormido deja a
+    // la app con el respaldo para toda la sesión. Ver `_cacheaSoloSiLlega`.
+    _pedidoAlimentos = _cacheaSoloSiLlega(
+      () => fetchConTimeout(`${API_BASE}/alimentos`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((v) => {
+          if (v) for (const fn of _alLlegarAlimentos) { try { fn(v) } catch { /* nada */ } }
+          return v
+        }),
+      (x) => { _pedidoAlimentos = x },
+    )
   }
   return _pedidoAlimentos
 }
