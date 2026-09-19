@@ -39,7 +39,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout, tiempoParaVariosMenus } from "./api.js";
-import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS, MODOS_DE_PREPARACION_RESPALDO, opcionesDeModoDePreparacion, modoDePreparacionPorOmision, avisoDeModoCocinado, nombreDelModo, tramosDeTransicion, ojoDeLaTransicion } from "./vocabulario.js";
+import { useVocabulario, useAlimentos, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS, MODOS_DE_PREPARACION_RESPALDO, opcionesDeModoDePreparacion, modoDePreparacionPorOmision, avisoDeModoCocinado, nombreDelModo, tramosDeTransicion, ojoDeLaTransicion } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
@@ -2654,6 +2654,11 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // camino que se olvide de pasarlo enseña la vista de tutor -- que es el
   // lado seguro del error.
   enModoProfesional = false }) {
+  // ⚠️ Esta vista pinta `CATEGORIAS_ALIMENTO` (el editor de alimentos y la
+  // lista de suplementos). Sin esto se queda con el RESPALDO para siempre:
+  // la lista del motor llega después de pintar y reasignar una variable de
+  // módulo no repinta nada. Ver `useAlimentos` en vocabulario.js.
+  const alimentosDelMotor = useAlimentos();
   const [tabActiva, setTabActiva] = useState(menus[0].id);
   // ⚠️ LA CUARTA COPIA DE LOS NIVELES DE ACTIVIDAD, encontrada el 11 de
   // septiembre escribiendo `tests/vocabulario.spec.js`. Esta pantalla tenía la
@@ -2931,7 +2936,9 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   // que ya siguen las instrucciones de «cómo darlo» y la petición al motor.
   const catsDelModo = useMemo(
     () => filtrarCategoriasPorModo(categoriasDisponibles || CATEGORIAS_ALIMENTO, modoDelMenu),
-    [categoriasDisponibles, modoDelMenu]);
+    // `alimentosDelMotor` sube cuando llega `/alimentos`: sin él este memo
+    // devuelve el árbol del RESPALDO para siempre. Ver `useAlimentos`.
+    [categoriasDisponibles, modoDelMenu, alimentosDelMotor]);
   const comoSeDa = (categoria) => comoSeDaLaCategoria(categoria, modoDelMenu);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
   const viendoBloqueado = necesitaTransicion && idxActiva > 0;
@@ -5824,6 +5831,9 @@ function RawkuOnboardingInterna({
   onCrearCuenta = () => {},
   onDescartarLocal = () => {},
 }) {
+  // Lo mismo: `filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, …)` se
+  // calcula al pintar. Ver `useAlimentos` en vocabulario.js.
+  const alimentosDelMotor = useAlimentos();
   // ⚠️ EL VOCABULARIO DEL MOTOR (11 septiembre). Una sola peticion por sesion,
   // cacheada a nivel de modulo. De aqui salen los niveles de actividad con SUS
   // DOS registros -- el del dueño y el del veterinario --, en vez de las listas
@@ -8752,7 +8762,10 @@ function RawkuOnboardingInterna({
   const pesoObjetivoKg = objetivo?.kg || null;
   const categoriasDisponibles = useMemo(
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
-    [especiesExcluidas]
+    // `alimentosDelMotor` sube cuando llega `/alimentos`. Sin él este memo no
+    // se recalcula nunca -- repintar no basta -- y Personalizar se queda con el
+    // RESPALDO, que es justo lo que Elena vio con el Pets Purest.
+    [especiesExcluidas, alimentosDelMotor]
   );
   // ⚠️ PERSONALIZAR ELIGE DENTRO DEL MODO QUE SE ACABA DE ELEGIR (18 de
   // septiembre de 2026, noche). El selector de «cambiar a» de un menú ya hecho
@@ -13352,6 +13365,8 @@ function SiNoToggle({ valor, onChange }) {
 }
 
 function SelectorAlimentos({ lista, onAnadir, onQuitar, idGrupo, estadoAbierto, setEstadoAbierto, categorias }) {
+  // Lo mismo: `CATS` cae a `CATEGORIAS_ALIMENTO` cuando no le pasan lista.
+  useAlimentos();
   const CATS = categorias || CATEGORIAS_ALIMENTO;
   const abierto = estadoAbierto && estadoAbierto.grupo === idGrupo ? estadoAbierto : null;
   const especiesYaExcluidas = new Set(
