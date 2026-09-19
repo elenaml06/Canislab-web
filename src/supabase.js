@@ -415,9 +415,36 @@ export function filaDePerro(userId, perfil, extras = {}) {
 // la app se quedaría sin poder guardar la ficha -- justo lo que no nos
 // podemos permitir. Así se guarda todo lo demás y el objetivo empieza a
 // persistirse solo, en cuanto exista la columna.
-const esColumnaQueNoExiste = (error, columna) => {
+//
+// ⚠️ Y TIENE QUE MIRAR EL NOMBRE, NO SOLO EL CÓDIGO (19 de septiembre de 2026).
+// CASO REAL, contado por Elena usando la app: el menú de Cairo salía con
+// EXACTAMENTE las mismas kcal contestando «bastantes premios» que «ninguno».
+//
+// Aquí ponía `error?.code === 'PGRST204' || texto.includes(columna)`, o sea que
+// CUALQUIER PGRST204 daba true para CUALQUIER columna de la lista. Y en
+// producción falta `con_hidratos` -- comprobado sondeando el esquema: PostgREST
+// contesta «column perros.con_hidratos does not exist» mientras que
+// `premios_nivel` y `peso_objetivo_kg` existen y dan permiso denegado, que es
+// otra cosa.
+//
+// Así que el bucle de abajo, al recibir ese 204 por `con_hidratos`, quitaba
+// PRIMERO `peso_objetivo_kg`, reintentaba (mismo 204), quitaba `premios_nivel`,
+// reintentaba (mismo 204) y por fin quitaba el culpable. La ficha se guardaba
+// -- sin dar ningún error -- y sin la respuesta de los premios NI el peso
+// objetivo, que es de donde sale el escalado de mínimos de FEDIAF §7.2.5.
+//
+// Una columna que falta se llevaba por delante a dos que estaban.
+// ⚠️ SE EXPORTA PARA PODER PROBARLA SOLA. `guardarPerro` habla con el Supabase
+// de verdad en cuanto se importa este módulo fuera del navegador, así que la
+// única forma de probar esta decisión sin red -- y es la decisión que causó el
+// fallo -- es mirándola de frente. Ver `tests/columna-que-falta.spec.js`.
+export const esColumnaQueNoExiste = (error, columna) => {
   const texto = `${error?.message || ''} ${error?.details || ''} ${error?.hint || ''}`
-  return error?.code === 'PGRST204' || texto.includes(columna)
+  // PGRST204 al escribir («no encuentro la columna en el esquema») y 42703 al
+  // leer. Los dos NOMBRAN la columna, así que se exige el nombre: sin eso, una
+  // columna que falta arrastra a las demás de la lista.
+  const esDeColumna = error?.code === 'PGRST204' || error?.code === '42703'
+  return esDeColumna && texto.includes(columna)
 }
 
 // Las columnas de `perros` que son mas nuevas que el codigo que las escribe.
@@ -441,19 +468,43 @@ export async function guardarPerro(userId, perfil, extras = {}) {
   // poder guardarse. Ahora la lista es una lista, y añadir una columna nueva es
   // añadir una linea aqui -- que es lo que hay que acordarse de hacer, y por eso
   // esta escrito junto a ellas.
+  // ⚠️ Y LO QUE SE CAE DE LA FILA NO SE CAE DE LA MEMORIA (19 de septiembre de
+  // 2026). CASO REAL, contado por Elena: el menú de Cairo salía con EXACTAMENTE
+  // las mismas kcal contestando «bastantes premios» que «ninguno».
+  //
+  // La causa es esto de aquí: sin el ALTER TABLE, `premios_nivel` se quitaba de
+  // la fila -- correcto, perder un campo es mejor que no poder guardar la ficha
+  // -- y la respuesta que devolvía Supabase, ya sin esa columna, era la que la
+  // app se quedaba como perfil. O sea que la respuesta se perdía TAMBIÉN de la
+  // sesión, y la siguiente petición de menú salía con `premios_nivel: null`. El
+  // dueño contesta la pregunta, la app no se queja, y el menú es el de un perro
+  // que no come nada fuera de su ración.
+  //
+  // Se devuelven los valores que no se pudieron guardar PEGADOS a la fila. Al
+  // recargar volverán a faltar y la ficha lo preguntará otra vez, que es lo que
+  // ya estaba decidido; lo que no puede pasar es que la respuesta se evapore
+  // entre contestarla y usarla.
+  const noSeGuardaron = {}
   for (const columna of COLUMNAS_NUEVAS) {
     if (!error || !esColumnaQueNoExiste(error, columna)) continue
     // Falta el ALTER TABLE. Se guarda el resto: perder un campo es molesto, no
     // poder guardar la ficha es que la app no sirve.
     const sinLaColumna = { ...payload }
     delete sinLaColumna[columna]
+    if (payload[columna] !== undefined && payload[columna] !== null) {
+      noSeGuardaron[columna] = payload[columna]
+    }
     console.warn(`[rawku] la columna ${columna} no existe todavía en Supabase; ` +
                  'se guarda el resto de la ficha. Falta el ALTER TABLE.')
     ;({ data, error } = await escribir(sinLaColumna))
   }
 
   if (error) throw error
-  return data
+  // `_columnas_sin_guardar` deja rastro de lo que NO está en la base, para que
+  // quien lea esto no crea que sí. No es un campo de la tabla: se añade aquí.
+  return Object.keys(noSeGuardaron).length
+    ? { ...data, ...noSeGuardaron, _columnas_sin_guardar: Object.keys(noSeGuardaron) }
+    : data
 }
 
 // ─── EL HISTORIAL DE PESADAS ────────────────────────────────────────────────
