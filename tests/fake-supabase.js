@@ -251,6 +251,14 @@ export function crearFakeSupabase(opciones = {}) {
     clinica: {},
     // Simula que migracion-clinica.sql no se ha ejecutado todavía.
     sinColumnasDeClinica: false,
+    // ⚠️ LAS COLUMNAS DE `perros` QUE TODAVÍA NO EXISTEN EN SUPABASE. No es un
+    // capricho: `premios_nivel` (11-sep), `con_hidratos` (17-sep) y
+    // `peso_objetivo_kg` se añaden con un SQL A MANO, y hasta que alguien lo
+    // lanza PostgREST contesta PGRST204. La app aguanta eso a propósito
+    // -- guarda el resto de la ficha en vez de no guardarla -- y ahí está el
+    // fallo que esto reproduce: guardaba el resto y PERDÍA la respuesta,
+    // también de la memoria, así que el menú salía como si no hubiera premios.
+    columnasDePerroQueFaltan: [],
     casaFalla: false,
     // Última petición recibida en /menu/varios-perros, para poder
     // comprobar que la app manda lo que dice mandar.
@@ -431,6 +439,9 @@ export function crearFakeSupabase(opciones = {}) {
           ? JSON.parse(JSON.stringify(cfg.catalogo)) : null;
       }
       estado.sinColumnasDeClinica = cfg.sinColumnasDeClinica === true;
+      if (Array.isArray(cfg.columnasDePerroQueFaltan)) {
+        estado.columnasDePerroQueFaltan = cfg.columnasDePerroQueFaltan;
+      }
       // ⚠️ LEER NO PUEDE BORRAR (8 septiembre). `leer()` hace un POST con el
       // cuerpo vacío para mirar el estado, y aquí `clinica` no es un
       // interruptor de escenario: es lo que la app ACABA DE GUARDAR. Si se
@@ -1245,6 +1256,16 @@ export function crearFakeSupabase(opciones = {}) {
       // prueba de varios perros habría pasado en verde diciendo cosas
       // falsas (crear el segundo perro habría "funcionado" borrando el
       // primero). Ahora se comporta como una tabla de verdad: por id.
+      // Sin el ALTER TABLE, PostgREST contesta que la columna no existe. Es lo
+      // que pasa de verdad hasta que alguien lanza el SQL.
+      if (req.method !== "GET" && estado.columnasDePerroQueFaltan.length) {
+        const enviado = JSON.parse(cuerpo || "{}");
+        const falta = estado.columnasDePerroQueFaltan.find((c) => c in enviado);
+        if (falta) {
+          return responder(400, { code: "PGRST204",
+            message: `Could not find the '${falta}' column of 'perros' in the schema cache` });
+        }
+      }
       if (req.method === "POST") {
         const enviado = JSON.parse(cuerpo || "{}");
         // El primer perro conserva el id de siempre para no romper las
