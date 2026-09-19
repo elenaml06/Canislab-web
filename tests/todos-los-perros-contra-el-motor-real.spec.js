@@ -143,7 +143,37 @@ function fichaDe([nombre, etapa, peso, raza, tamano, nacimiento, premios], patol
   };
 }
 
-async function entrarYGenerar(page, request, ficha) {
+// El «ojo» del modo cocinado, leído DEL MOTOR y no copiado aquí: es la señal de
+// que el clic ha entrado, y si se copiase dejaría de servir el día que el motor
+// cambie el texto -- la prueba seguiría verde buscando una frase que ya no se
+// pinta. Regla 6 aplicada a la propia prueba.
+let _ojoCocinado = null;
+async function elOjoDelModoCocinado(request) {
+  if (_ojoCocinado) return _ojoCocinado;
+  const res = await request.get(`${API_REAL_PAT}/vocabulario`);
+  expect(res.ok(), "el motor no contesta a /vocabulario").toBeTruthy();
+  const ojo = (await res.json())?.modo_de_preparacion?.ojo || "";
+  expect(ojo.length,
+    "el motor no sirve `modo_de_preparacion.ojo`. Sin él esta prueba no puede "
+    + "comprobar que el clic en «Cocinada» ha entrado, y el bucle entero podría "
+    + "estar resolviendo en crudo").toBeGreaterThan(20);
+  // La app le quita la señal de aviso de delante, que es NUESTRA y no del motor.
+  _ojoCocinado = ojo.replace(/^\S+\s/, "");
+  return _ojoCocinado;
+}
+
+// ⚠️ EL MODO ES UN PARÁMETRO, Y NO LO ERA (19 de septiembre de 2026). Esta
+// matriz nació el 13 de septiembre, cuando solo existía la ración cruda. El
+// modo cocinado se fusionó el 18 y **esta prueba siguió recorriendo los doce
+// perros en crudo y solo en crudo**, así que la mitad nueva del producto -- un
+// catálogo entero de 71 fichas cocidas, el hueso fuera, el calcio saliendo de
+// otro sitio -- no tenía ni un perro que la ejercitara desde la app.
+//
+// Es exactamente el hueco que esta prueba existe para tapar, abierto otra vez:
+// la batería del motor sí prueba cocinado (BLOQUES 128-130) y las pruebas de
+// esta carpeta hablan con el servidor falso, que da menú siempre. Entre las dos
+// cabía «el motor dice que no en cocinado y la app no lo enseña».
+async function entrarYGenerar(page, request, ficha, modo = "crudo") {
   await configurar(request, {
     retrasoPerrosMs: 50, perros: [ficha], menus: [], premium: true,
   });
@@ -161,6 +191,24 @@ async function entrarYGenerar(page, request, ficha) {
   await page.getByPlaceholder("Contraseña").fill(CUENTA_DE_PRUEBA.password);
   await page.getByRole("button", { name: "Entrar" }).click();
   await irAlGenerador(page);
+  // La pregunta de cruda o cocinada va ANTES de Automático, y el título lo
+  // sirve el motor (regla 6). Se busca por el texto que pinta la app en vez de
+  // por una clave: lo que se quiere probar es lo que ve el dueño.
+  if (modo === "cocinado") {
+    await page.getByText(/^Cocinada$/).click();
+    // ⚠️ QUE EL CLIC HAYA ENTRADO, COMPROBADO CON EL TEXTO DEL MOTOR. Sin esto
+    // el bucle entero podría resolver en CRUDO y salir verde: los doce perros
+    // tienen menú en los dos modos, así que «no hizo clic» y «hizo clic» se ven
+    // exactamente igual en pantalla. El «ojo» solo lo pinta la app cuando el
+    // modo elegido es cocinado, y el texto lo sirve el motor (regla 6), así que
+    // tampoco vale copiado a mano aquí.
+    const ojo = await elOjoDelModoCocinado(request);
+    await expect(page.getByText(ojo.slice(0, 60), { exact: false }),
+      "se ha pulsado «Cocinada» y no sale el aviso de cómo se pesa que sirve el motor. "
+      + "O el clic no ha entrado -- y entonces este caso está resolviendo en crudo sin "
+      + "decirlo -- o la app ha dejado de pintar el «ojo»")
+      .toBeVisible();
+  }
   await page.getByRole("button", { name: /^Automático/ }).click();
   await page.getByRole("button", { name: /^(Generar|Hacer)/ }).click();
 
@@ -322,4 +370,43 @@ test.describe("todos los tipos de perro obtienen menú, con el motor de verdad",
     expect(sinMenu, "hay patologías de veterinario que no obtienen menú por la app")
       .toEqual([]);
   });
+});
+
+// ─── Y LOS MISMOS PERROS, PERO COCINADO ──────────────────────────────────────
+//
+// POR QUÉ ES UN BUCLE APARTE Y NO UN PARÁMETRO DEL DE ARRIBA (19 de septiembre
+// de 2026). Porque no es la misma pregunta. En crudo el calcio lo pone el hueso
+// carnoso y fija el ratio Ca:P; en cocinado **el hueso no es candidato** -- es
+// una exclusión dura, como una alergia, porque cocido astilla -- y el calcio
+// tiene que salir de la cáscara de huevo o del bote. Es decir: el motor resuelve
+// un problema DISTINTO, con otro catálogo y otra fuente de calcio, y que salga
+// menú en crudo no dice absolutamente nada de si sale en cocinado.
+//
+// Medido contra el motor DESPLEGADO el 19 de septiembre, los dos modos: los
+// trece perros dan menú verde en los dos, y en cocinado varios bajan de peldaño
+// (Cairo sale en `hasta_dos_suplementos`, no en `estricto`). Bajar de peldaño es
+// legítimo y se dice, así que la prueba NO afirma en cuál sale -- esa es la
+// regla del 10 de septiembre y aquí muerde de verdad.
+//
+// PARA COMPROBAR QUE SIRVE (hazlo si la tocas): quítale al motor la exclusión
+// del hueso carnoso en cocinado. No se pone roja -- y eso es correcto, porque
+// esto vigila que HAYA menú, no que cumpla. Lo que sí la pone roja es quitar el
+// `if (modo === "cocinado")` de `entrarYGenerar`: sin el clic no sale el «ojo»
+// del motor y los doce casos se caen diciendo que están resolviendo en crudo.
+// Esa guarda es la mitad que hace que esto no sea un bucle decorativo: los doce
+// perros tienen menú en los DOS modos, así que sin ella «hizo clic» y «no hizo
+// clic» saldrían los dos verdes.
+test.describe("los mismos perros, con la ración COCINADA", () => {
+  for (const perro of PERROS) {
+    if (perro[0] === PREMIOS_SIN_DECIR_QUE_SON) continue;
+    test(`dueño · cocinado · ${perro[0]}`, async ({ page, request }) => {
+      test.setTimeout(RELOJ_POR_MENU + 60_000);
+      const r = await entrarYGenerar(page, request, fichaDe(perro), "cocinado");
+      expect(r.ok,
+        `«${perro[0]}» obtiene menú CRUDO y no obtiene menú COCINADO. En cocinado el ` +
+        `hueso carnoso no es candidato y el calcio tiene que salir de otro sitio, así que ` +
+        `este caso no lo cubre ninguna prueba de arriba. ${r.motivo || ""}`)
+        .toBe(true);
+    });
+  }
 });
