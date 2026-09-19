@@ -42,8 +42,40 @@ export const esperarLaFicha = (page, opciones = {}) =>
 export const laFichaClinicaHaCargado = (page) =>
   page.getByRole("heading", { name: /Ficha del paciente|Nuevo paciente/ });
 
-export const esperarElPaciente = (page, opciones = {}) =>
-  laFichaClinicaHaCargado(page).waitFor(opciones);
+// ⚠️ Y DESDE EL 8 DE SEPTIEMBRE HAY QUE ABRIR EL PACIENTE PRIMERO.
+//
+// La app ya no arranca en la ficha del último paciente mirado: arranca en la
+// LISTA, que es lo que hace un fichero clínico de verdad (encontrado abriendo
+// rawku.app desplegado, con un veterinario de tres pacientes). Así que esta
+// ayuda, que existe para dejar la prueba PLANTADA en la ficha, tiene que dar
+// ese paso.
+//
+// Va aquí y no repetido en las siete pruebas que la usan para que el día que
+// la pantalla de entrada vuelva a cambiar se toque un sitio. Y no oculta la
+// regresión que arregla: quién aterriza dónde lo comprueba, a pelo y sin
+// ayudas, `vet-arranque-y-rueda.spec.js`.
+// ⚠️ SE ESPERA A QUE HAYA PANTALLA ANTES DE MIRARLA (19 de septiembre de 2026).
+// La primera versión hacía `count()` nada más entrar, y `count()` NO espera:
+// devuelve lo que hay en ese instante. Como la lista tarda en pintarse -- la
+// petición de pacientes pasa por el servidor de mentira --, salía 0, no se
+// pulsaba ningún paciente, y la ayuda se quedaba esperando la ficha clínica
+// hasta el timeout.
+//
+// Medido: ocho pruebas del formulador en rojo, TODAS con «waiting for
+// getByRole('heading', {name: /Ficha del paciente/})». Parecían ocho
+// regresiones del cambio de pantalla de entrada y era una carrera aquí.
+export async function esperarElPaciente(page, opciones = {}) {
+  const laLista = page.getByRole("button", { name: /Dar de alta un paciente/ });
+  const laFicha = laFichaClinicaHaCargado(page);
+  // O la lista o la ficha: se acepta CUALQUIERA de las dos y luego se mira
+  // cuál es. Esperar solo a una daría un timeout que no dice por qué.
+  await laLista.or(laFicha).first().waitFor(opciones);
+  if (await laLista.isVisible()) {
+    const primero = page.getByRole("button", { name: /^Paciente / }).first();
+    if (await primero.count()) await primero.click();
+  }
+  await laFicha.waitFor(opciones);
+}
 
 // Ir al generador desde donde sea. Desde el 25 de agosto se entra por "Mis
 // menús": la ficha del perro ya no ofrece hacer menús cuando vas a editarla.
