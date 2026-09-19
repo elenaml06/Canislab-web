@@ -40,7 +40,10 @@
 // casos de cachorro de raza grande con premios tienen que ponerse rojos.
 
 import { test, expect } from "@playwright/test";
-import { CUENTA_DE_PRUEBA, PERRO_DE_PRUEBA } from "./fake-supabase.js";
+import { CUENTA_DE_PRUEBA } from "./fake-supabase.js";
+// ⚠️ La lista de perros vive aparte: la comparten esta prueba y la que corre
+// contra rawku.app desplegado. Ver `perros-de-la-matriz.js`.
+import { PERROS, fichaDe } from "./perros-de-la-matriz.js";
 import { irAlGenerador } from "./ayudas.js";
 
 const SUPABASE_FALSO = "http://127.0.0.1:54322";
@@ -65,26 +68,6 @@ const configurar = async (request, opciones) => {
 //     suelo reforzado de la nota b y el techo apretado de SACN5
 //   · con y sin premios, porque los premios suben los suelos y no los techos
 //   · las patologías que más aprietan, una por aparato
-const PERROS = [
-  // nombre                       etapa                  peso  raza                      tamano     nacimiento     premios
-  ["adulto mediano",              "adulto",              24.5, "Pastor Alemán",          "Grande",  "2021-05-14",  null],
-  ["adulto toy",                  "adulto",               1.8, "Chihuahua",              "Toy",     "2021-05-14",  null],
-  ["adulto gigante",              "adulto",              62.0, "Mastín Español",         "Gigante", "2021-05-14",  null],
-  ["senior",                      "adulto",              24.5, "Pastor Alemán",          "Grande",  "2015-05-14",  null],
-  ["cachorro joven",              "cachorro_joven",       4.0, "Pastor Alemán",          "Grande",  null,          null],
-  ["cachorro crecimiento",        "cachorro_crecimiento", 12.0, "Pastor Alemán",         "Grande",  null,          null],
-  ["gestante",                    "gestante_tardia",     22.0, "Pastor Alemán",          "Grande",  "2021-05-14",  null],
-  ["lactante",                    "lactante",            22.0, "Pastor Alemán",          "Grande",  "2021-05-14",  null],
-  // EL CASO DE CAIRO, con los cuatro niveles de premios
-  ["Cairo sin premios",           "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "ninguno"],
-  ["Cairo pocos premios",         "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "alguno"],
-  ["Cairo premios al máximo",     "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "hasta_el_maximo"],
-  ["Cairo más del máximo",        "cachorro_crecimiento", 20.0, "American Staffordshire Terrier", "Mediano", null, "mas_del_maximo"],
-  // y el adulto con premios, que es la otra mitad de la regla 3-bis
-  ["adulto con premios",          "adulto",              24.5, "Pastor Alemán",          "Grande",  "2021-05-14",  "mas_del_maximo"],
-  ["toy con premios",             "adulto",               1.8, "Chihuahua",              "Toy",     "2021-05-14",  "hastaـel_maximo".replace("ـ", "_")],
-];
-
 // ⚠️ QUÉ PATOLOGÍAS ENTRAN EN CADA ROL, Y **NO SE ESCRIBE AQUÍ** (13 de
 // septiembre). Elena, al ver la primera versión de esta prueba:
 //
@@ -124,24 +107,6 @@ async function patologiasPorQuienLaMarca(request) {
 // el reloj y no la nutrición -- que es el fallo que ya costó dos rondas en el
 // BLOQUE 43 y en el 75 del otro repo.
 const RELOJ_POR_MENU = 180_000;
-
-function fichaDe([nombre, etapa, peso, raza, tamano, nacimiento, premios], patologias = []) {
-  return {
-    ...PERRO_DE_PRUEBA,
-    nombre,
-    peso_actual: peso,
-    etapa,
-    tamano,
-    raza,
-    // Sin fecha, la app calcula la etapa desde `etapa`. Con ella, desde la edad
-    // -- que es lo que hace la app de verdad, así que se manda cuando la hay.
-    fecha_nacimiento: nacimiento,
-    premios_nivel: premios,
-    patologia_si: patologias.length ? "si" : "no",
-    patologias,
-    dieta_actual: "barf",
-  };
-}
 
 // El «ojo» del modo cocinado, leído DEL MOTOR y no copiado aquí: es la señal de
 // que el clic ha entrado, y si se copiase dejaría de servir el día que el motor
