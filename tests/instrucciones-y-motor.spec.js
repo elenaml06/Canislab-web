@@ -113,3 +113,77 @@ test.describe("la app no da reglas que el motor no aplica", () => {
     ).toEqual([]);
   });
 });
+
+// ─── Y un menú hervido no se prepara con las instrucciones del crudo ─────────
+//
+// POR QUÉ EXISTE (17 de septiembre de 2026)
+//
+// AGUJERO DE VERDAD DEL MODO COCINADO, encontrado mirando la pantalla y no el
+// repo: con un menú cocinado delante, la pestaña «Cómo darlo» —la que se abre
+// justo para saber cómo se prepara— servía el texto de CRUDO. Un muslo de
+// pollo hervido con «Cruda. En trozos, no picada» encima, un riñón cocido con
+// «Crudas, en trozos pequeños», y un salmón recién cocido con «Crudo SOLO si
+// se ha congelado antes; si no, cocinado».
+//
+// O sea el texto diciendo lo CONTRARIO del plato. Y no era inofensivo por el
+// lado que parece: el de pescado manda congelarlo antes, que es una
+// precaución para darlo crudo, y leerla sobre un pescado que se acaba de
+// hervir es lo que hace que quien lo lee deje de fiarse del resto.
+//
+// Es la lección de la TERCERA PUERTA otra vez: un texto se vigila por la
+// puerta por la que SALE, no por dónde está escrito. El `aviso_al_comprar` de
+// cada ficha cocida ya decía «se compra crudo y se da cocido» — y justo al
+// lado, más grande, la instrucción de la categoría decía «Cruda».
+//
+// Lo que se vigila aquí es la parte de la APP: que las cuatro pantallas que
+// pintan ese texto pasen por `comoSeDaLaCategoria(categoria, modo)` y no por
+// el diccionario de crudo a pelo. Que el motor SIRVA el texto cocinado, y que
+// no sea el de crudo copiado, lo vigila el BLOQUE 128 de `pruebas_completas.py`.
+test.describe("el «cómo darlo» de un menú cocinado no es el de crudo", () => {
+  test("las cuatro pantallas piden el texto POR MODO, no el de crudo a pelo", () => {
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+
+    // El diccionario de crudo no se puede leer directamente desde la pantalla:
+    // hacerlo es exactamente el fallo, y no da error ninguno.
+    const aPelo = [...app.matchAll(/INSTRUCCIONES_POR_CATEGORIA\s*\[/g)];
+    expect(aPelo.length,
+      `App.jsx lee INSTRUCCIONES_POR_CATEGORIA[...] directamente en ${aPelo.length} sitio(s). ` +
+      `Ese diccionario es el de CRUDO: en un menú cocinado dice «Cruda. En trozos, no picada» ` +
+      `sobre un muslo hervido. Se pide con comoSeDaLaCategoria(categoria, modo), que cae al de ` +
+      `crudo cuando no hay texto cocinado — que es lo correcto para verdura, extras y suplementos`)
+      .toBe(0);
+
+    // Y el modo que se usa es el DEL MENÚ, no el del botón de la pantalla de
+    // generar: un menú cocinado mirado después de cambiar el botón a crudo se
+    // sigue preparando cocinado.
+    expect(app,
+      "la vista del menú no fija el modo a partir del menú que se está mirando " +
+      "(`menu?.modoPreparacion`). Si lo cogiera del botón de generar, un menú cocinado " +
+      "guardado se leería con las instrucciones de crudo en cuanto alguien tocara el botón")
+      .toContain("const modoDelMenu = menu?.modoPreparacion");
+  });
+
+  // La lógica misma, sin pantalla: las tres cosas que tiene que hacer.
+  test("comoSeDaLaCategoria elige por modo y cae al de crudo cuando toca", async () => {
+    const mod = await import("../src/instrucciones.js");
+    const { comoSeDaLaCategoria, INSTRUCCIONES_POR_CATEGORIA } = mod;
+
+    // 1. Sin modo, o en crudo, el de siempre.
+    for (const modo of [undefined, null, "crudo", "CRUDO"]) {
+      expect(comoSeDaLaCategoria("Carne muscular", modo),
+        `con modo=${JSON.stringify(modo)} tendría que dar el texto de crudo`)
+        .toBe(INSTRUCCIONES_POR_CATEGORIA["Carne muscular"]);
+    }
+
+    // 2. Una categoría que no tiene texto cocinado cae al de crudo, y eso es
+    //    lo correcto: en verdura, extras, suplementos y cereales el modo no
+    //    cambia nada, y escribir una copia sería mantener dos textos iguales.
+    expect(comoSeDaLaCategoria("Verduras y frutas", "cocinado"),
+      "una categoría sin texto cocinado tiene que caer al de crudo, no quedarse vacía: " +
+      "sin texto, la pantalla no enseña NADA sobre cómo se prepara")
+      .toBe(INSTRUCCIONES_POR_CATEGORIA["Verduras y frutas"]);
+
+    // 3. Y una categoría que no existe no revienta ni inventa.
+    expect(comoSeDaLaCategoria("Categoría que no existe", "cocinado")).toBeUndefined();
+  });
+});

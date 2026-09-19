@@ -407,6 +407,11 @@ export async function migrarLocalACuenta(userId) {
       // día entero de calorías -- comiendo de más, en silencio, justo en el
       // salto. Lo cazó `tests/sin-cuenta.spec.js` el día que se añadió el campo.
       premiosNivel: p.premios_nivel,
+      // ⚠️ Mismo motivo que la de arriba, y el mismo sitio donde se pierde: sin
+      // esta línea, quien contestó «sin hidratos» sin cuenta y luego se
+      // registra vuelve con la pregunta a null, y el motor puede meterle arroz
+      // al perro cuya patología lo pida. Lo vigila `tests/sin-cuenta.spec.js`.
+      conHidratos: p.con_hidratos == null ? null : (p.con_hidratos ? 'si' : 'no'),
     }, {
       etapa: p.etapa,
       pesoAdultoEsperado: p.peso_adulto_esperado,

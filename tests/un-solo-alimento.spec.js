@@ -31,10 +31,33 @@ const configurar = async (request, opciones) => {
   return res.json();
 };
 
-// "Acelga" es su propio ejemplo: en el catálogo tiene un único alimento
-// dentro. "Pollo" tiene varios, y ése SÍ tiene que abrir el segundo paso --
-// si no, no habría forma de elegir entre sus cortes.
-const UNA_SOLA = "Acelga";
+// ⚠️ LA ESPECIE DE EJEMPLO SE DERIVA, NO SE ESCRIBE (18 de septiembre de 2026,
+// noche). Aquí ponía `const UNA_SOLA = "Acelga"` desde agosto, y el 18 de
+// septiembre entraron al catálogo 64 fichas cocidas: la acelga pasó a tener
+// DOS --"Acelga" y "Acelga cocida"--, así que esta prueba se puso roja
+// acusando a la app de abrir un paso de más cuando la app tenía razón. El
+// invariante no ha cambiado; lo que había caducado era el ejemplo.
+//
+// Se saca del MISMO sitio del que la app pinta la lista cuando el motor no ha
+// contestado (`CATEGORIAS_ALIMENTO_RESPALDO`), que es el caso en el que corren
+// estas pruebas: el servidor de mentira no devuelve `pantallas`.
+function arbolDelRespaldo() {
+  const fuente = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  const ini = fuente.indexOf("const CATEGORIAS_ALIMENTO_RESPALDO = {");
+  const bloque = fuente.slice(ini, fuente.indexOf("\nlet CATEGORIAS_ALIMENTO", ini))
+    .split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+  const json = bloque.slice(bloque.indexOf("{"), bloque.lastIndexOf("}") + 1)
+    .replace(/,(\s*[}\]])/g, "$1");
+  return JSON.parse(json);
+}
+
+const VERDURAS = arbolDelRespaldo()["Verduras y frutas"];
+// La primera verdura con UN solo alimento dentro, en orden alfabético: la que
+// la app tiene que resolver de un toque.
+const UNA_SOLA = Object.keys(VERDURAS).sort()
+  .find((especie) => VERDURAS[especie].length === 1);
+// "Pollo" tiene varios cortes, y ése SÍ tiene que abrir el segundo paso -- si
+// no, no habría forma de elegir entre ellos.
 const VARIAS = "Pollo";
 
 async function entrar(page) {

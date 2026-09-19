@@ -269,3 +269,101 @@ test.describe("la compra en pantalla", () => {
     await expect(page.getByText("4,7 kg")).toBeVisible();
   });
 });
+
+// ─── EN LA TIENDA SE COMPRA CRUDO ────────────────────────────────────────────
+//
+// POR QUÉ EXISTE (18 de septiembre de 2026)
+//
+// Los gramos de un menú COCINADO son de comida YA COCINADA —la ficha lo declara
+// y el aviso al comprar lo repite— pero en el mostrador se pide el peso CRUDO. Y
+// la diferencia no es un redondeo: medida sobre las 69 fichas que se pesan
+// cocidas, va de ×0,20 a ×1,99. Del pulpo hay que comprar el DOBLE de lo que
+// dice el menú y de los copos de avena una QUINTA PARTE.
+//
+// Es exactamente la familia de fallos que esta lista vino a arreglar: sin
+// error, sin aviso, y te enteras en la carnicería — solo que esta vez te
+// enteras con la mitad de la comida del perro.
+//
+// ⚠️ Y LAS TRES MITADES QUE HAY QUE VIGILAR, no solo la cuenta:
+//   · que convierta;
+//   · que NO convierta lo que no tiene factor, y lo diga (inventarle el factor
+//     de otro corte sería una cifra sin fuente en una lista de la compra);
+//   · que el peso del PLATO se conserve, porque es lo que hay que enseñar al
+//     lado — convertir en silencio sería tan malo como no convertir.
+import { declararQueEsCocido } from "../src/cesta.js";
+
+const FACTOR_DE_MENTIRA = {
+  "Pulpo cocido": { factor: 1.99, aproximado: false },
+  "Arroz cocido": { factor: 0.41, aproximado: false },
+  "Cerdo cocido": { factor: 1.26, aproximado: true },
+};
+const factorDe = (n) => FACTOR_DE_MENTIRA[n] || null;
+const categoriaCocida = (n) =>
+  n.startsWith("Arroz") ? "Cereales y tubérculos"
+  : n.startsWith("Pulpo") ? "Pescados y mariscos" : "Carne muscular";
+const unaSemanaDe = (gramos) => [{ nombre: "Cairo", menus: [{ dias: 7, gramos }] }];
+
+test.describe("en la tienda se compra crudo", () => {
+  test.beforeEach(() => {
+    declararQueEsCocido((n) => n.endsWith(" cocido") || n.endsWith(" cocida"));
+  });
+
+  test("los gramos del menú cocinado se convierten al peso que se pide en la tienda", () => {
+    const cesta = cestaDeLaCompra(
+      unaSemanaDe({ "Pulpo cocido": 100, "Arroz cocido": 100 }), categoriaCocida, factorDe);
+    // 100 g/día × 7 días = 700 g en el plato
+    expect(linea(cesta, "Pulpo cocido").gramos,
+      "el pulpo pierde la mitad de su peso al cocerse: hay que comprar el DOBLE de lo que " +
+      "dice el menú, y sin convertir la lista manda a por la mitad de la comida")
+      .toBeCloseTo(700 * 1.99, 1);
+    expect(linea(cesta, "Arroz cocido").gramos,
+      "el arroz absorbe agua: se compra menos de la mitad de lo que pesa ya cocido")
+      .toBeCloseTo(700 * 0.41, 1);
+  });
+
+  test("el peso del PLATO se conserva, porque es lo que hay que decir al lado", () => {
+    const cesta = cestaDeLaCompra(unaSemanaDe({ "Pulpo cocido": 100 }), categoriaCocida, factorDe);
+    const l = linea(cesta, "Pulpo cocido");
+    expect(l.seCompraEnCrudo, "no se marca que es peso crudo").toBe(true);
+    expect(l.gramosEnElPlato,
+      "se ha perdido lo que pesa en el plato. Convertir EN SILENCIO es tan malo como no " +
+      "convertir: quien mire el menú y la lista vería dos números para el mismo alimento")
+      .toBeCloseTo(700, 1);
+  });
+
+  test("lo aproximado se marca como aproximado", () => {
+    const cesta = cestaDeLaCompra(unaSemanaDe({ "Cerdo cocido": 100 }), categoriaCocida, factorDe);
+    expect(linea(cesta, "Cerdo cocido").factorAproximado,
+      "el factor del cerdo sale de una fila cruda que NO es la suya —su fila cocida es una " +
+      "media de cortes— y eso tiene que poder decirse").toBe(true);
+  });
+
+  // ⚠️ LA QUE MÁS VALE: lo que el motor NO sabe convertir NO se convierte.
+  test("una ficha cocida sin factor se queda igual y se marca para poder decirlo", () => {
+    const cesta = cestaDeLaCompra(
+      unaSemanaDe({ "Ternera cocida": 100 }), categoriaCocida, factorDe);
+    const l = linea(cesta, "Ternera cocida");
+    expect(l.gramos, "se le ha aplicado un factor que el motor no ha dado").toBeCloseTo(700, 1);
+    expect(l.sinFactor,
+      "no se marca que son gramos ya cocinados. Sin eso, la lista da el peso del plato como " +
+      "si fuera el de la tienda y no lo dice").toBe(true);
+  });
+
+  // Y la simetría: en un menú CRUDO no se convierte nada.
+  test("un menú crudo no se toca", () => {
+    declararQueEsCocido(() => false);
+    const cesta = cestaDeLaCompra(
+      unaSemanaDe({ "Conejo": 100 }), () => "Carne muscular", () => null);
+    const l = linea(cesta, "Conejo");
+    expect(l.gramos).toBeCloseTo(700, 1);
+    expect(l.seCompraEnCrudo, "un menú crudo no tiene nada que convertir").toBeFalsy();
+    expect(l.sinFactor, "un alimento crudo no puede salir marcado como «gramos ya cocinados»").toBeFalsy();
+  });
+
+  test("los cereales y tubérculos se compran en la frutería, no en la despensa", () => {
+    expect(zonaDeCategoria("Cereales y tubérculos"),
+      "la categoría entró el 17 de septiembre y no estaba en ninguna zona, así que caía en " +
+      "«Despensa» por el valor por omisión — el arroz y la patata entre los botes de vitaminas")
+      .toBe("verduleria");
+  });
+});

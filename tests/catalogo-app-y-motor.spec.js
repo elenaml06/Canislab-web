@@ -119,6 +119,83 @@ function alimentosDelMotor() {
     ).toEqual([]);
   });
 
+  // ⚠️ Y EL SEGUNDO NIVEL, QUE NO LO MIRABA NADIE (18 de septiembre de 2026,
+  // noche). La prueba de arriba mira la CATEGORÍA y dejó pasar tres cosas el
+  // mismo día:
+  //
+  //   · «Cerdo cocido» metido dentro de la especie «Conejo» -- misma categoría
+  //     (Carne muscular), así que verde. Con Render dormido, abrir «Conejo»
+  //     enseñaba cerdo.
+  //   · «Solomillo de vaca cocido» y «Vaca para guisar cocida» dentro de
+  //     «Buey» en vez de «Vaca».
+  //   · Y en los suplementos, que la prueba de arriba se salta ENTEROS: dos
+  //     grupos que el motor no tiene («Levadura de cerveza», «Algas (Kelp)»),
+  //     y tres fichas que faltaban -- entre ellas el aceite Pets Purest, que
+  //     es EL caso que motivó la regla 6 del CLAUDE.md del motor.
+  //
+  // El grupo se DERIVA del catálogo con las mismas tres reglas del motor
+  // (`alimentos_como_se_presentan.json` dice cuál toca en cada pantalla), y la
+  // única línea de lógica es `especie_de`, cuyo propio docstring en
+  // `especies.py` dice que es «la misma logica ya usada en el frontend».
+  test("cada alimento está en el mismo grupo que dice el motor", () => {
+    const PRESENTACION = path.resolve(AQUI, "../../Canislab-api/alimentos_como_se_presentan.json");
+    test.skip(!fs.existsSync(PRESENTACION),
+      "alimentos_como_se_presentan.json no está a mano (los dos repos tienen que estar juntos)");
+    const pres = JSON.parse(fs.readFileSync(PRESENTACION, "utf-8"));
+
+    // `especie_de` de especies.py, literal: si el nombre lleva " de X", la
+    // especie es X; si no, la primera palabra.
+    const especieDe = (nombre) => {
+      if (nombre.includes(" de ")) {
+        const resto = nombre.split(" de ").slice(1).join(" de ");
+        const palabra = resto.split(" ")[0];
+        return palabra.charAt(0).toUpperCase() + palabra.slice(1).toLowerCase();
+      }
+      return nombre.split(" ")[0];
+    };
+
+    const segundoNivel = {};
+    for (const p of pres.pantallas) {
+      for (const c of p.categorias_del_motor) segundoNivel[c] = [p.clave, p.segundo_nivel];
+    }
+    const extras = pres.grupo_de_cada_extra || {};
+
+    // Lo que dice el motor: pantalla -> grupo -> alimentos.
+    const delMotor = {};
+    for (const a of alimentosDelMotor()) {
+      const par = segundoNivel[a.categoria];
+      if (!par) continue;                       // categoría sin pantalla: `sin_pantalla`
+      const [pantalla, nivel] = par;
+      const grupo = nivel === "especie" ? especieDe(a.nombre)
+                  : nivel === "categoria_del_motor" ? a.categoria
+                  : (extras[a.nombre] || "Otros");
+      ((delMotor[pantalla] ||= {})[grupo] ||= []).push(a.nombre);
+    }
+
+    // Lo que ofrece la app, con su grupo.
+    const app = fs.readFileSync(path.resolve(AQUI, "../src/App.jsx"), "utf-8");
+    const ini = app.indexOf("const CATEGORIAS_ALIMENTO_RESPALDO = {");
+    const bloque = app.slice(ini, app.indexOf("\nlet CATEGORIAS_ALIMENTO", ini))
+      .split("\n").filter((l) => !l.trim().startsWith("//")).join("\n");
+    const deLaApp = {};
+    for (const [, pantalla, cuerpo] of bloque.matchAll(/\n  "([^"]+)": \{([\s\S]*?)\n  \},/g)) {
+      for (const [, grupo, lista] of cuerpo.matchAll(/"([^"]+)":\s*\[([^\]]*)\]/g)) {
+        ((deLaApp[pantalla] ||= {})[grupo] ||= []).push(
+          ...[...lista.matchAll(/"([^"]+)"/g)].map((m) => m[1]));
+      }
+    }
+
+    const ordenado = (x) => Object.fromEntries(Object.entries(x).sort()
+      .map(([k, v]) => [k, Object.fromEntries(Object.entries(v).sort()
+        .map(([g, l]) => [g, [...l].sort()]))]));
+
+    expect(ordenado(deLaApp),
+      "el respaldo de la app agrupa algún alimento en una especie o en un " +
+      "grupo de suplemento que no es el que dice el motor. No da ningún error " +
+      "y no se ve salvo con Render dormido, que es cuando se pinta esta lista"
+    ).toEqual(ordenado(delMotor));
+  });
+
   test("la app no inventa alimentos que el motor no tiene", () => {
     const enElMotor = new Set(alimentosDelMotor().map((a) => a.nombre));
     const sospechosos = [...alimentosQueOfreceLaApp()].filter((n) => !enElMotor.has(n));

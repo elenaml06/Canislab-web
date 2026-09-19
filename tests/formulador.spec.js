@@ -563,6 +563,31 @@ test.describe("los datos de la ficha llegan desde el formulador", () => {
           .toEqual({ premios: nivel, actividad: claveEsperada });
       });
   }
+
+  // ⚠️ Y LA TERCERA, DEL 17 DE SEPTIEMBRE DE 2026, por el mismo hueco: el motor
+  // acepta `con_hidratos` en `/formular/*` y esta pantalla no lo mandaba. Las
+  // dos direcciones hacen daño y por eso se prueban las dos: un «no quiero
+  // hidratos» ignorado le mete arroz al paciente cuya patología los pida, y un
+  // «sí» ignorado deja al veterinario formulando sin una herramienta que el
+  // dueño le ha autorizado. ⚠️ Y el tercer estado importa: `null` es «no ha
+  // contestado» y NO es `false`.
+  for (const [guardado, esperado] of [[false, false], [true, true], [null, null]]) {
+    test(`con_hidratos «${guardado}» viaja a /formular`, async ({ page, request }) => {
+      await comoVeterinario(page, request, {
+        perros: [{ ...PERRO_DE_PRUEBA, con_hidratos: guardado }],
+      });
+      await page.getByRole("button", { name: /Autocompletar/ }).click();
+
+      await expect.poll(async () => {
+        const { peticionesFormular } = await leer(request);
+        const u = peticionesFormular[peticionesFormular.length - 1];
+        return u === undefined ? "sin petición" : (u.con_hidratos ?? null);
+      }, { message: "la pantalla del veterinario formula sin la respuesta de los hidratos. Un " +
+                    "«no» ignorado le mete arroz al paciente cuya patología los pida, y un «sí» " +
+                    "ignorado le quita al veterinario una herramienta que el dueño autorizó" })
+        .toEqual(esperado);
+    });
+  }
 });
 
 // ─── LA SEMANA DEL PACIENTE, PROBADA EN LA APP ───────────────────────────────
@@ -749,4 +774,74 @@ test("sin /vocabulario se pintan los ocho de respaldo y no un hueco", async ({ p
 
   await expect(page.getByText("Proteína (g/1000 kcal)")).toBeVisible();
   await expect(page.getByText("8 nutrientes · los que verifica el motor")).toBeVisible();
+});
+
+// ─── CRUDA O COCINADA, TAMBIÉN AQUÍ ──────────────────────────────────────────
+//
+// POR QUÉ EXISTE (18 de septiembre de 2026)
+//
+// Elena lo pidió para los dos desde el primer día: «el usuario tiene que poder
+// elegir, O EL VETERINARIO, si quiere hacer menú barf o cocinado». El motor lo
+// acepta en `/formular/*` y esta pantalla NO LO MANDABA, así que un veterinario
+// solo podía formular en crudo y nada se lo decía.
+//
+// Es el MISMO hueco por tercera vez —lo tuvieron los premios, la actividad y
+// los hidratos— y aquí es el más caro de los tres: el modo decide el CATÁLOGO.
+// En cocinado el hueso carnoso no es candidato, las fichas animales son las
+// cocidas, y sus GRAMOS son de comida ya cocinada. Firmar una ración en crudo
+// que el paciente va a comer hervida es firmar unos gramos que no son los que
+// se van a pesar.
+//
+// ⚠️ SE SIEMBRA EL MODO POR OMISIÓN AL REVÉS de lo que el motor dice hoy, que es
+// lo único que distingue «lo ha leído del motor» de «lo lleva escrito dentro».
+const VOCAB_COCINADO_POR_OMISION = {
+  modo_de_preparacion: {
+    por_omision: "cocinado",
+    ojo: "OJO-DEL-MOTOR: estos gramos son de comida ya cocinada",
+    modos: [
+      { clave: "crudo", dueno: { titulo: "Cruda" }, veterinario: { titulo: "VET-racion-cruda" } },
+      { clave: "cocinado", dueno: { titulo: "Cocinada" }, veterinario: { titulo: "VET-racion-cocinada" } },
+    ],
+  },
+};
+
+// El formulador no llama al motor hasta que se le pide algo, así que se pulsa
+// Autocompletar, que es como lo hace la prueba de las categorías excluidas.
+async function pedirleAlgoAlMotor(page) {
+  await page.getByRole("button", { name: /Autocompletar/ }).click();
+}
+
+test("el modo de preparación viaja en cada petición del formulador", async ({ page, request }) => {
+  await comoVeterinario(page, request, { vocabulario: VOCAB_COCINADO_POR_OMISION });
+  await pedirleAlgoAlMotor(page);
+
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const ultima = peticionesFormular[peticionesFormular.length - 1];
+    return ultima?.modo_de_preparacion;
+  }, { message: "el formulador no manda `modo_de_preparacion`, o manda «crudo» cuando el motor " +
+                "ha dicho que su omisión es «cocinado» — o sea que lo lleva escrito dentro. " +
+                "Formular en crudo una ración que el paciente va a comer hervida es firmar " +
+                "unos gramos que no son los que se van a pesar" })
+    .toBe("cocinado");
+});
+
+test("el veterinario puede elegir el modo, con la palabra de SU registro", async ({ page, request }) => {
+  await comoVeterinario(page, request, { vocabulario: VOCAB_COCINADO_POR_OMISION });
+
+  // El registro del veterinario, no el del dueño: son dos a propósito.
+  await expect(page.getByRole("button", { name: /VET-racion-cruda/ }),
+    "el selector no pinta el registro del veterinario. Si en su lugar pone «Cruda», está " +
+    "pintando el del dueño o su propio respaldo").toBeVisible();
+
+  // Y al elegir crudo, la petición cambia: si no, el botón se pinta y no decide.
+  await page.getByRole("button", { name: /VET-racion-cruda/ }).click();
+  await pedirleAlgoAlMotor(page);
+  await expect.poll(async () => {
+    const { peticionesFormular } = await leer(request);
+    const ultima = peticionesFormular[peticionesFormular.length - 1];
+    return ultima?.modo_de_preparacion;
+  }, { message: "se ha elegido cruda y la petición sigue yendo en cocinado: el selector se pinta " +
+                "y no decide nada" })
+    .toBe("crudo");
 });

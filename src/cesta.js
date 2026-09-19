@@ -38,7 +38,12 @@ export const ZONAS = [
   {
     clave: "verduleria",
     titulo: "Frutería",
-    categorias: ["Verduras y frutas"],
+    // ⚠️ «Cereales y tubérculos» entró el 17 de septiembre y no estaba en
+    // NINGUNA zona, así que caía en «Despensa» por el `|| "despensa"` de abajo
+    // — sin error y sin que nadie lo viera. La patata y el boniato se compran
+    // en la frutería; el arroz y la avena también salen aquí porque quien hace
+    // la compra no va a buscarlos entre los botes de vitaminas.
+    categorias: ["Verduras y frutas", "Cereales y tubérculos"],
   },
   {
     // Todo lo que no se compra fresco ni se compra cada semana: sal,
@@ -50,6 +55,14 @@ export const ZONAS = [
                  "Yodo", "Calcio", "Omega-3", "Vitamina B", "Hierro", "Fibra"],
   },
 ];
+
+// Si una ficha se pesa cocida lo dice el motor, no su nombre: hay fichas
+// cocidas que no se llaman «cocido» (el Boniato) y al revés. Se pregunta por la
+// misma vía que el factor, y sin respuesta se asume que no, que es el lado que
+// no cambia ninguna cantidad.
+let _esCocida = () => false;
+export function declararQueEsCocido(fn) { _esCocida = fn || (() => false); }
+const esCocida = (nombre) => { try { return !!_esCocida(nombre); } catch { return false; } };
 
 const ZONA_DE = {};
 for (const z of ZONAS) for (const c of z.categorias) ZONA_DE[c] = z.clave;
@@ -96,7 +109,7 @@ function enumerar(nombres) {
  * vinieron. Con un solo perro no sirve de nada y la pantalla no lo pinta,
  * pero se calcula igual: es más simple que tener dos caminos.
  */
-export function cestaDeLaCompra(perros, categoriaDe) {
+export function cestaDeLaCompra(perros, categoriaDe, crudoQueHaceFalta) {
   const total = new Map();
 
   for (const perro of perros || []) {
@@ -121,6 +134,38 @@ export function cestaDeLaCompra(perros, categoriaDe) {
           linea.deQuien.push(perro.nombre);
         }
       }
+    }
+  }
+
+  // ⚠️ EN LA TIENDA SE COMPRA CRUDO (18 de septiembre de 2026), y esto era un
+  // fallo, no una mejora. Los gramos de un menú COCINADO son de comida YA
+  // COCINADA —la ficha lo declara y el aviso al comprar lo repite— pero lo que
+  // se pide en el mostrador es el peso crudo. Y la diferencia no es un
+  // redondeo: medida sobre las 69 fichas que se pesan cocidas, va de **×0,20 a
+  // ×1,99**. Del pulpo hay que comprar el DOBLE de lo que dice el menú y de los
+  // copos de avena una QUINTA PARTE. Sin convertir, la lista manda a la tienda
+  // a por la cantidad equivocada, y en el peor caso por la mitad de la comida.
+  //
+  // El factor lo calcula el MOTOR y llega dentro de cada alimento
+  // (`cuanto_crudo_hace_falta`): se deriva del agua de la ficha cocida y la de
+  // su crudo, así que el día que una humedad cambie, el factor cambia solo.
+  // Aquí no hay ni un número — regla 6.
+  //
+  // ⚠️ Y lo que NO tiene factor se queda TAL CUAL y se dice. Hoy es una sola
+  // ficha, «Vaca para guisar cocida», porque la fila cruda que la ancla no
+  // publica agua. Poner el factor de otro corte de vaca sería inventarse una
+  // cifra en una lista de la compra.
+  for (const linea of total.values()) {
+    const d = crudoQueHaceFalta ? crudoQueHaceFalta(linea.alimento) : null;
+    if (d && d.factor > 0) {
+      linea.gramosEnElPlato = linea.gramos;
+      linea.gramos = linea.gramos * d.factor;
+      linea.seCompraEnCrudo = true;
+      linea.factorCrudo = d.factor;
+      linea.factorAproximado = !!d.aproximado;
+    } else if (esCocida(linea.alimento)) {
+      linea.seCompraEnCrudo = false;
+      linea.sinFactor = true;
     }
   }
 

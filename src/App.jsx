@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef, Component } from "react";
-import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, ChevronDown, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
+import { AlertCircle, Award, Beef, Check, CheckCircle2, ChevronLeft, ChevronRight, ChevronUp, ClipboardList, Dog, Fish, Flame, Footprints, Hand, Heart, HeartPulse, Info, Lock, Menu, Moon, ChevronDown, MoreVertical, Pencil, Pill, Plus, Printer, Salad, Scissors, Search, SlidersHorizontal, Sparkles, Settings, ShoppingBasket, Trash2, TrendingUp, UtensilsCrossed, X, Zap } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import Auth from "./auth";
 import Formulador from "./formulador.jsx";
@@ -8,7 +8,8 @@ import { onAuthChange, logout, cambiarPassword, cambiarCorreo, pedirRolProfesion
          getTokenDeSesion } from "./supabase";
 // Los textos de cómo se prepara cada cosa viven aparte para poder
 // comprobarlos enteros desde las pruebas. Ver su cabecera.
-import { INSTRUCCIONES_POR_CATEGORIA, COMO_DAR_ALIMENTO } from "./instrucciones";
+import { COMO_DAR_ALIMENTO, comoSeDaLaCategoria } from "./instrucciones";
+import { documentacionDelModo, deQueEsRico, crudoQueHaceFalta, sePesaCocido, comoSePreparaElPlato } from "./documentacion";
 import { cestaDeLaCompra, formatearCompra, deQuienEs } from './cesta'
 // ⚠️ Los datos NO se piden a Supabase directamente: pasan por el almacén,
 // que los manda a Supabase o al navegador según haya cuenta o no. Ver el
@@ -38,7 +39,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
 import { API_BASE, fetchConTimeout, tiempoParaVariosMenus } from "./api.js";
-import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS } from "./vocabulario.js";
+import { useVocabulario, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS, MODOS_DE_PREPARACION_RESPALDO, opcionesDeModoDePreparacion, modoDePreparacionPorOmision, avisoDeModoCocinado, nombreDelModo, tramosDeTransicion, ojoDeLaTransicion } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
 // código: variable VITE_PAYWALL en Vercel + redeploy.
@@ -657,6 +658,21 @@ const CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO = [
   { key: "Verduras y frutas", label: "Verduras y frutas" },
 ];let CATEGORIAS_QUE_PUEDE_EXCLUIR = CATEGORIAS_QUE_PUEDE_EXCLUIR_RESPALDO;
 
+// ⚠️ LO QUE PUEDE QUITAR EL DUEÑO ES OTRA LISTA, Y ES UNA SOLA (17 de septiembre
+// de 2026). La de arriba es la del FORMULADOR del veterinario, que las ofrece
+// todas. Al dueño se le pregunta «qué NO PUEDE comer», y de las siete
+// categorías del motor solo el hueso contesta eso: quitar la carne es una dieta
+// de eliminación (la firma un veterinario), quitar los hidratos ya lo pregunta
+// la pregunta de los hidratos, y quitar vísceras o pescado no es «no puede
+// comer» sino «no quiero comprarlo», que es otra pregunta.
+//
+// Estaba escrita A MANO dentro del JSX, un array de un elemento, y por eso está
+// aquí: si la clave no coincide EXACTAMENTE con la del catálogo, la exclusión
+// no hace nada y el menú sale verde igual, sin error y sin aviso.
+const CATEGORIAS_QUE_QUITA_EL_DUENO_RESPALDO = [{ key: "Hueso carnoso", label: "Hueso carnoso (huesos crudos)" }];
+let CATEGORIAS_QUE_QUITA_EL_DUENO = CATEGORIAS_QUE_QUITA_EL_DUENO_RESPALDO;
+let PREGUNTA_QUITAR_CATEGORIA = null;
+
 // ⚠️ RESPALDO: el peso del perro de muestra de cada tamaño lo sirve el motor en
 // `tamanos.tamanos[].peso_kg_del_menu_de_muestra`, que es el mismo con el que
 // genera los menús precalculados de la vista previa. Tenerlo escrito aquí era
@@ -669,6 +685,11 @@ alLlegarVocabulario((v) => {
   if (Array.isArray(cats) && cats.length) {
     CATEGORIAS_QUE_PUEDE_EXCLUIR = cats.map((c) => ({ key: c, label: c }));
   }
+  const delDueno = v?.categorias_que_excluye_el_dueno;
+  if (Array.isArray(delDueno?.categorias) && delDueno.categorias.length) {
+    CATEGORIAS_QUE_QUITA_EL_DUENO = delDueno.categorias.map((c) => ({ key: c, label: c }));
+  }
+  if (delDueno?.pregunta) PREGUNTA_QUITAR_CATEGORIA = delDueno;
   const tam = v?.tamanos?.tamanos;
   if (Array.isArray(tam) && tam.length) {
     const m = {};
@@ -919,6 +940,56 @@ function preguntaDePremios(vocab, modo) {
   return vocab?.premios?.pregunta?.[modo] || PREGUNTA_PREMIOS_RESPALDO[modo];
 }
 
+// ─── LA PREGUNTA DE LOS HIDRATOS ─────────────────────────────────────────────
+//
+// ⚠️ TRES ESTADOS Y NO DOS, y el tercero es el que importa (17 de septiembre de
+// 2026). «No he contestado» NO es «no quiero»: sin contestar, el motor no
+// propone hidratos salvo que la patología los pida; con un «no», no entran ni
+// aunque la patología los pida. Con dos estados, un perro con pancreatitis se
+// quedaría sin la ración que le conviene por una respuesta que nadie dio.
+//
+// El texto y los estados los sirve el motor (`hidratos` de `GET /vocabulario`),
+// no se escriben aquí: la clave que viaja es un booleano y el registro que se
+// pinta es `dueno` o `veterinario`.
+const HIDRATOS_RESPALDO = [
+  { clave: "no", label: "No, sin arroz ni patata",
+    detalle: "ni aunque su enfermedad los pida — si eso deja el plato peor, te lo decimos" },
+  { clave: "si", label: "Sí, puede llevarlos",
+    detalle: "arroz, patata o avena, siempre cocidos" },
+];
+const PREGUNTA_HIDRATOS_RESPALDO = "¿Quieres que su menú pueda llevar arroz, patata o avena?";
+
+// ─── CRUDO O COCINADO ──────────────────────────────────────────────
+//
+// ⚠️ ESTO VIVÍA AQUÍ Y SE MUDÓ A `vocabulario.js` el 18 de septiembre de 2026,
+// por el mismo motivo por el que se mudaron `claveDeActividad` y los premios:
+// lo necesita TAMBIÉN el formulador del veterinario, y esa pantalla no puede
+// importar de `App.jsx` sin hacer un ciclo. O sea que el dato estaba y el
+// camino no existía — que es literalmente lo que ya pasó con los premios y con
+// la actividad, y las dos veces acabó en que el veterinario formulaba sin un
+// dato que la ficha SÍ tenía.
+//
+// Se importan arriba, de `vocabulario.js`, que es de donde tiran las dos.
+
+
+function opcionesDeHidratos(vocab, modo) {
+  const servidos = vocab?.hidratos?.estados;
+  if (!Array.isArray(servidos) || servidos.length === 0) return HIDRATOS_RESPALDO;
+  // El estado «sin contestar» (valor null) no se pinta: es la ausencia de
+  // respuesta, no una respuesta que se pueda pulsar.
+  return servidos
+    .filter((e) => e?.valor === true || e?.valor === false)
+    .map((e) => ({
+      clave: e.valor ? "si" : "no",
+      label: e?.[modo]?.titulo ?? (e.valor ? "Sí" : "No"),
+      detalle: e?.[modo]?.ejemplo ?? e?.[modo]?.detalle ?? "",
+    }));
+}
+
+function avisoDeHidratos(vocab) {
+  return vocab?.hidratos?.ojo || "";
+}
+
 // ⚠️ `ACTIVIDAD_API` y `claveDeActividad` VIVEN EN `vocabulario.js` DESDE EL 11
 // DE SEPTIEMBRE, y no es un traslado por orden: `formulador.jsx` -- la pantalla
 // del veterinario -- las necesita y no puede importar de aquí sin hacer un
@@ -1005,15 +1076,33 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // alimentación cruda, lo que separa víscera de carne no es "es
     // tejido muscular o es un órgano", es si SEGREGA algo o no: ni el
     // corazón ni la molleja segregan, así que van con la carne.
-    "Conejo": ["Conejo", "Corazón de conejo"],
-    "Cordero": ["Corazón de cordero", "Lengua de cordero"],
-    "Gallina": ["Gallina (carne sin hueso)"],
-    "Pato": ["Pato (carne sin hueso)"],
-    "Pavo": ["Corazón de pavo", "Molleja de pavo", "Pavo", "Pavo muslo con piel", "Pavo pechuga con piel", "Pavo pechuga sin piel"],
-    "Pollo": ["Corazón de pollo", "Molleja de pollo", "Pollo ala con piel (sin hueso)", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo sin piel", "Pollo pechuga con piel", "Pollo pechuga sin piel"],
-    "Ternera": ["Lomo de ternera con grasa", "Lengua de ternera", "Ternera con grasa", "Ternera solomillo sin grasa"],
-    "Buey": ["Lengua de buey"],
-    "Vaca": ["Corazón de vaca"],
+    // ⚠️ «Cerdo cocido» estuvo AQUÍ, dentro de Conejo, del 18 de septiembre a esa
+    // misma noche: se insertó por orden alfabético en la lista de al lado en vez
+    // de en su especie. No daba ningún error -- con Render dormido, abrir «Conejo»
+    // enseñaba cerdo. Lo caza ahora `catalogo-app-y-motor.spec.js`, que compara el
+    // GRUPO de cada alimento y no solo el conjunto.
+    "Cerdo": ["Cerdo cocido"],
+    "Conejo": ["Conejo", "Conejo cocido", "Corazón de conejo"],
+    "Cordero": ["Corazón de cordero", "Corazón de cordero cocido", "Lengua de cordero", "Lengua de cordero cocida"],
+    "Gallina": ["Gallina (carne sin hueso)", "Gallina (carne sin hueso) cocida"],
+    "Pato": ["Pato (carne sin hueso)", "Pato (carne sin hueso) cocido"],
+    "Pavo": ["Corazón de pavo", "Corazón de pavo cocido", "Molleja de pavo", "Molleja de pavo cocida", "Pavo", "Pavo muslo con piel", "Pavo muslo con piel cocido", "Pavo pechuga con piel", "Pavo pechuga con piel cocido", "Pavo pechuga sin piel", "Pavo pechuga sin piel cocido"],
+    "Pollo": ["Corazón de pollo", "Corazón de pollo cocido", "Molleja de pollo", "Molleja de pollo cocida", "Pollo ala con piel (sin hueso)", "Pollo ala con piel (sin hueso) cocido", "Pollo con piel (sin hueso)", "Pollo muslo con piel", "Pollo muslo con piel cocido", "Pollo muslo sin piel", "Pollo muslo sin piel cocido", "Pollo pechuga con piel", "Pollo pechuga con piel cocido", "Pollo pechuga sin piel", "Pollo pechuga sin piel cocido"],
+    "Ternera": ["Jarrete de ternera cocido", "Lengua de ternera", "Lengua de ternera cocida", "Lomo de ternera con grasa", "Ternera cocida", "Ternera con grasa", "Ternera solomillo sin grasa"],
+    "Buey": ["Lengua de buey", "Lengua de buey cocida"],
+    "Vaca": ["Corazón de vaca", "Corazón de vaca cocido", "Solomillo de vaca cocido", "Vaca para guisar cocida"],
+  },
+  // ⚠️ LOS HIDRATOS (17 de septiembre de 2026). Categoría nueva del motor:
+  // cinco fichas que se dan COCIDAS y se PESAN COCIDAS. En BARF no entran solas
+  // -- solo si la patología las pide o si el dueño contesta que sí a la
+  // pregunta de los hidratos -- pero en Personalizar se pueden elegir a mano,
+  // que es la regla 5 de su CLAUDE.md, y por eso tienen que estar en el
+  // respaldo: sin ellas, con Render dormido la pantalla no las ofrece.
+  "Cereales y tubérculos": {
+    "Arroz": ["Arroz blanco cocido", "Arroz integral cocido"],
+    "Avena": ["Copos de avena cocidos"],
+    "Patata": ["Patata cocida"],
+    "Quinoa": ["Quinoa cocida"],
   },
   "Pescados y mariscos": {
     // ⚠️ CORREGIDO (5 agosto, noche): Calamar/Gamba/Langostino(s)/
@@ -1021,26 +1110,26 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // AUTOMÁTICO no los usa nunca (se filtran de ACCESIBLES) -- pero
     // si el usuario los quiere elegir él mismo aquí, sabiendo que hay
     // que cocinarlos, puede.
-    "Atún": ["Atún"],
+    "Atún": ["Atún", "Atún claro cocido"],
     "Bacaladilla": ["Bacaladilla"],
-    "Bacalao": ["Bacalao"],
+    "Bacalao": ["Bacalao", "Bacalao cocido"],
     "Besugo": ["Besugo"],
     "Boquerón": ["Boquerón"],
-    "Caballa": ["Caballa"],
-    "Calamar": ["Calamar"],
-    "Dorada": ["Dorada"],
+    "Caballa": ["Caballa", "Caballa cocida"],
+    "Calamar": ["Calamar", "Calamar cocido"],
+    "Dorada": ["Dorada", "Dorada cocida"],
     "Gamba": ["Gamba roja"],
     "Langostino": ["Langostino"],
-    "Lenguado": ["Lenguado"],
+    "Lenguado": ["Lenguado", "Lenguado cocido"],
     "Lubina": ["Lubina"],
-    "Merluza": ["Merluza"],
-    "Perca": ["Perca"],
+    "Merluza": ["Merluza", "Merluza cocida"],
+    "Perca": ["Perca", "Perca cocida"],
     "Pescadilla": ["Pescadilla"],
-    "Pulpo": ["Pulpo"],
-    "Salmón": ["Salmón"],
+    "Pulpo": ["Pulpo", "Pulpo cocido"],
+    "Salmón": ["Salmón", "Salmón cocido"],
     "Sardina": ["Sardina"],
     "Sepia": ["Sepia"],
-    "Trucha": ["Trucha"],
+    "Trucha": ["Trucha", "Trucha cocida"],
   },
   "Hueso carnoso": {
     // ⚠️ CORREGIDO (5 agosto, noche) — tercera pasada: la usuaria ya
@@ -1080,7 +1169,7 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // aparte. Confirmado que NO hay datos fiables de bazo/páncreas de
     // pollo, pavo ni conejo -- no se han inventado esas especies.
     // Timo y cerebro dan variedad adicional con datos USDA reales.
-    "Cordero": ["Pulmón de cordero", "Riñón de cordero", "Bazo de cordero"],
+    "Cordero": ["Bazo de cordero", "Bazo de cordero cocido", "Pulmón de cordero", "Pulmón de cordero cocido", "Riñón de cordero", "Riñón de cordero cocido"],
     // ⚠️ «Riñón de ternera» YA NO EXISTE (13 septiembre, noche). El motor la
     // renombró a «Riñón de vaca» sin tocar una cifra: cuadra en TRECE celdas
     // exactas con la fila de riñón de BUEY de CIQUAL, así que la ficha era de
@@ -1088,7 +1177,7 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // el bazo, el páncreas y el pulmón. Aquí es respaldo, pero un respaldo que
     // ofrece un alimento que el motor no tiene manda una petición que el motor
     // no sabe recibir.
-    "Ternera": ["Pulmón de ternera", "Timo de ternera", "Cerebro de ternera"],
+    "Ternera": ["Cerebro de ternera", "Cerebro de ternera cocido", "Pulmón de ternera", "Pulmón de ternera cocido", "Timo de ternera", "Timo de ternera cocido"],
     // ⚠️ AMPLIADO (8 septiembre) — LA MISMA HISTORIA DE AGOSTO, OTRA VEZ.
     // El comentario de arriba cuenta que "Bazo de ternera" y "Páncreas de
     // ternera" pasaron a "de vaca" porque sus datos eran de animal adulto.
@@ -1108,8 +1197,7 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     // que un respaldo desactualizado. La de TERNERA se queda, porque la
     // ternera española se sacrifica por debajo del año, y su ficha lleva esa
     // condición escrita y un aviso para quien va a la carnicería.
-    "Vaca": ["Bazo de vaca", "Páncreas de vaca", "Timo de vaca",
-             "Pulmón de vaca", "Riñón de vaca"],
+    "Vaca": ["Bazo de vaca", "Bazo de vaca cocido", "Páncreas de vaca", "Pulmón de vaca", "Pulmón de vaca cocido", "Riñón de vaca", "Riñón de vaca cocido", "Timo de vaca", "Timo de vaca cocido"],
     // ⚠️ ELIMINADO (5 agosto, madrugada) — CASO REAL GRAVE, pedido
     // expreso: "Cerdo": ["Bazo de cerdo", "Páncreas de cerdo"] quitado
     // por completo -- riesgo real de enfermedad de Aujeszky
@@ -1121,14 +1209,14 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
   },
   "Hígado": {
     "Conejo": ["Hígado de conejo"],
-    "Cordero": ["Hígado de cordero"],
+    "Cordero": ["Hígado de cordero", "Hígado de cordero cocido"],
     "Pato": ["Hígado de pato"],
-    "Pavo": ["Hígado de pavo"],
-    "Pollo": ["Hígado de pollo"],
-    "Vaca": ["Hígado de vaca"],
+    "Pavo": ["Hígado de pavo", "Hígado de pavo cocido"],
+    "Pollo": ["Hígado de pollo", "Hígado de pollo cocido"],
+    "Vaca": ["Hígado de vaca", "Hígado de vaca cocido"],
   },
   "Verduras y frutas": {
-    "Acelga": ["Acelga"],
+    "Acelga": ["Acelga", "Acelga cocida"],
     "Albahaca": ["Albahaca"],
     "Albaricoque": ["Albaricoque"],
     "Alcachofa": ["Alcachofa"],
@@ -1136,24 +1224,24 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     "Arándano": ["Arándano"],
     "Berenjena": ["Berenjena"],
     "Boniato": ["Boniato"],
-    "Bruselas": ["Coles de Bruselas"],
-    "Brócoli": ["Brócoli"],
-    "Calabacín": ["Calabacín"],
-    "Calabaza": ["Calabaza"],
+    "Bruselas": ["Coles de Bruselas", "Coles de Bruselas cocida"],
+    "Brócoli": ["Brócoli", "Brócoli cocido"],
+    "Calabacín": ["Calabacín", "Calabacín cocido"],
+    "Calabaza": ["Calabaza", "Calabaza cocida"],
     "Canónigos": ["Canónigos"],
-    "Cardo": ["Cardo"],
-    "Champiñón": ["Champiñón"],
+    "Cardo": ["Cardo", "Cardo cocido"],
+    "Champiñón": ["Champiñón", "Champiñón cocido"],
     "Coco": ["Coco fresco"],
-    "Col": ["Col lombarda", "Col rizada"],
-    "Coliflor": ["Coliflor"],
+    "Col": ["Col lombarda", "Col lombarda cocida", "Col rizada"],
+    "Coliflor": ["Coliflor", "Coliflor cocida"],
     "Dátil": ["Dátil"],
     "Endibia": ["Endibia"],
-    "Espinaca": ["Espinaca"],
+    "Espinaca": ["Espinaca", "Espinaca cocida"],
     "Espárrago": ["Espárrago verde"],
     "Frambuesa": ["Frambuesa"],
     "Fresa": ["Fresa"],
     "Grelo": ["Grelo"],
-    "Judía": ["Judía verde"],
+    "Judía": ["Judía verde", "Judía verde cocida"],
     "Lechuga": ["Lechuga"],
     "Mandarina": ["Mandarina"],
     "Mango": ["Mango"],
@@ -1163,15 +1251,15 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     "Naranja": ["Naranja"],
     "Pepino": ["Pepino"],
     "Pera": ["Pera"],
-    "Pimiento": ["Pimiento rojo"],
+    "Pimiento": ["Pimiento rojo", "Pimiento rojo cocido"],
     "Piña": ["Piña"],
     "Plátano": ["Plátano"],
-    "Repollo": ["Repollo"],
+    "Repollo": ["Repollo", "Repollo cocido"],
     "Rucula": ["Rucula"],
     "Rábano": ["Rábano"],
     "Sandía": ["Sandía"],
     "Tomate": ["Tomate (puré)"],
-    "Zanahoria": ["Zanahoria"],
+    "Zanahoria": ["Zanahoria", "Zanahoria cocida"],
   },
   "Extras": {
     "Huevo": ["Huevo clara", "Huevo de codorniz", "Huevo de gallina entero", "Huevo de pato", "Huevo de pato entero", "Huevo yema"],
@@ -1203,10 +1291,18 @@ const CATEGORIAS_ALIMENTO_RESPALDO = {
     "Fibra": ["NaturGreen Psyllium Bio"],
     "Hierro": ["AniForte Beef Blood Powder"],
     "Multivitamínico": ["Homemadekun (multivitamínico completo)", "NEKTON Dog Easy-BARF (multivitamínico)", "napfcheck Novomineral proLEBER", "astoral MultiVital BARF", "V-INTEGRA Perro Adulto", "V-INTEGRA Cachorro", "V-INTEGRA Senior", "V-INTEGRA Epato", "V-INTEGRA Renal", "Nutratop Vitamínico-Mineral 7:1"],
-    "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Oleum Canis Aceite de Salmón"],
-    "Levadura de cerveza": ["GRAU Levadura de cerveza", "PAWS & PATCH Levadura de cerveza"],
-    "Algas (Kelp)": ["AniForte Seaweed Meal"],
-    "Yodo": ["Yoduro potásico (comprimidos 200 µg)"],
+    // ⚠️ AQUÍ EL SEGUNDO NIVEL ES LA CATEGORÍA DEL MOTOR, NO EL TIPO DE PRODUCTO
+    // (18 de septiembre de 2026, noche). Este respaldo tenía «Levadura de cerveza»
+    // y «Algas (Kelp)» como grupos propios, y el motor las sirve dentro de
+    // «Vitamina B» y «Yodo» -- que es de donde salen de verdad esos dos productos.
+    // O sea que con Render dormido la pantalla enseñaba una agrupación que no
+    // existe, y al despertar cambiaba sola. Y faltaban TRES fichas: el aceite Pets
+    // Purest -- el mismo que motivó la regla 6 en CLAUDE.md, otra vez -- y las dos
+    // de vitamina E que entraron el 15 de septiembre.
+    "Omega-3": ["Aceite de Salmón Natural Greatness", "AniForte Aceite de Salmón", "Oleum Canis Aceite de Salmón", "Pets Purest Aceite de Salmón Escocés"],
+    "Vitamina B": ["GRAU Levadura de cerveza", "PAWS & PATCH Levadura de cerveza"],
+    "Vitamina E": ["Beaphar Aceite de Germen de Trigo (vitamina E)", "MARNYS VITAHELP Vitamina E liquida"],
+    "Yodo": ["AniForte Seaweed Meal", "Yoduro potásico (comprimidos 200 µg)"],
   },
 };
 // ⚠️ EN ORDEN ALFABÉTICO, LAS DOS (13 de septiembre de 2026, noche). Elena, en
@@ -1225,10 +1321,234 @@ let CATEGORIAS_ALIMENTO = arbolOrdenado(CATEGORIAS_ALIMENTO_RESPALDO);
 
 // En cuanto conteste el motor, esta es la lista. Antes de eso, el respaldo.
 pedirAlimentos();
+// ⚠️ EN QUÉ MODOS VALE CADA ALIMENTO, del motor (18 de septiembre de 2026). Lo
+// pidió Elena: «cuando generas un menú y cambias algo y se rehace, solo va a
+// usar ingredientes de ese tipo de menú».
+//
+// Medido antes de tocar nada: el AUTOMÁTICO de la edición ya lo cumplía —
+// cambiar, quitar, añadir y revalidar, en los dos modos, cero intrusos. Lo que
+// faltaba era ESTA punta: el selector de «cambiar a» ofrecía el CATÁLOGO
+// ENTERO, porque `filtrarCategoriasPorEspecies` solo mira las especies
+// excluidas. En un menú cocinado te ofrecía «Pavo pechuga con piel» crudo al
+// lado de su versión cocida, y elegirlo metía comida cruda en un plato que se
+// va a cocer.
+//
+// ⚠️ NO SE DEDUCE DEL NOMBRE. «Las que acaban en cocido» fallaría con el
+// Boniato y con la clara de huevo, que se dan cocidos y no se llaman así. Lo
+// dice el motor, con la misma función que usa el solver.
+// ⚠️ Y SU RESPALDO, QUE FALTABA Y DEJABA EL OTRO A MEDIAS (18 de septiembre de
+// 2026, noche). `CATEGORIAS_ALIMENTO_RESPALDO` ganó ese día las 64 fichas
+// cocidas --sin ellas la pantalla del menú reventaba entera-- y esto se quedó
+// vacío, así que mientras el motor no contestaba el filtro de modo NO FILTRABA
+// NADA: con Render dormido, un menú crudo ofrecía «Acelga cocida» al lado de la
+// «Acelga», que es exactamente lo que el filtro existe para evitar.
+//
+// ⚠️ SOLO VAN LAS DE UN SOLO MODO. Las 83 que valen en los dos --el boniato, la
+// clara de huevo, el arroz: las que se dan siempre cocidas y no tienen versión
+// cruda-- no se escriben, porque «no está en la lista» ya significa «vale en los
+// dos» (ver `filtrarCategoriasPorModo`). Escribirlas sería 233 líneas para decir
+// lo mismo.
+//
+// ⚠️ NO SE DEDUCE DEL NOMBRE, y por eso está escrita: «las que acaban en cocido»
+// fallaría con el Boniato y con la clara de huevo. Sale de `accesibles.modos_de`
+// del motor, que es la misma función que usa el solver.
+const MODOS_DE_CADA_ALIMENTO_RESPALDO = {
+  "Acelga": ["crudo"],
+  "Acelga cocida": ["cocinado"],
+  "Atún": ["crudo"],
+  "Atún claro cocido": ["cocinado"],
+  "Bacaladilla": ["crudo"],
+  "Bacalao": ["crudo"],
+  "Bacalao cocido": ["cocinado"],
+  "Bazo de cordero": ["crudo"],
+  "Bazo de cordero cocido": ["cocinado"],
+  "Bazo de vaca": ["crudo"],
+  "Bazo de vaca cocido": ["cocinado"],
+  "Besugo": ["crudo"],
+  "Boquerón": ["crudo"],
+  "Brócoli": ["crudo"],
+  "Brócoli cocido": ["cocinado"],
+  "Caballa": ["crudo"],
+  "Caballa cocida": ["cocinado"],
+  "Calabacín": ["crudo"],
+  "Calabacín cocido": ["cocinado"],
+  "Calabaza": ["crudo"],
+  "Calabaza cocida": ["cocinado"],
+  "Calamar": ["crudo"],
+  "Calamar cocido": ["cocinado"],
+  "Carcasa de conejo": ["crudo"],
+  "Carcasa de pato": ["crudo"],
+  "Carcasa de pollo": ["crudo"],
+  "Cardo": ["crudo"],
+  "Cardo cocido": ["cocinado"],
+  "Cerdo cocido": ["cocinado"],
+  "Cerebro de ternera": ["crudo"],
+  "Cerebro de ternera cocido": ["cocinado"],
+  "Champiñón": ["crudo"],
+  "Champiñón cocido": ["cocinado"],
+  "Col lombarda": ["crudo"],
+  "Col lombarda cocida": ["cocinado"],
+  "Coles de Bruselas": ["crudo"],
+  "Coles de Bruselas cocida": ["cocinado"],
+  "Coliflor": ["crudo"],
+  "Coliflor cocida": ["cocinado"],
+  "Conejo": ["crudo"],
+  "Conejo cocido": ["cocinado"],
+  "Corazón de conejo": ["crudo"],
+  "Corazón de cordero": ["crudo"],
+  "Corazón de cordero cocido": ["cocinado"],
+  "Corazón de pavo": ["crudo"],
+  "Corazón de pavo cocido": ["cocinado"],
+  "Corazón de pollo": ["crudo"],
+  "Corazón de pollo cocido": ["cocinado"],
+  "Corazón de vaca": ["crudo"],
+  "Corazón de vaca cocido": ["cocinado"],
+  "Costillas de cordero": ["crudo"],
+  "Cuello de pato": ["crudo"],
+  "Cuello de pavo": ["crudo"],
+  "Cuello de ternera": ["crudo"],
+  "Dorada": ["crudo"],
+  "Dorada cocida": ["cocinado"],
+  "Espinaca": ["crudo"],
+  "Espinaca cocida": ["cocinado"],
+  "Espinazo de conejo": ["crudo"],
+  "Gallina (carne sin hueso)": ["crudo"],
+  "Gallina (carne sin hueso) cocida": ["cocinado"],
+  "Gamba roja": ["crudo"],
+  "Hígado de conejo": ["crudo"],
+  "Hígado de cordero": ["crudo"],
+  "Hígado de cordero cocido": ["cocinado"],
+  "Hígado de pato": ["crudo"],
+  "Hígado de pavo": ["crudo"],
+  "Hígado de pavo cocido": ["cocinado"],
+  "Hígado de pollo": ["crudo"],
+  "Hígado de pollo cocido": ["cocinado"],
+  "Hígado de vaca": ["crudo"],
+  "Hígado de vaca cocido": ["cocinado"],
+  "Jarrete de ternera cocido": ["cocinado"],
+  "Judía verde": ["crudo"],
+  "Judía verde cocida": ["cocinado"],
+  "Langostino": ["crudo"],
+  "Lengua de buey": ["crudo"],
+  "Lengua de buey cocida": ["cocinado"],
+  "Lengua de cordero": ["crudo"],
+  "Lengua de cordero cocida": ["cocinado"],
+  "Lengua de ternera": ["crudo"],
+  "Lengua de ternera cocida": ["cocinado"],
+  "Lenguado": ["crudo"],
+  "Lenguado cocido": ["cocinado"],
+  "Lomo de ternera con grasa": ["crudo"],
+  "Lubina": ["crudo"],
+  "Merluza": ["crudo"],
+  "Merluza cocida": ["cocinado"],
+  "Molleja de pavo": ["crudo"],
+  "Molleja de pavo cocida": ["cocinado"],
+  "Molleja de pollo": ["crudo"],
+  "Molleja de pollo cocida": ["cocinado"],
+  "Pato (carne sin hueso)": ["crudo"],
+  "Pato (carne sin hueso) cocido": ["cocinado"],
+  "Pavo": ["crudo"],
+  "Pavo muslo con piel": ["crudo"],
+  "Pavo muslo con piel cocido": ["cocinado"],
+  "Pavo pechuga con piel": ["crudo"],
+  "Pavo pechuga con piel cocido": ["cocinado"],
+  "Pavo pechuga sin piel": ["crudo"],
+  "Pavo pechuga sin piel cocido": ["cocinado"],
+  "Pecho de ternera con hueso": ["crudo"],
+  "Perca": ["crudo"],
+  "Perca cocida": ["cocinado"],
+  "Pescadilla": ["crudo"],
+  "Pimiento rojo": ["crudo"],
+  "Pimiento rojo cocido": ["cocinado"],
+  "Pollo ala con piel (sin hueso)": ["crudo"],
+  "Pollo ala con piel (sin hueso) cocido": ["cocinado"],
+  "Pollo con piel (sin hueso)": ["crudo"],
+  "Pollo muslo con piel": ["crudo"],
+  "Pollo muslo con piel cocido": ["cocinado"],
+  "Pollo muslo sin piel": ["crudo"],
+  "Pollo muslo sin piel cocido": ["cocinado"],
+  "Pollo pechuga con piel": ["crudo"],
+  "Pollo pechuga con piel cocido": ["cocinado"],
+  "Pollo pechuga sin piel": ["crudo"],
+  "Pollo pechuga sin piel cocido": ["cocinado"],
+  "Pulmón de cordero": ["crudo"],
+  "Pulmón de cordero cocido": ["cocinado"],
+  "Pulmón de ternera": ["crudo"],
+  "Pulmón de ternera cocido": ["cocinado"],
+  "Pulmón de vaca": ["crudo"],
+  "Pulmón de vaca cocido": ["cocinado"],
+  "Pulpo": ["crudo"],
+  "Pulpo cocido": ["cocinado"],
+  "Páncreas de vaca": ["crudo"],
+  "Repollo": ["crudo"],
+  "Repollo cocido": ["cocinado"],
+  "Riñón de cordero": ["crudo"],
+  "Riñón de cordero cocido": ["cocinado"],
+  "Riñón de vaca": ["crudo"],
+  "Riñón de vaca cocido": ["cocinado"],
+  "Salmón": ["crudo"],
+  "Salmón cocido": ["cocinado"],
+  "Sardina": ["crudo"],
+  "Sepia": ["crudo"],
+  "Solomillo de vaca cocido": ["cocinado"],
+  "Ternera cocida": ["cocinado"],
+  "Ternera con grasa": ["crudo"],
+  "Ternera solomillo sin grasa": ["crudo"],
+  "Timo de ternera": ["crudo"],
+  "Timo de ternera cocido": ["cocinado"],
+  "Timo de vaca": ["crudo"],
+  "Timo de vaca cocido": ["cocinado"],
+  "Trucha": ["crudo"],
+  "Trucha cocida": ["cocinado"],
+  "Vaca para guisar cocida": ["cocinado"],
+  "Zanahoria": ["crudo"],
+  "Zanahoria cocida": ["cocinado"],
+};
+let MODOS_DE_CADA_ALIMENTO = { ...MODOS_DE_CADA_ALIMENTO_RESPALDO };
+
 alLlegarAlimentos((datos) => {
   const arbol = alimentosDelMotor(datos);
   if (arbol) CATEGORIAS_ALIMENTO = arbolOrdenado(arbol);
+  const modos = {};
+  for (const p of datos?.pantallas || []) {
+    for (const lista of Object.values(p.grupos || {})) {
+      for (const a of lista) {
+        if (Array.isArray(a.modos) && a.modos.length) modos[a.nombre] = a.modos;
+      }
+    }
+  }
+  if (Object.keys(modos).length) MODOS_DE_CADA_ALIMENTO = modos;
 });
+
+/**
+ * El árbol de alimentos, dejando solo los que valen en ESTE modo.
+ *
+ * Sin modo no se filtra, y un alimento que no esté en la tabla tampoco se quita:
+ * el lado del que no se pierde comida. Las 83 fichas que valen en los dos modos
+ * no están escritas a propósito -- «no está en la tabla» ya significa «los dos».
+ *
+ * ⚠️ Y filtra TAMBIÉN con Render dormido, desde el 18 de septiembre por la noche:
+ * la tabla arranca en `MODOS_DE_CADA_ALIMENTO_RESPALDO` y el motor la sustituye
+ * entera cuando contesta. Antes arrancaba vacía, y entonces esto no filtraba
+ * nada justo cuando más falta hace -- con el catálogo del respaldo, que es el que
+ * lleva las dos versiones de cada verdura.
+ */
+function filtrarCategoriasPorModo(categoriasAlimento, modo) {
+  if (!modo || Object.keys(MODOS_DE_CADA_ALIMENTO).length === 0) return categoriasAlimento;
+  const resultado = {};
+  for (const [categoria, especies] of Object.entries(categoriasAlimento)) {
+    const dentro = {};
+    for (const [especie, alimentos] of Object.entries(especies)) {
+      const quedan = alimentos.filter((n) => {
+        const m = MODOS_DE_CADA_ALIMENTO[n];
+        return !m || m.includes(modo);
+      });
+      if (quedan.length) dentro[especie] = quedan;
+    }
+    if (Object.keys(dentro).length) resultado[categoria] = dentro;
+  }
+  return resultado;
+}
 
 // El árbol que manda el motor -> la forma que pinta la app.
 // `pantallas[].grupos` ya viene con el segundo nivel resuelto: la especie en
@@ -1987,6 +2307,13 @@ function respuestaApiAMenu(respuestas, derObjetivo) {
       // compatible). El menú cumple los 30 requisitos igual, pero no se
       // parece a los demás -- sin explicación, parece un error.
       avisoComposicion: data.aviso_composicion || null,
+      // ⚠️ CON QUÉ MODO SE HIZO ESTE MENÚ. El servidor lo devuelve en cada
+      // respuesta y hace falta guardarlo: editar o revalidar un menú cocinado
+      // tiene que volver a pedirlo COCINADO, no con lo que diga el botón de la
+      // pantalla de generar, que para entonces puede estar en otra cosa. Un
+      // menú cocinado reeditado en crudo se llevaría hueso carnoso — y cocido
+      // astilla. `|| "crudo"` para los menús hechos antes de que esto existiera.
+      modoPreparacion: data.modo_de_preparacion || "crudo",
     };
   });
 }
@@ -2592,6 +2919,20 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
   const [avisoComposicionPorMenu, setAvisoComposicionPorMenu] = useState({});
 
   const menu = menus.find((m) => m.id === tabActiva);
+  // ⚠️ EL MODO ES EL DEL MENÚ QUE SE ESTÁ MIRANDO. Decide el texto de «cómo
+  // darlo»: con el de crudo, un menú hervido dice «Cruda. En trozos, no picada»
+  // sobre un muslo de pollo cocido y «Crudo SOLO si se ha congelado antes» sobre
+  // un salmón que se acaba de cocer — justo en la pantalla que se abre para
+  // saber cómo se prepara.
+  const modoDelMenu = menu?.modoPreparacion || "crudo";
+  // ⚠️ EL ÁRBOL QUE SE OFRECE AL EDITAR ES EL DEL MODO DE **ESTE** MENÚ, no el
+  // del botón de la pantalla de generar: un menú cocinado mirado después de
+  // cambiar el botón a crudo se sigue editando en cocinado. Es la misma regla
+  // que ya siguen las instrucciones de «cómo darlo» y la petición al motor.
+  const catsDelModo = useMemo(
+    () => filtrarCategoriasPorModo(categoriasDisponibles || CATEGORIAS_ALIMENTO, modoDelMenu),
+    [categoriasDisponibles, modoDelMenu]);
+  const comoSeDa = (categoria) => comoSeDaLaCategoria(categoria, modoDelMenu);
   const idxActiva = menus.findIndex((m) => m.id === tabActiva);
   const viendoBloqueado = necesitaTransicion && idxActiva > 0;
   const gramosReales = gramosRealesPorMenu[tabActiva];
@@ -2730,6 +3071,14 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           der_objetivo: menu.kcal,
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
+          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+          // ⚠️ EL MODO ES EL DEL MENÚ QUE SE ESTÁ EDITANDO, NO EL DEL BOTÓN.
+          // Lo dice el propio motor: «uno generado crudo y editado en cocinado
+          // metería hueso crudo en un plato que se va a cocer». El servidor lo
+          // devuelve con cada menú y aquí se le devuelve tal cual, así que
+          // cambiar un alimento de un menú cocinado ofrece fichas cocidas
+          // aunque quien lo mira haya tocado el botón de crudo entretanto.
+          modo_de_preparacion: menu?.modoPreparacion || "crudo",
           etapa_requisitos: etapaSufijoApi,
           especies_excluidas: Array.from(especiesExcluidas || []),
           nombres_excluidos: Array.from(alimentosEvitados || []),
@@ -3108,23 +3457,31 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               <p className="text-sm mb-2" style={{ color: TINTA, fontFamily: fontBody, fontWeight: 600 }}>
                 Plan de transición ({dietaActual === "pienso" ? "pienso" : "comida cocinada"} → BARF)
               </p>
+              {/* ⚠️ EL CALENDARIO LO DICE EL MOTOR (18 de septiembre de 2026).
+                  Los cuatro tramos estaban escritos aquí a mano y viven en
+                  `transicion.py` desde agosto CON SU FUENTE: la Tabla 1-1 de
+                  SACN5, el calendario LARGO, que es el que la fuente recomienda
+                  cuando el cambio de comida «is known to be significant». Es la
+                  regla 6: el día que cambiara, la app seguiría pintando el
+                  viejo sin dar ningún error.
+
+                  ⚠️ Y EL NOMBRE DE LA COMIDA NUEVA TAMBIÉN, que con el modo
+                  cocinado dejó de ser cosmético: aquí ponía «% BARF» pasara lo
+                  que pasara, así que a quien iba a COCINAR le decía que le
+                  diera BARF. Ahora es el nombre del modo con el que se generó
+                  el menú, en el registro del dueño. */}
               <div className="flex flex-col gap-1">
-                {[
-                  { dias: "Días 1-3", barf: 25 },
-                  { dias: "Días 4-6", barf: 50 },
-                  { dias: "Días 7-9", barf: 75 },
-                  { dias: "Día 10 en adelante", barf: 100 },
-                ].map((tramo, i) => (
+                {tramosDeTransicion(vocabDeLaVista).map((tramo, i) => (
                   <div key={i} className="flex items-center justify-between text-xs" style={{ fontFamily: fontBody, color: TINTA }}>
-                    <span>{tramo.dias}</span>
+                    <span>{tramo.etiqueta}</span>
                     <span style={{ fontFamily: "monospace", color: VIOLETA, fontWeight: 700 }}>
-                      {tramo.barf}% BARF / {100 - tramo.barf}% {dietaActual === "pienso" ? "pienso" : "cocinado"}
+                      {tramo.nuevo_pct}% {nombreDelModo(vocabDeLaVista, modoDelMenu)} / {tramo.anterior_pct}% {dietaActual === "pienso" ? "pienso" : "lo de antes"}
                     </span>
                   </div>
                 ))}
               </div>
               <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
-                Dáselo en tomas separadas, no mezclado en el mismo plato — se digieren a ritmos distintos.
+                {ojoDeLaTransicion(vocabDeLaVista)}
               </p>
             </div>
           )}
@@ -3261,6 +3618,33 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                 que se calculó deja de cumplir sin que se note.
               </p>
             </div>
+          {/* ─── CÓMO SE MONTA EL PLATO ────────────────────────────────────
+              ⚠️ VA ANTES QUE «ALIMENTO POR ALIMENTO», y el orden es el de
+              quien cocina: primero qué se hace con todo esto, y después el
+              detalle de cada cosa. Lo preguntó Elena el 17 de septiembre —«¿se
+              tritura todo junto y se da modo puré? ¿se le echa todo entero?»— y
+              no se contestaba en ningún sitio: había texto de cada alimento y
+              de cada categoría, y ninguno del PLATO.
+
+              Los pasos los escribe el motor y cambian con el modo del MENÚ, no
+              con el botón de la pantalla de generar. Aquí no hay ni una frase. */}
+          {(() => {
+            const plato = comoSePreparaElPlato(modoDelMenu);
+            if (!plato) return null;
+            return (
+              <div className="rounded-2xl p-4 mb-4" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
+                <p className="text-[11px] tracking-[0.1em] uppercase mb-2" style={{ color: VIOLETA, fontFamily: "monospace" }}>
+                  {plato.titulo}
+                </p>
+                {(plato.pasos || []).map((paso) => (
+                  <p key={paso.titulo} className="text-xs mb-2 leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
+                    <b>{paso.titulo}.</b> {paso.texto}
+                  </p>
+                ))}
+              </div>
+            );
+          })()}
+
           {/* ⚠️ AÑADIDO — CÓMO PREPARAR CADA ALIMENTO, TODO JUNTO.
               Esto mismo sigue estando detrás del icono de cubiertos de
               cada fila, y no es un descuido: ahí sirve para mirar UN
@@ -3276,7 +3660,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
           {(() => {
             const porCategoria = [];
             for (const item of itemsMostrados) {
-              if (!INSTRUCCIONES_POR_CATEGORIA[item.categoria]) continue;
+              if (!comoSeDa(item.categoria)) continue;
               let grupo = porCategoria.find((g) => g.categoria === item.categoria);
               if (!grupo) { grupo = { categoria: item.categoria, items: [] }; porCategoria.push(grupo); }
               grupo.items.push(item);
@@ -3296,7 +3680,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                           {grupo.categoria}
                         </p>
                         <p className="text-xs leading-snug" style={{ color: TINTA, fontFamily: fontBody }}>
-                          {INSTRUCCIONES_POR_CATEGORIA[grupo.categoria]}
+                          {comoSeDa(grupo.categoria)}
                         </p>
                       </div>
                     </div>
@@ -3896,7 +4280,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                       }}>
                       <Trash2 size={15} style={{ color: alimentoAQuitar === item.alimento ? ROSA : "#C9BEDD" }} />
                     </button>
-                    {INSTRUCCIONES_POR_CATEGORIA[item.categoria] && (
+                    {comoSeDa(item.categoria) && (
                       <button
                         aria-label={`Cómo preparar ${item.alimento}`}
                         onClick={() => { setComoAbierto(comoAbierto === i ? null : i); setPorqueAbierto(null); setEditorAbierto(null); }}>
@@ -3932,7 +4316,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>CAMBIAR A QUÉ CATEGORÍA</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
-                      {Object.keys(categoriasDisponibles || CATEGORIAS_ALIMENTO).map((cat) => (
+                      {Object.keys(catsDelModo).map((cat) => (
                         <button key={cat} onClick={() => setEditorAbierto({ ...editorAbierto, categoria: cat })}
                           className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
                           {cat}
@@ -3946,7 +4330,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                     <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>{editorAbierto.categoria.toUpperCase()}</p>
                     <div className="flex flex-col gap-1.5 max-h-48 overflow-y-auto">
                       <ListaDeEspecies
-                        porEspecie={(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria]}
+                        porEspecie={catsDelModo[editorAbierto.categoria]}
                         onElegir={(alimento) => cambiarAlimento(editorAbierto.alimentoViejo, alimento)}
                         onAbrir={(especie) => setEditorAbierto({ ...editorAbierto, especie })}
                         fondo={PAPEL}
@@ -3965,13 +4349,13 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                           única opción (ahí es redundante). Con más de una,
                           hace falta para poder decir "cualquiera de estos
                           cortes vale" en vez de fijar uno exacto. */}
-                      {(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][editorAbierto.especie].length > 1 && (
+                      {catsDelModo[editorAbierto.categoria][editorAbierto.especie].length > 1 && (
                         <button onClick={() => cambiarAlimento(editorAbierto.alimentoViejo, `Todo: ${editorAbierto.especie}`)}
                           className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}>
                           Todo el/la {editorAbierto.especie}
                         </button>
                       )}
-                      {(categoriasDisponibles || CATEGORIAS_ALIMENTO)[editorAbierto.categoria][editorAbierto.especie].map((alimento) => (
+                      {catsDelModo[editorAbierto.categoria][editorAbierto.especie].map((alimento) => (
                         <button key={alimento} onClick={() => cambiarAlimento(editorAbierto.alimentoViejo, alimento)}
                           className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: PAPEL }}>
                           {alimento}
@@ -3991,7 +4375,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                   <div className="mt-3 pt-3" style={{ borderTop: "1px solid #F0ECF7" }}>
                     <div className="flex gap-2 items-start">
                       <UtensilsCrossed size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
-                      <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{INSTRUCCIONES_POR_CATEGORIA[item.categoria]}</p>
+                      <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>{comoSeDa(item.categoria)}</p>
                     </div>
                     {COMO_DAR_ALIMENTO[item.alimento] && (
                       <div className="mt-2.5 p-2.5 rounded-xl" style={{ background: PAPEL }}>
@@ -4030,6 +4414,37 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
                                 : `Como referencia, ${COMO_DAR_ALIMENTO[item.alimento].pieza} — con los ${formatearGramos(item.gramos)} de hoy te haces una idea de cuánto es.`}
                           </p>
                         )}
+                      </div>
+                    )}
+                    {/* ⚠️ PARA QUÉ ES BUENO ESTE ALIMENTO (18 de septiembre de
+                        2026). Elena: «esto es la hostia para el pelo, esto es
+                        la hostia para el hígado». Lo DERIVA el motor del
+                        catálogo vivo y llega con la frase ya hecha: si la app
+                        tradujera «epa_dha» a «para las articulaciones» sería la
+                        regla 6 rota, y el día que se cambie la frase habría que
+                        cambiarla en dos sitios.
+
+                        Y no sale en todos los alimentos a propósito: de 232,
+                        113 no destacan en nada. Poner algo en todos sería no
+                        informar de nada. */}
+                    {deQueEsRico(item.alimento).length > 0 && (
+                      <div className="mt-2.5 p-2.5 rounded-xl" style={{ background: "#F3EDFB" }}>
+                        <p className="text-[10px] tracking-[0.1em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          Por qué está en el menú
+                        </p>
+                        <ul className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                          {/* Se lee al revés que el dato: primero PARA QUÉ
+                              sirve, que es lo que le interesa a quien lo lee, y
+                              luego por qué lo decimos. El nombre llano del
+                              nutriente lo manda el motor: traducirlo aquí sería
+                              tener la misma frase en dos sitios. */}
+                          {deQueEsRico(item.alimento).map((r) => (
+                            <li key={r.nutriente} className="mb-0.5">
+                              · <strong>{r.dueno.charAt(0).toUpperCase() + r.dueno.slice(1)}</strong>
+                              {" "}— es de los alimentos con más {r.nombre || r.nutriente} del catálogo.
+                            </li>
+                          ))}
+                        </ul>
                       </div>
                     )}
                   </div>
@@ -4796,6 +5211,13 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
               .map((it, idxReal) => ({ ...it, idxReal }))
               .filter((it) => it.categoria === cat.nombre);
             const abierto = abiertoAnalizar && abiertoAnalizar.categoria === cat.nombre ? abiertoAnalizar : null;
+            // ⚠️ EL ANALIZADOR ES LA ÚNICA PANTALLA QUE NO FILTRA POR MODO, Y ES A
+            // PROPÓSITO (18 de septiembre de 2026, noche). Aquí ponía `catsDelModo`,
+            // y `modoDelMenu` vale «crudo» siempre que no haya un menú abierto --que
+            // es justo el caso de esta pantalla--, así que a quien ya le da comida
+            // cocinada a su perro no le dejaba escribir lo que le da: no salía ni un
+            // alimento cocido en la lista. Esto no formula nada; mira lo que el perro
+            // come HOY, y lo que come hoy puede ser de cualquiera de los dos modos.
             const catsParaEsta = { [cat.nombre]: (categoriasDisponibles || CATEGORIAS_ALIMENTO)[cat.nombre] };
             return (
               <div key={cat.nombre} className="rounded-2xl p-4 mb-3" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
@@ -5169,6 +5591,16 @@ function perfilDesdeSupabase(p) {
     // vuelve como null y la pantalla vuelve a preguntarlo -- que es lo correcto:
     // mejor preguntar otra vez que dar por hecho que no le da ninguno.
     premiosNivel: p.premios_nivel ?? null,
+    // Igual que los premios: si la columna todavía no existe en Supabase vuelve
+    // null, y la pantalla lo vuelve a preguntar. Mejor preguntar otra vez que
+    // dar por contestado un «no» que el dueño no ha dicho.
+    // ⚠️ SE NORMALIZA A "si"/"no", NO SE GUARDA EL BOOLEANO (17 de septiembre de
+    // 2026). Supabase devuelve `true`/`false`/`null` y el resto de la app
+    // compara contra las cadenas "si" y "no" —el botón activo, lo que se manda
+    // al motor, el formulador—, así que dejar el booleano hacía que
+    // `true === "si"` fuera FALSO: un «sí quiero hidratos» del dueño se leía
+    // como «no». Lo cazó `tests/formulador.spec.js` con el caso `true`.
+    conHidratos: p.con_hidratos == null ? null : (p.con_hidratos ? "si" : "no"),
     esterilizado: p.castrado ? "si" : "no",
     // ⚠️ LOS CUATRO «SI/NO» SE LEEN NORMALIZADOS (11 de septiembre de 2026).
     //
@@ -5296,7 +5728,7 @@ function datosDeUnPerro(perfil) {
  * manda el generador de un solo perro -- por eso se construye aquí una
  * vez y no en cada sitio que lo necesita.
  */
-function cuerpoApiDeUnPerro(perfil) {
+function cuerpoApiDeUnPerro(perfil, modoDePreparacion = "crudo") {
   const d = datosDeUnPerro(perfil);
   return {
     modo: "automatico",
@@ -5306,6 +5738,11 @@ function cuerpoApiDeUnPerro(perfil) {
     der_objetivo: d.derReal,
     actividad: claveDeActividad(perfil),
     premios_nivel: perfil?.premiosNivel || null,
+    con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+    // El modo lo elige la pantalla y es el MISMO para toda la casa: en una
+    // cocina no se hierve para uno y se da crudo al otro — y si alguna vez
+    // hiciera falta por perro, el parámetro ya viaja por perro.
+    modo_de_preparacion: modoDePreparacion || "crudo",
     etapa_requisitos: ETAPA_A_SUFIJO_API[d.etapaCalculada] || "Adulto",
     especies_excluidas: Array.from(d.especiesExcluidas),
     evitar_especies: [],
@@ -5666,6 +6103,14 @@ function RawkuOnboardingInterna({
       // un «no le doy premios» que no ha dicho. Con null, la pantalla no deja
       // continuar hasta que elige.
       premiosNivel: null,
+      // ⚠️ null Y NO "no" (17 de septiembre de 2026). La pregunta de los
+      // hidratos tiene TRES estados en el motor y el tercero es «no ha
+      // contestado», que NO es lo mismo que «no quiero»: sin contestar, el
+      // motor no los propone salvo que la patología los pida; con un «no», no
+      // entran ni aunque la patología los pida. Poner "no" por defecto sería
+      // contestar por el dueño una pregunta que puede dejar sin la mejor
+      // ración a un perro con pancreatitis.
+      conHidratos: null,
       esterilizado: null,
       alergiaSi: null,
       alergias: [],
@@ -5780,6 +6225,26 @@ function RawkuOnboardingInterna({
   // (pienso o comida cocinada -> BARF no se hace de golpe). Un perro que
   // venía de pienso perdía ese dato y con él el aviso de transición.
   const [dietaActual, setDietaActual] = useState(perroInicial?.dieta_actual ?? null);
+
+  // ⚠️ CRUDO O COCINADO: ESTADO DE ESTA GENERACIÓN, NO CAMPO DE LA FICHA (17 de
+  // septiembre de 2026). Y es una decisión, no un descuido.
+  //
+  // El motor dice que el modo viaja CON el menú — «uno generado crudo y editado
+  // en cocinado metería hueso crudo en un plato que se va a cocer» —, así que la
+  // verdad de un menú ya hecho es la que el servidor devolvió con ÉL, y editarlo
+  // manda ESA (`menu.modoPreparacion`), nunca lo que diga este botón ahora.
+  // Guardarlo además en la ficha creaba un segundo sitio donde vive lo mismo, y
+  // el día que la ficha dijera «cocinado» con un menú crudo guardado al lado no
+  // habría nada que avisara: el menú sale verde igual. Es la duplicación del DER
+  // otra vez, y aquí todavía se puede no hacer.
+  //
+  // Arranca en lo que diga el motor (`por_omision`), no en un "crudo" escrito
+  // aquí: ver `modoDePreparacionPorOmision`.
+  const [modoPreparacion, setModoPreparacion] = useState(null);
+  // Plegado por omisión: quien ya sabe lo que quiere no tiene que leer nada.
+  const [queEsAbierto, setQueEsAbierto] = useState(false);
+  const modoPreparacionElegido = modoPreparacion ?? modoDePreparacionPorOmision(vocab);
+
   const [modo, setModo] = useState(null);
   const [pantalla, setPantalla] = useState("elegir");
 
@@ -6012,7 +6477,9 @@ function RawkuOnboardingInterna({
         : (p.menus || []).filter((_, i) => i === compraMenu),
     })).filter((p) => (p.menus || []).length);
 
-    const cesta = cestaDeLaCompra(conElMenu, categoriaDeAlimento);
+    // ⚠️ El tercer argumento es lo que convierte los gramos COCIDOS del menú
+    // en los CRUDOS que se piden en la tienda. El factor lo calcula el motor.
+    const cesta = cestaDeLaCompra(conElMenu, categoriaDeAlimento, crudoQueHaceFalta);
     if (compraTandas === 1) return cesta;
     return cesta.map((z) => ({
       ...z,
@@ -7886,6 +8353,25 @@ function RawkuOnboardingInterna({
                             {deQuien}
                           </span>
                         )}
+                        {/* ⚠️ SE DICE QUE ES PESO CRUDO, y no es cosmética: la
+                            cesta ACABA DE CONVERTIR los gramos del menú, que son
+                            de comida ya cocinada, al peso que se pide en el
+                            mostrador. Convertir en silencio sería tan malo como
+                            no convertir — quien mire el menú y la lista vería
+                            dos números distintos para el mismo alimento y no
+                            sabría cuál creer. Del pulpo la lista pone el DOBLE
+                            que el menú, y eso hay que explicarlo donde se lee. */}
+                        {linea.seCompraEnCrudo && (
+                          <span className="block text-[10px]" style={{ color: MALVA, fontFamily: fontBody }}>
+                            en crudo — en el plato son {formatearCompra(linea.gramosEnElPlato * compraTandas)} ya cocinado
+                            {linea.factorAproximado ? " (aproximado)" : ""}
+                          </span>
+                        )}
+                        {linea.sinFactor && (
+                          <span className="block text-[10px]" style={{ color: MALVA, fontFamily: fontBody }}>
+                            son gramos YA COCINADOS: compra un poco más, que al cocer pierde agua
+                          </span>
+                        )}
                       </span>
                     </span>
                     <span className="text-sm shrink-0"
@@ -8010,7 +8496,7 @@ function RawkuOnboardingInterna({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           perros: fichas.map((f) => ({
-            ...cuerpoApiDeUnPerro(f.perfil),
+            ...cuerpoApiDeUnPerro(f.perfil, modoPreparacionElegido),
             ...(elegidos.length > 0
               ? { modo: "personalizar", forzar_presencia: elegidos,
                   nombres_alimentos: elegidos, restringir_especie: especiePorCategoria }
@@ -8268,6 +8754,26 @@ function RawkuOnboardingInterna({
     () => filtrarCategoriasPorEspecies(CATEGORIAS_ALIMENTO, especiesExcluidas),
     [especiesExcluidas]
   );
+  // ⚠️ PERSONALIZAR ELIGE DENTRO DEL MODO QUE SE ACABA DE ELEGIR (18 de
+  // septiembre de 2026, noche). El selector de «cambiar a» de un menú ya hecho
+  // filtra por el modo DEL MENÚ desde esa mañana, y esta pantalla --donde se
+  // eligen los alimentos ANTES de generar-- se quedó ofreciendo el catálogo
+  // entero: en un menú crudo salía «Acelga cocida» debajo de «Acelga», que es
+  // el mismo alimento dos veces con dos composiciones distintas.
+  //
+  // ⚠️ Va APARTE de `categoriasDisponibles` y no dentro, a propósito: ése lo
+  // recibe también `VistaMenus`, que tiene que filtrar por el modo del MENÚ
+  // ABIERTO y no por el botón de generar -- un menú cocinado guardado se edita
+  // en cocinado aunque el botón diga crudo. Filtrar arriba dejaría ese selector
+  // sin nada que ofrecer, y sin ningún error.
+  //
+  // ⚠️ Y NO PROHÍBE NADA: la regla 5 dice que lo que se elige a mano se respeta,
+  // y el motor lo sigue respetando por su nombre. Lo que cambia es que ya no se
+  // ofrece por accidente.
+  const categoriasParaPersonalizar = useMemo(
+    () => filtrarCategoriasPorModo(categoriasDisponibles, modoPreparacionElegido),
+    [categoriasDisponibles, modoPreparacionElegido]
+  );
 
   // ─── IR AL GENERADOR ────────────────────────────────────────────────────
   //
@@ -8396,6 +8902,11 @@ function RawkuOnboardingInterna({
       der_objetivo: derReal,                       // el DER de AHORA
       actividad: claveDeActividad(perfil),
       premios_nivel: perfil?.premiosNivel || null,
+      con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+      // Igual que al editar: el menú guardado trae el suyo. Revalidar uno
+      // cocinado con el botón en crudo lo reharía con hueso.
+      modo_de_preparacion: menuParaRevisar?.modo_de_preparacion
+        || menuParaRevisar?.contexto?.modo_de_preparacion || "crudo",
       etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
       peso_perro_kg: perfil?.pesoActual ? Number(perfil.pesoActual) : null,
       peso_adulto_esperado_kg: pesoAdultoEsperado || null,
@@ -8558,6 +9069,8 @@ function RawkuOnboardingInterna({
           der_objetivo: derReal,
           actividad: claveDeActividad(perfil),
           premios_nivel: perfil?.premiosNivel || null,
+          con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+          modo_de_preparacion: modoPreparacionElegido,
           etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
           // ⚠️ CORREGIDO (5 agosto, madrugada): antes la especie a rotar
           // (para dar variedad entre varios menús automáticos) se
@@ -8656,6 +9169,8 @@ function RawkuOnboardingInterna({
             der_objetivo: derReal,
             actividad: claveDeActividad(perfil),
             premios_nivel: perfil?.premiosNivel || null,
+            con_hidratos: perfil?.conHidratos == null ? null : perfil.conHidratos === "si",
+            modo_de_preparacion: modoPreparacionElegido,
             etapa_requisitos: ETAPA_A_SUFIJO_API[etapaCalculada] || "Adulto",
             especies_excluidas: Array.from(especiesExcluidas),
             evitar_especies: [],
@@ -10153,18 +10668,50 @@ function RawkuOnboardingInterna({
           </div>
 
           <div className="mt-7">
-            <Etiqueta>¿Hay alguna categoría entera que no pueda comer?</Etiqueta>
+            {/* ⚠️ LA PREGUNTA ES DEL HUESO, NO DE «UNA CATEGORÍA ENTERA» (17 de
+                septiembre de 2026). Elena: «mira a ver tú qué sentido tiene que
+                un usuario pueda quitar otras categorías. Si no tiene sentido
+                entonces sería cambiar la pregunta y poner directamente si quiere
+                excluir el hueso».
+
+                De las siete categorías del motor solo el hueso contesta a «qué
+                NO PUEDE comer»: quitar la carne es una dieta de eliminación (la
+                firma un veterinario, y la tiene en SU pantalla), quitar los
+                hidratos ya lo pregunta la pregunta de los hidratos, y quitar
+                vísceras o pescado no es «no puede comer» sino «no quiero
+                comprarlo», que es otra pregunta.
+
+                ⚠️ La LISTA y el TEXTO vienen del motor
+                (`categorias_que_excluye_el_dueno`), no de aquí: si la clave no
+                coincide EXACTAMENTE con la del catálogo, la exclusión no hace
+                nada y el menú sale verde igual, sin error y sin aviso. Y si el
+                motor llegara a ofrecer más de una, los botones vuelven solos. */}
+            <Etiqueta>
+              {PREGUNTA_QUITAR_CATEGORIA?.pregunta?.dueno?.titulo
+                || "¿Hay que quitarle el hueso crudo del menú?"}
+            </Etiqueta>
             <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
-              Por ejemplo, si es senior o tiene los dientes en mal estado y no puede masticar huesos —
-              el calcio que aportaría se cubre con suplemento en su lugar.
+              {PREGUNTA_QUITAR_CATEGORIA?.pregunta?.dueno?.ejemplo
+                || "dinos que sí si es mayor, le faltan dientes o traga sin masticar"}
+              {" — "}
+              {PREGUNTA_QUITAR_CATEGORIA?.que_pasa_al_quitarlo
+                || "el calcio que aportaría se cubre con cáscara de huevo o con un suplemento."}
             </p>
             <SiNoToggle
               valor={perfil.categoriasExcluidasSi}
-              onChange={(v) => { set("categoriasExcluidasSi", v); if (v === "no") set("categoriasExcluidas", []); }}
+              onChange={(v) => {
+                set("categoriasExcluidasSi", v);
+                // Con UNA sola categoría, «sí» ya es la respuesta entera: pedirle
+                // además que pulse el único botón que hay es un paso que no
+                // decide nada, y se puede dejar a medias sin que nada avise.
+                if (v === "no") set("categoriasExcluidas", []);
+                else if (CATEGORIAS_QUE_QUITA_EL_DUENO.length === 1)
+                  set("categoriasExcluidas", [CATEGORIAS_QUE_QUITA_EL_DUENO[0].key]);
+              }}
             />
-            {perfil.categoriasExcluidasSi === "si" && (
+            {perfil.categoriasExcluidasSi === "si" && CATEGORIAS_QUE_QUITA_EL_DUENO.length > 1 && (
               <div className="flex flex-col gap-2 mt-3">
-                {[{ key: "Hueso carnoso", label: "Hueso carnoso (huesos crudos)" }].map((c) => {
+                {CATEGORIAS_QUE_QUITA_EL_DUENO.map((c) => {
                   const activo = perfil.categoriasExcluidas.includes(c.key);
                   return (
                     <button
@@ -10182,6 +10729,50 @@ function RawkuOnboardingInterna({
                   );
                 })}
               </div>
+            )}
+          </div>
+
+          {/* ⚠️ LA PREGUNTA DE LOS HIDRATOS (17 de septiembre de 2026). La pidió
+              Elena: «también tendría que haber una pregunta de si quieres que tu
+              menú, ya sea barf o comida cocinada, lleve hidratos o no».
+
+              Va aquí, pegada a la del hueso, porque las dos son la misma clase
+              de pregunta —qué lleva el plato— y una pantalla más es un paso más
+              que abandonar. El texto y las respuestas los sirve el motor.
+
+              ⚠️ Y NO LLEVA `SiNoToggle` a propósito: son TRES estados y el
+              tercero es «no ha contestado», que no es «no quiero». Un toggle de
+              dos obligaría a que uno de los dos fuera el valor por defecto, y
+              ese es justo el fallo que se quería evitar: con un «no» puesto por
+              omisión, un perro con pancreatitis se queda sin la ración que le
+              conviene y nadie se entera. Se puede seguir sin contestar. */}
+          <div className="mt-7">
+            <Etiqueta>
+              {vocab?.hidratos?.pregunta_dueno || PREGUNTA_HIDRATOS_RESPALDO}
+            </Etiqueta>
+            <p className="text-xs mb-3" style={{ color: MALVA, fontFamily: fontBody }}>
+              Una ración cruda no los lleva y no le hacen falta a un perro sano. Si tiene algo que
+              le obligue a comer más ligero, los ponemos aunque no contestes.
+            </p>
+            <div className="grid grid-cols-1 gap-2">
+              {opcionesDeHidratos(vocab, "dueno").map((op) => {
+                const activo = perfil.conHidratos === op.clave;
+                return (
+                  <button key={op.clave}
+                    onClick={() => set("conHidratos", activo ? null : op.clave)}
+                    className="text-left px-4 py-3 rounded-2xl transition-all"
+                    style={{ background: activo ? VIOLETA : "#FFFFFF", border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}>
+                    <span className="block" style={{ color: activo ? "#FFFFFF" : TINTA, fontFamily: fontDisplay, fontSize: 15 }}>{op.label}</span>
+                    <span className="block text-xs mt-0.5" style={{ color: activo ? "#F3E9FB" : MALVA, fontFamily: fontBody }}>{op.detalle}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {perfil.conHidratos === "si" && (
+              <p className="text-xs mt-2" style={{ color: MALVA, fontFamily: fontBody }}>
+                ⚠️ Van siempre cocidos, nunca crudos, y los gramos del menú son de producto ya
+                cocido: pésalos después de cocinarlos, no antes.
+              </p>
             )}
           </div>
 
@@ -11957,6 +12548,126 @@ function RawkuOnboardingInterna({
             );
           })()}
 
+          {/* ─── CRUDO O COCINADO ────────────────────────────────────
+              ⚠️ VA AQUÍ, entre «¿qué come ahora?» y los dos modos, porque es la
+              pregunta que decide el CATÁLOGO con el que se va a montar el menú
+              y tiene que estar contestada antes de entrar en Automático o en
+              Personalizar — en Personalizar se eligen alimentos A MANO, y la
+              lista que se ofrece depende de esto.
+
+              ⚠️ Y LLEVA SU PROPIO TÍTULO DICIENDO «A PARTIR DE AHORA», porque dos
+              preguntas más arriba hay una respuesta que se llama IGUAL: «Comida
+              cocinada» como respuesta a «¿qué come ahora mismo?». Aquella es de
+              dónde viene el perro y solo decide el plan de transición; ésta es
+              lo que se le va a dar. Sin decirlo, las dos se leen como la misma.
+
+              El texto y los modos los sirve el motor (regla 6). */}
+          <p className="text-[11px] tracking-[0.14em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+            Y a partir de ahora
+          </p>
+          <p className="text-sm mb-3" style={{ color: TINTA, fontFamily: fontBody }}>
+            ¿Qué le quieres dar{paraQuien !== "solo" && listaDePerros.length > 1 ? "" : ` a ${nombreMostrar}`}?
+          </p>
+          <div className="flex flex-col gap-2 mb-2">
+            {opcionesDeModoDePreparacion(vocab, "dueno").map((op) => {
+              const activo = modoPreparacionElegido === op.clave;
+              return (
+                <button
+                  key={op.clave}
+                  onClick={() => setModoPreparacion(op.clave)}
+                  className="text-left rounded-xl p-4"
+                  style={{ background: activo ? "#F3EDFB" : "#FFFFFF",
+                           border: `1.5px solid ${activo ? VIOLETA : "#E3DAF0"}` }}
+                >
+                  <p className="text-sm" style={{ color: TINTA, fontFamily: fontBody, fontWeight: activo ? 700 : 600 }}>
+                    {op.label}
+                  </p>
+                  {op.detalle && (
+                    <p className="text-xs mt-0.5 leading-snug" style={{ color: MALVA, fontFamily: fontBody }}>
+                      {op.detalle}
+                    </p>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+          {/* El «ojo» del motor: los gramos de un menú cocinado son de comida YA
+              cocinada. Va aquí y no solo con el menú hecho porque quien decide
+              cocinar tiene que saber antes cómo se pesa lo que va a cocinar. */}
+          {modoPreparacionElegido === "cocinado" && avisoDeModoCocinado(vocab) && (
+            <div className="rounded-xl p-3 mb-6 flex gap-2 items-start" style={{ background: "#F0ECF7" }}>
+              <Info size={14} style={{ color: VIOLETA, flexShrink: 0, marginTop: 2 }} />
+              <p className="text-xs" style={{ color: TINTA, fontFamily: fontBody }}>
+                {String(avisoDeModoCocinado(vocab)).replace(/^\u26a0\ufe0f\s*/, "")}
+              </p>
+            </div>
+          )}
+          {modoPreparacionElegido !== "cocinado" && <div className="mb-2" />}
+
+          {/* ─── QUÉ ES CADA UNA ───────────────────────────────────────────
+              ⚠️ POR QUÉ ESTÁ AQUÍ (18 de septiembre de 2026). Elena:
+              «deberíamos tener una parte en la aplicación que sea información
+              sobre los beneficios del BARF y qué es el BARF, los beneficios de
+              la comida cocinada y qué es la comida cocinada».
+
+              Va PLEGADO y justo debajo de la pregunta, no en una pantalla
+              aparte: quien ya sabe lo que quiere no tiene que leer nada, y
+              quien duda lo tiene donde le surge la duda y no en un menú de
+              ayuda que nadie abre.
+
+              ⚠️ Y ENSEÑA LAS DOS MITADES. `por_que` son las ventajas y
+              `a_tener_en_cuenta` es lo que hay que saber, y los dos modos
+              tienen las dos: contar solo las ventajas de una forma de dar de
+              comer es publicidad, no información. El texto lo escribe el motor
+              (regla 6) — aquí no hay ni una frase. */}
+          {(() => {
+            const doc = documentacionDelModo(modoPreparacionElegido);
+            if (!doc) return null;
+            return (
+              <div className="mb-6">
+                <button
+                  onClick={() => setQueEsAbierto((v) => !v)}
+                  className="flex items-center gap-1.5 text-xs"
+                  style={{ color: VIOLETA, fontFamily: fontBody }}
+                >
+                  <Info size={13} /> {doc.titulo || "Qué es esto"}
+                  {queEsAbierto ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                </button>
+                {queEsAbierto && (
+                  <div className="mt-2 rounded-xl p-3" style={{ background: PAPEL }}>
+                    <p className="text-xs mb-3" style={{ color: TINTA, fontFamily: fontBody }}>
+                      {doc.que_es}
+                    </p>
+                    {(doc.por_que || []).length > 0 && (
+                      <>
+                        <p className="text-[10px] tracking-[0.1em] uppercase mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          Por qué
+                        </p>
+                        {(doc.por_que || []).map((x) => (
+                          <p key={x.titulo} className="text-xs mb-1.5" style={{ color: TINTA, fontFamily: fontBody }}>
+                            <strong>{x.titulo}.</strong> {x.texto}
+                          </p>
+                        ))}
+                      </>
+                    )}
+                    {(doc.a_tener_en_cuenta || []).length > 0 && (
+                      <>
+                        <p className="text-[10px] tracking-[0.1em] uppercase mt-3 mb-1" style={{ color: MALVA, fontFamily: "monospace" }}>
+                          Y esto hay que saberlo
+                        </p>
+                        {(doc.a_tener_en_cuenta || []).map((x) => (
+                          <p key={x.titulo} className="text-xs mb-1.5" style={{ color: TINTA, fontFamily: fontBody }}>
+                            <strong>{x.titulo}.</strong> {x.texto}
+                          </p>
+                        ))}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
           <div className="flex flex-col gap-3 mb-6">
             {MODOS.map((m) => {
               const Icono = m.Icono;
@@ -12376,6 +13087,21 @@ function RawkuOnboardingInterna({
               const Icono = cat.Icono;
               const categoriaAbierta = estadoAbiertoPersonalizar && estadoAbiertoPersonalizar.categoria === cat.nombre;
               const especieAbierta = categoriaAbierta ? estadoAbiertoPersonalizar.especie : null;
+              // ⚠️ UNA CATEGORÍA QUE EN ESTE MODO NO TIENE NADA NO SE PINTA (18 de
+              // septiembre de 2026, noche). El caso es el HUESO CARNOSO en un menú
+              // cocinado: el hueso cocido astilla, así que el motor no tiene ni una
+              // ficha de hueso para ese modo -- y sin esto quedaba una tarjeta con su
+              // icono, su «Elegir alimento» y una lista vacía detrás. Una casilla que
+              // se puede abrir y no ofrece nada se lee como que la app está rota.
+              //
+              // ⚠️ Y SOLO POR EL MODO, no por las alergias: se exige que la categoría
+              // SÍ tenga comida en el catálogo del perro y no la tenga en este modo.
+              // Una categoría que se queda vacía porque el perro es alérgico a todo lo
+              // que hay dentro se sigue pintando, igual que hasta hoy -- cambiar eso
+              // sería otra decisión y no está medida.
+              const hayEnElCatalogo = Object.keys(categoriasDisponibles[cat.nombre] || {}).length > 0;
+              const hayEnEsteModo = Object.keys(categoriasParaPersonalizar[cat.nombre] || {}).length > 0;
+              if (hayEnElCatalogo && !hayEnEsteModo) return null;
               return (
                 <div key={cat.nombre} className="rounded-2xl p-4" style={{ background: "#FFFFFF", border: "1.5px solid #E3DAF0" }}>
                   <div className="flex items-center gap-3 mb-1">
@@ -12437,7 +13163,7 @@ function RawkuOnboardingInterna({
                           <p className="text-xs mb-2" style={{ color: MALVA, fontFamily: "monospace" }}>ESPECIE</p>
                           <div className="flex flex-col gap-1.5 max-h-56 overflow-y-auto">
                             <ListaDeEspecies
-                              porEspecie={categoriasDisponibles[cat.nombre]}
+                              porEspecie={categoriasParaPersonalizar[cat.nombre] || {}}
                               onElegir={(alimento) => elegirAlimento(cat.nombre, alimento)}
                               onAbrir={(especie) => setEstadoAbiertoPersonalizar({ categoria: cat.nombre, especie })}
                             />
@@ -12455,13 +13181,13 @@ function RawkuOnboardingInterna({
                                 mismo (elegir el único alimento, o "todo el/la X"),
                                 confuso de verdad. Ahora solo aparece cuando de
                                 verdad hay más de un alimento entre los que elegir. */}
-                            {categoriasDisponibles[cat.nombre][especieAbierta].length > 1 && (
+                            {(categoriasParaPersonalizar[cat.nombre]?.[especieAbierta] || []).length > 1 && (
                               <button onClick={() => elegirAlimento(cat.nombre, `Todo: ${especieAbierta}`)}
                                 className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: VIOLETA, fontFamily: fontBody, fontWeight: 700, background: "#F0ECF7" }}>
                                 Todo el/la {especieAbierta}
                               </button>
                             )}
-                            {categoriasDisponibles[cat.nombre][especieAbierta].map((alimento) => (
+                            {(categoriasParaPersonalizar[cat.nombre]?.[especieAbierta] || []).map((alimento) => (
                               <button key={alimento} onClick={() => elegirAlimento(cat.nombre, alimento)}
                                 className="text-left px-3 py-2 rounded-lg text-sm" style={{ color: TINTA, fontFamily: fontBody, background: "#FFFFFF" }}>
                                 {alimento}

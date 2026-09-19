@@ -68,6 +68,7 @@ const PERRO_LOCAL = {
   // El extremo, no el primero de la lista: `ninguno` se parece demasiado al
   // vacío y la prueba pasaría aunque el campo se perdiera en el salto.
   premios_nivel: "mas_del_maximo",
+  con_hidratos: false,
 };
 
 // Lo mismo que vigila ficha-ida-y-vuelta al guardar, aquí al migrar: si un
@@ -95,6 +96,7 @@ const CAMPOS = [
   ["patologia_si",            "cambia los límites de seguridad"],
   ["patologias",              "cambia los límites de seguridad"],
   ["premios_nivel",           "lo que come fuera de la ración cambia cuánta comida le toca"],
+  ["con_hidratos",            "quien contestó «sin hidratos» sin cuenta tiene que seguir sin ellos después de registrarse"],
 ];
 
 const MENU_LOCAL = {
