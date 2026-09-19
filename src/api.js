@@ -64,17 +64,31 @@ export function anotarPresupuestoDeTiempo(servido) {
   PRESUPUESTO_DE_TIEMPO = nuevo;
 }
 
-// ⚠️ EL MARGEN NO ES UN NÚMERO REDONDO: ES UNA MEDIDA. El presupuesto acota el
-// BUCLE DEL SOLVER, no la respuesta entera -- después vienen la verificación de
-// cero, los avisos y la ficha. Medido contra el motor desplegado, el perro que
-// más tarda (Cairo con premios al máximo) devolvió HTTP 200 con menú en
-// **105,2 · 144,7 · 148,4 s** contra un presupuesto de 90. O sea que el
-// desbordamiento llega a ~58 s, y con 60 cabe el peor caso medido.
+// ⚠️ EL MARGEN SALE DE UNA MEDIDA, Y DE DÓNDE SE CORTA LA COLA. El presupuesto
+// acota el BUCLE DEL SOLVER, no la respuesta entera: después vienen la
+// verificación de cero, los avisos y la ficha. Medido contra el motor
+// desplegado, los menús que este arreglo existe para no tirar llegan en
 //
-// ⚠️ Y de paso esas tres tiradas tiran la premisa que sostenía los dos techos
-// del motor: «Render documenta 100 s como máximo de una petición» está escrito
-// en cuatro sitios del repo y **Render sirvió las tres, la más larga a 148,4 s**.
-export const MARGEN_SOBRE_EL_PRESUPUESTO_MS = 60000;
+//     adulto toy cocinado ....... 37,0 s
+//     Cairo, crudo .............. 68,1 · 79,8 · 79,8 · 81,4 s
+//     Cairo sin premios cocinado  86,5 s
+//
+// o sea que con **10 s sobre el presupuesto (100 en total) caben todos**.
+//
+// ⚠️ NO SE PONE MÁS A PROPÓSITO, y esto es lo que cuesta: mientras la app
+// espera, un servidor MUDO también la tiene esperando. Render dormido tarda
+// cerca de un minuto en despertar, y el aviso de «Despertando el servidor» solo
+// sale cuando la petición se aborta. Cada segundo de más aquí es un segundo más
+// de pantalla quieta en el caso malo, así que el margen cubre los menús que hay
+// que salvar y no la cola.
+//
+// ⚠️ Y esa cola existe: el perro que más tarda (Cairo con premios al máximo)
+// devolvió HTTP 200 con menú en **105,2 · 144,7 · 148,4 s** contra un
+// presupuesto de 90. Ése se sigue perdiendo, y va escrito para que se sepa. De
+// paso, esas tres tiradas tiran la premisa que sostiene los dos techos del
+// motor: «Render documenta 100 s como máximo de una petición» está escrito en
+// cuatro sitios del repo y **Render sirvió las tres**.
+export const MARGEN_SOBRE_EL_PRESUPUESTO_MS = 10000;
 const TOPE_DE_ESPERA_MS = 180000;
 
 /** Lo que se espera por UN menú: lo que el motor dice que puede tardar, más el
