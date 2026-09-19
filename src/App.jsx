@@ -38,7 +38,7 @@ import { ESCALA_BCS, BCS_MINIMO, BCS_MAXIMO, pesoIdealDesdeBcs, bcsDesdeCondicio
          condicionDesdeBcs, bcsVigente } from "./bcs";
 import { leerEleccionModo, guardarEleccionModo,
          enModoProfesional as calcularModoProfesional } from "./modo";
-import { API_BASE, fetchConTimeout, tiempoParaVariosMenus } from "./api.js";
+import { API_BASE, fetchConTimeout, tiempoParaVariosMenus, tiempoParaUnMenu, tiempoParaVariosPerros } from "./api.js";
 import { useVocabulario, useAlimentos, alLlegarVocabulario, alLlegarAlimentos, pedirAlimentos, ACTIVIDAD_API, claveDeActividad, CONFIRMACION_DIAGNOSTICO, pideConfirmacionDeDiagnostico, SALIDA_PATOLOGIAS, MODOS_DE_PREPARACION_RESPALDO, opcionesDeModoDePreparacion, modoDePreparacionPorOmision, avisoDeModoCocinado, nombreDelModo, tramosDeTransicion, ojoDeLaTransicion } from "./vocabulario.js";
 
 // ⚠️ AÑADIDO — el muro de pago tiene TRES modos, y se cambia sin tocar
@@ -3097,7 +3097,7 @@ function VistaMenus({ menus, onVolver, soloSeccion = null, modo, alimentosEvitad
       peso_objetivo_kg: pesoObjetivoKg || null,
           ...cuerpoExtra,
         }),
-      });
+      }, tiempoParaUnMenu());
       const data = await res.json();
       if (data.factible) {
         // ⚠️ AÑADIDO (5 agosto, madrugada): comparación real,
@@ -8517,7 +8517,7 @@ function RawkuOnboardingInterna({
           numero_de_menus: cuantos,
           ...(porMenu ? { personalizacion_por_menu: porMenu } : {}),
         }),
-      });
+      }, tiempoParaVariosPerros());
       let cuerpo;
       try {
         cuerpo = await res.json();
@@ -8945,7 +8945,7 @@ function RawkuOnboardingInterna({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(conTokenProfesional({ ...cuerpoBase, menu_actual_gramos: gramos })),
-        })
+        }, tiempoParaUnMenu())
           .then((res) => res.json())
           .then((data) => ({ original: gramos, data }))
       )
@@ -9130,7 +9130,17 @@ function RawkuOnboardingInterna({
           // vía rápida o no.
           tamano: perfil?.raza?.tamano || perfil?.tamanoManual || null,
         })),
-      }).then(async (res) => {
+        // ⚠️ EL RELOJ, QUE AQUÍ NO ESTABA Y ERA UN FALLO EN PRODUCCIÓN (19 de
+        // septiembre de 2026). Sin tercer argumento esto se quedaba con los
+        // 45 s de `TIEMPO_MAXIMO_PETICION_MS` mientras el motor se da 90 para
+        // un menú suelto, así que todo menú que tardara entre los dos números
+        // se calculaba y se tiraba. Y es el camino NORMAL: la ficha pide un
+        // menú por omisión, y con uno solo no se va por `/menu/semana`.
+        //
+        // Medido contra el motor desplegado: Cairo sale con menú verde en
+        // 79,8 · 79,8 · 81,4 · 68,1 s y la app colgaba a los 45,3. La semana
+        // ya tenía su reloj propio desde el 16 de septiembre; esto se quedó.
+      }, tiempoParaUnMenu()).then(async (res) => {
         // ⚠️ AÑADIDO (5 agosto, noche): antes esto era solo
         // `res.json()` -- si el servidor devolvía algo vacío o
         // recortado (un proxy cortando la respuesta a medio camino,

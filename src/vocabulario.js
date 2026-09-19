@@ -34,7 +34,7 @@
 // dormido, y quien las use tiene su respaldo comprobado contra el motor por
 // `tests/vocabulario.spec.js`.
 import { useEffect, useState } from 'react'
-import { API_BASE, fetchConTimeout } from './api.js'
+import { API_BASE, fetchConTimeout, anotarPresupuestoDeTiempo } from './api.js'
 
 let _pedido = null
 const _alLlegar = []
@@ -60,6 +60,14 @@ export function pedirVocabulario() {
   }
   return _pedido
 }
+
+// ⚠️ EL RELOJ DE LA APP SALE DEL MOTOR (19 de septiembre de 2026, regla 6).
+// La app cortaba toda petición de menú a los 45 s y el motor se da 90 para el
+// menú suelto: los menús que tardaban entre los dos números se calculaban y se
+// tiraban. Medido contra el motor desplegado, a Cairo le pasaba las cuatro
+// veces. El número vive en `main.py` y lo sirve `/vocabulario`; aquí solo se
+// anota, y `api.js` tiene el respaldo para cuando Render duerme.
+alLlegarVocabulario((v) => { anotarPresupuestoDeTiempo(v?.presupuesto_de_tiempo) })
 
 // ─── EL CATÁLOGO DE ALIMENTOS, POR LA MISMA PUERTA ───────────────────────────
 //
